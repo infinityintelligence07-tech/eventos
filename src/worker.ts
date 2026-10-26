@@ -1,6 +1,8 @@
 import { createJobQueue, errorMessage, isTransientDbError } from "@/core/jobs";
 import { logger, withCorrelationId } from "@/core/logging";
 
+import { registrarSincronizacaoDeTurmas } from "./jobs/sincronizar-turmas-job";
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
@@ -28,8 +30,8 @@ async function runWorkerOnce(): Promise<void> {
   });
 
   await boss.start();
-  // Jobs entram aqui conforme os módulos forem criados
-  // (sincronização de turmas do IAM Control, rotas do Google Maps, envio de mensagens).
+  await registrarSincronizacaoDeTurmas(boss);
+  // Próximos jobs: rotas do Google Maps, envio de mensagens.
 
   withCorrelationId("worker-startup", () => {
     logger.info({ componente: "worker" }, "worker iniciado");

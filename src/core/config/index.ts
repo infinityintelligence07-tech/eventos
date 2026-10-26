@@ -7,6 +7,16 @@ const environmentSchema = z.object({
     .string()
     .optional()
     .transform((value) => (value === "" ? undefined : value)),
+  // IAM Control: leitura das turmas (GET /api/webhooks/eventos/turmas), token exclusivo do Eventos.
+  IAM_CONTROL_URL: z
+    .string()
+    .optional()
+    .transform((value) => (value === "" ? undefined : value))
+    .pipe(z.string().url().optional()),
+  IAM_CONTROL_EVENTOS_TOKEN: z
+    .string()
+    .optional()
+    .transform((value) => (value === "" ? undefined : value)),
   LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),

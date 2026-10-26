@@ -23,7 +23,7 @@ const CORE_NAO_IMPORTA_MODULO = {
 };
 
 const ACESSO_AO_BANCO = {
-  group: ["@/core/db/client", "@/core/db/schema", "@/core/db/schema/*", "drizzle-orm", "drizzle-orm/*", "pg"],
+  group: ["@/core/db/client", "@/core/db/database", "@/core/db/schema", "@/core/db/schema/*", "drizzle-orm", "drizzle-orm/*", "pg"],
   message: "Acesso ao banco só em repository/ (ou em core/db).",
 };
 
@@ -102,6 +102,14 @@ export default tseslint.config(
     },
   },
 
+  // jobs/ monta as dependências (banco, integrações) e chama os serviços dos módulos.
+  {
+    files: ["src/jobs/**/*.ts"],
+    rules: {
+      "no-restricted-imports": ["error", { patterns: [PROIBIDO_ATRAVESSAR_FRONTEIRA] }],
+    },
+  },
+
   {
     files: ["src/core/**/*.{ts,tsx}"],
     rules: {
@@ -115,7 +123,7 @@ export default tseslint.config(
   },
 
   {
-    files: ["**/*.test.ts"],
+    files: ["**/*.test.ts", "src/test/**/*.ts"],
     rules: {
       "no-restricted-imports": "off",
       "no-restricted-properties": "off",

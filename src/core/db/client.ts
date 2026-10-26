@@ -1,17 +1,7 @@
-import { Pool } from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
-
 import { config } from "@/core/config";
 
-import * as core from "./schema/core";
-import * as eventos from "./schema/eventos";
+import { criarDb } from "./database";
 
-export const pool = new Pool({
-  connectionString: config.DATABASE_URL,
-  application_name: "eventos-web",
-});
+export type { Db } from "./database";
 
-export const db = drizzle({
-  client: pool,
-  schema: { ...core, ...eventos },
-});
+export const { db, pool } = criarDb(config.DATABASE_URL);
