@@ -9,11 +9,52 @@ logística (carona, voo, hotel) e custos. Fase atual: backend e banco.
 - Requisitos: [docs/01-requisitos-e-viabilidade.md](docs/01-requisitos-e-viabilidade.md)
 - Regras de custo: [docs/03-regras-de-custo.md](docs/03-regras-de-custo.md)
 
-## Banco
+## Rodar
 
 ```bash
 npm ci
-cp .env.example .env          # DATABASE_URL
+cp .env.example .env          # DATABASE_URL (o usuário cola; nunca commitar)
+npm run dev                   # web em http://localhost:3000 (GET /api/health, /api/health?db=1)
+npm run worker                # fila pg-boss no schema pgboss_eventos
+npm run lint && npm run typecheck && npm test
+```
+
+## Estrutura
+
+```
+src/
+  app/                 Next.js (rotas). Interface ainda não aprovada: só API por enquanto.
+  core/                infraestrutura: config (env validado com Zod), db, logging (pino), jobs (pg-boss)
+  modules/<nome>/
+    domain/            regras puras, sem banco, sem relógio, sem ambiente (o lint barra)
+    index.ts           interface pública do módulo
+  worker.ts            processo do pg-boss
+```
+
+Regras puras já prontas, com testes:
+
+| Módulo | Regra |
+|---|---|
+| `escala` | Vagas por tipo de evento a partir de `tipo_evento.regra_vagas` (Confronto, ASM). Fórmulas editáveis, avaliadas sem `eval`; dado faltando vira pendência, não 0. |
+| `comunicacao` | Motor de copy: `{{evento.cidade}}`, `{{genero:ESCALADO\|ESCALADA}}`, lista do que falta, hash dos dados para marcar copy desatualizada, saudação e período em português. |
+| `eventos` | Código `SIGLA_POLO_EDIÇÃO`: montar, separar e normalizar o que foi digitado nas planilhas. |
+
+Os testes leem os tipos de evento e os modelos de copy direto da migration `0002`, então um dado inicial inválido quebra o CI.
+
+## Deploy (EasyPanel)
+
+Um `Dockerfile`, duas imagens:
+
+```bash
+docker build --target web    -t eventos-web .     # Next standalone, porta 3000, healthcheck /api/health
+docker build --target worker -t eventos-worker .  # pg-boss
+```
+
+Variáveis: `DATABASE_URL`, `WORKER_DATABASE_URL` (opcional, conexão direta para o worker), `LOG_LEVEL`.
+
+## Banco
+
+```bash
 npm run db:migrate            # aplica as migrations do schema eventos
 npm run db:generate           # gera migration a partir de src/core/db/schema/eventos
 ```
