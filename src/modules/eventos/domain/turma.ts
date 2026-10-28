@@ -58,7 +58,17 @@ export type EventoDaTurma = {
   local: LocalDaTurma | null;
 };
 
-export type MotivoTurmaIgnorada = "TIPO_NAO_RECONHECIDO" | "SEM_DATA";
+export type MotivoTurmaIgnorada = "TIPO_NAO_RECONHECIDO" | "SEM_DATA" | "TURMA_DE_CONTROLE";
+
+// O IAM Control guarda alunos fora de turma (cancelados, inadimplentes, no jurídico...) em turmas
+// com essas edições e data 31/12/2999. Não são eventos.
+const EDICOES_DE_CONTROLE = new Set(["CANCELADA", "SEM_TURMA", "INADIMPLENTE", "JURIDICO"]);
+const ANO_DE_CONTROLE = "2900";
+
+function turmaDeControle(edicao: string | null, dataInicio: string): boolean {
+  const edicaoNormalizada = normalizar(edicao).replace(/ /g, "_").toUpperCase();
+  return EDICOES_DE_CONTROLE.has(edicaoNormalizada) || dataInicio.slice(0, 4) >= ANO_DE_CONTROLE;
+}
 
 export type TurmaConvertida =
   | { ok: true; evento: EventoDaTurma }
@@ -191,6 +201,9 @@ export function eventoDaTurma(
   const dataFinal = turma.data_final?.slice(0, 10) || dataInicio;
   if (!DATA.test(dataInicio) || !DATA.test(dataFinal)) {
     return { ok: false, iamControlTurmaId: turma.id, motivo: "SEM_DATA", treinamento: turma.treinamento.nome };
+  }
+  if (turmaDeControle(turma.edicao, dataInicio)) {
+    return { ok: false, iamControlTurmaId: turma.id, motivo: "TURMA_DE_CONTROLE", treinamento: turma.treinamento.nome };
   }
 
   // Data final antes da inicial é erro de digitação: o evento fica com um dia só.

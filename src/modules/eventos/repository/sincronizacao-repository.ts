@@ -11,7 +11,7 @@ export type AcaoSincronizacao = "CRIADO" | "ATUALIZADO" | "IGNORADO_EXCLUIDO";
 export type EventoSalvo = {
   acao: AcaoSincronizacao;
   eventoId: string;
-  /** Código que outro evento já usa; este ficou sem código até o time resolver. */
+  /** Código que outro evento ativo já usa; este ficou sem código até o time resolver. */
   codigoEmConflito: string | null;
   poloNaoEncontrado: boolean;
 };
@@ -74,11 +74,13 @@ export function criarRepositorioSincronizacao(db: Db): RepositorioSincronizacao 
             (await tx.insert(local).values({ ...dados.local, tipo: "EVENTO" }).returning({ id: local.id }))[0]!.id;
         }
 
+        // Turma remarcada: a cancelada e a nova têm a mesma edição. O código fica com o evento ativo;
+        // só dois eventos ativos com o mesmo código viram conflito para o time resolver.
         let codigo = dados.codigo;
         let codigoEmConflito: string | null = null;
         if (codigo) {
           const [outro] = await tx
-            .select({ id: evento.id })
+            .select({ id: evento.id, status: evento.status, deletedAt: evento.deletedAt })
             .from(evento)
             .where(
               and(
@@ -86,10 +88,17 @@ export function criarRepositorioSincronizacao(db: Db): RepositorioSincronizacao 
                 existente ? ne(evento.id, existente.id) : sql`true`,
               ),
             )
-            .limit(1);
+            .limit(1)
+            .for("update");
           if (outro) {
-            codigoEmConflito = codigo;
-            codigo = null;
+            const esteAtivo = dados.status !== "CANCELADO";
+            const outroAtivo = outro.status !== "CANCELADO" && !outro.deletedAt;
+            if (esteAtivo && !outroAtivo) {
+              await tx.update(evento).set({ codigo: null, atualizadoEm: agora }).where(eq(evento.id, outro.id));
+            } else {
+              if (esteAtivo) codigoEmConflito = codigo;
+              codigo = null;
+            }
           }
         }
 

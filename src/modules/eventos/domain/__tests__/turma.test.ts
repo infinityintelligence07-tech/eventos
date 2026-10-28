@@ -119,6 +119,14 @@ describe("evento a partir da turma", () => {
     });
   });
 
+  it("turma de controle do IAM Control (alunos fora de turma) é ignorada", () => {
+    for (const edicao of ["CANCELADA", "SEM_TURMA", "INADIMPLENTE", "JURIDICO", "Jurídico"]) {
+      expect(eventoDaTurma(turmaDeExemplo({ edicao }), "2026-10-26")).toMatchObject({ ok: false, motivo: "TURMA_DE_CONTROLE" });
+    }
+    const em2999 = eventoDaTurma(turmaDeExemplo({ data_inicio: "2999-12-31", data_final: "2999-12-31" }), "2026-10-26");
+    expect(em2999).toMatchObject({ ok: false, motivo: "TURMA_DE_CONTROLE" });
+  });
+
   it("treinamento que não é evento é ignorado com o motivo", () => {
     const resultado = eventoDaTurma(
       turmaDeExemplo({ treinamento: { id: 1, nome: "Mentoria", sigla: null, tipo_evento: false, tipo_palestra: false } }),

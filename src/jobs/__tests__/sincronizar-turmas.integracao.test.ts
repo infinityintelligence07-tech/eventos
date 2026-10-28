@@ -158,4 +158,20 @@ describe.skipIf(!TEST_DATABASE_URL)("sincronização de turmas no Postgres (GH +
     expect(resumo.ignoradosExcluidos).toBe(1);
     expect((await evento(777)).status).toBe("CANCELADO");
   });
+
+  it("turma remarcada: o código passa da cancelada para a ativa, sem aviso", async () => {
+    turmas = [
+      turmaDeExemplo({ status_evento: "CANCELADA" }),
+      turmaDeExemplo({ id: 888, data_inicio: "2026-12-19", data_final: "2026-12-21" }),
+    ];
+    const resumo = await sincronizar();
+    expect(resumo.codigosEmConflito).toEqual([]);
+    expect((await evento(501)).codigo).toBeNull();
+    expect((await evento(888)).codigo).toBe("CONF_AM_60");
+
+    const denovo = await sincronizar();
+    expect(denovo.codigosEmConflito).toEqual([]);
+    expect((await evento(501)).codigo).toBeNull();
+    expect((await evento(888)).codigo).toBe("CONF_AM_60");
+  });
 });
