@@ -19,13 +19,12 @@ Deixar ela clicar: Calendário → CONF_AM_60 → Montar escala → Aprovação 
 **Perguntar (em aberto):**
 1. Horário do staff: cada dia tem horário de chegada e saída? É igual para todos ou muda por função
    (montagem chega antes)? Ele aparece na copy ("🕐 HORÁRIO") e na tela do staff.
-2. Expectativa de público: quem define o número que entra na conta dos líderes, e de onde ele sai hoje?
-3. Confronto: quantas vagas de Staff (além de líder, pai e mãe)? Existe conta ou é por experiência?
-4. Masterclass: quando há várias no mesmo dia e cidade, a escala é uma por Masterclass ou uma para o dia todo
-   (a mesma equipe cobre todas)?
-5. Código `MC_POLO_CIDADE`: como diferenciar duas Masterclasses na mesma cidade (no mesmo dia ou em datas diferentes)?
+2. Código `MC_POLO_CIDADE`: como diferenciar duas Masterclasses na mesma cidade? Proposta: acrescentar a edição da turma.
 
 **Só confirmar (respondidas pelo Vitor):**
+- Expectativa de público vem do IAM Control (maior entre a meta e os inscritos ativos) e pode ser editada.
+- Staff no Confronto: sem número fixo, ela decide em cada evento.
+- Masterclass: cada uma tem a sua equipe e a sua escala.
 - Líderes do Confronto = expectativa ÷ 25, arredondando para cima. É sempre sugestão: quem monta a escala confirma o número.
 - Sugestão de pessoas: disponibilidade primeiro; depois desempenho no evento (rastreio a criar).
 - Aprovação: a líder pode devolver com comentário, que é opcional.
@@ -47,12 +46,10 @@ Mostrar: Pedidos → Informar voo → Fatura (SDC) e Fatura SDC (financeiro).
 - A SDC usa uma página só dela; o time de eventos vê os mesmos pedidos numa aba SDC dentro do sistema.
 - Baixa do pagamento: o time de eventos confirma o valor (auditoria) e o financeiro paga com essa confirmação.
 
-**Perguntar:**
-6. Divergência na fatura (exemplos na tela "Fatura SDC"): diária extra pedida por WhatsApp, remarcação de voo
-   porque a escala mudou, taxa cobrada sem pedido. Quem decide se aceita: o time de eventos?
+- Divergência na fatura: ela/o time decide se o valor está certo; o financeiro paga.
 
 ## 5. Fechamento (5 min)
-- Das quatro áreas, qual ela quer usar primeiro?
+- Ordem de entrega: time de eventos, staff, SDC, financeiro (confirmar).
 - Quanto tempo leva hoje para montar e comunicar uma escala de Confronto? (valida a estimativa de economia)
 - Combinar a próxima conversa para ajustar o que mudou.
 

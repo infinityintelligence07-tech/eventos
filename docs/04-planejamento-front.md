@@ -145,13 +145,16 @@ Pontos a decidir nessas telas:
 | Baixa do pagamento | O time de eventos confirma o valor (auditoria) e o financeiro paga com essa confirmação. | Sem arquivo de retorno; o financeiro marca pago. |
 | Fatura SDC | Formato a confirmar com o financeiro. | — |
 | Atualização das telas | Tudo lê o mesmo banco. Montar escala, comunicação e pedidos da SDC atualizam sozinhas (Supabase Realtime) quando outra pessoa muda algo; as outras telas atualizam ao abrir ou recarregar. | Implementar Realtime nessas três telas. Lembrar: turmas do IAM Control chegam a cada 30 min; mensagem enviada e lote exportado não mudam (ficam marcados como desatualizados). |
+| Expectativa de público | Vem do IAM Control. A sincronização usa o maior entre a meta da turma e os inscritos ativos (sem cancelados e transferidos) e só preenche quando o campo está vazio. | Evento: expectativa editável; Montar escala recalcula a sugestão de líderes. |
+| Staff no Confronto | Sem número fixo: a Patricia decide em cada evento. | Função Staff sem sugestão; quem monta digita o número. |
+| Masterclass | Cada Masterclass tem a sua equipe (acontecem no mesmo horário). | Uma escala por Masterclass (uma turma = um evento), como já é gerado. |
+| Divergência na fatura SDC | A Patricia/time de eventos decide se o valor está certo; o financeiro paga. | Fatura SDC: o time aceita ou contesta cada divergência; o financeiro só paga a fatura conferida. |
+| Ordem de construção | Na ordem apresentada: time de eventos (calendário → escala → aprovação → comunicação), staff, SDC, financeiro. | Front começa pelo fluxo do time. |
 | Regras de custo | O print da aba REGRA DE CUSTO bate com os valores já carregados no banco (migration 0002); o Vitor confirma se o print está atualizado. | — |
 
 ## Perguntas em aberto
 
 - Horário do staff por dia (igual para todos ou por função) — hoje as vagas entram 08:00–18:00 provisórias.
-- Expectativa de público: quem define e de onde vem o número que entra na conta dos líderes.
-- Confronto: quantas vagas de Staff além de líder, pai e mãe.
-- Masterclass: escala por Masterclass ou pelo dia; como diferenciar códigos na mesma cidade.
-- Fatura SDC: quem decide aceitar uma divergência.
+- Código da Masterclass: como diferenciar duas `MC_POLO_CIDADE` iguais (proposta: acrescentar a edição da turma).
+- Formato da fatura da SDC (com o financeiro).
 - Regras de custo listadas no roteiro (`05-roteiro-validacao-patricia.md`).
