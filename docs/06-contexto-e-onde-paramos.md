@@ -48,12 +48,15 @@ Resumo para retomar o trabalho do Sistema Eventos numa conversa nova.
 - **Ordem do front:** time de eventos → staff → SDC → financeiro.
 
 ## Onde paramos
-1. **Primeira sincronização de turmas: bloqueada.** O `.env` do Eventos só tem o token. Falta o Vitor colar `DATABASE_URL`, a connection string do pooler do `iam-pessoas`. Depois:
-   - rodar `npm run sync:turmas`;
-   - conferir eventos, vagas e avisos de "polo não encontrado" ou código em conflito.
-2. **Depois disso:** começar o front do fluxo do time (calendário → evento → montar escala → aprovação → comunicação), com Realtime nas telas compartilhadas.
+1. **Sincronização de turmas: feita em 28/10.**
+   - Conexão pelo Session pooler: `aws-1-sa-east-1.pooler.supabase.com:5432`, usuário `postgres.rpnyvqinqdvqwripqlxj`. O host `db.…supabase.co` só tem IPv6 e não conecta daqui.
+   - Resultado: 893 turmas lidas, 850 eventos, 43 ignoradas, nenhum conflito de código, nenhum polo faltando. Vagas em 53 eventos (ASM e Confronto, 1.005 vagas).
+   - Corrigido: turmas de controle do IAM Control (edição CANCELADA, SEM_TURMA, INADIMPLENTE ou JURIDICO, data 31/12/2999) são ignoradas; em turma remarcada, o código fica com a turma ativa.
+   - A sincronização leva cerca de 2min30s (uma transação por turma).
+2. **Próximo:** começar o front do fluxo do time (calendário → evento → montar escala → aprovação → comunicação), com Realtime nas telas compartilhadas.
 
 ## Em aberto
+- **Regra de vagas da Masterclass e da Imersão de Negócios:** está vazia (`{}`), então esses eventos não recebem vagas.
 - **Horário do staff por dia:** igual para todos ou por função? Hoje as vagas entram 08:00–18:00 provisórias, e o horário aparece na copy.
 - **Código da Masterclass:** como diferenciar duas na mesma cidade. A proposta é acrescentar a edição da turma.
 - **Formato da fatura da SDC:** perguntar ao financeiro (planilha ou PDF, e se traz código por pedido).
