@@ -1,0 +1,120 @@
+@import "tailwindcss";
+@import "./estilos/design-system.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Paleta do IAM Control (TailAdmin) usada nas classes utilitárias. */
+@theme {
+  --color-brand-25: #f4f7ff;
+  --color-brand-50: #e8eefc;
+  --color-brand-100: #d3dff8;
+  --color-brand-200: #a7bfef;
+  --color-brand-300: #6d93e0;
+  --color-brand-400: #3d6ad4;
+  --color-brand-500: #0034b8;
+  --color-brand-600: #002a96;
+  --color-brand-700: #00247f;
+  --color-brand-800: #001c66;
+  --color-brand-900: #00144d;
+
+  --radius-md: 10px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-2xl: 14px;
+}
+
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--ds-separator, currentColor);
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  summary {
+    cursor: pointer;
+  }
+  body {
+    font-family: var(--ds-font);
+    background: var(--ds-bg);
+    color: var(--ds-label);
+    letter-spacing: var(--ds-tracking-body);
+    min-height: 100dvh;
+    overflow-x: clip;
+  }
+}
+
+/* Menu lateral: degradê da marca, como no IAM Control. */
+.app-sidebar {
+  background: linear-gradient(180deg, var(--ds-brand) 0%, var(--ds-tint-deep) 100%);
+  color: #ffffff;
+}
+
+.app-header {
+  background: color-mix(in srgb, var(--ds-surface) 82%, transparent);
+  backdrop-filter: saturate(180%) blur(18px);
+  -webkit-backdrop-filter: saturate(180%) blur(18px);
+  border-bottom: 1px solid var(--ds-separator);
+}
+
+html.dark .app-header {
+  background: color-mix(in srgb, #000000 72%, transparent);
+}
+
+@utility menu-item {
+  @apply relative flex w-full items-center gap-3 rounded-[10px] px-3 text-[14px] font-medium;
+  min-height: 40px;
+}
+
+@utility menu-item-active {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
+@utility menu-item-inactive {
+  color: rgba(255, 255, 255, 0.78);
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+  }
+}
+
+@utility menu-item-disabled {
+  color: rgba(255, 255, 255, 0.5);
+  cursor: default;
+}
+
+/* Cores por situação da escala: as mesmas da agenda de Masterclass do IAM Control. */
+.situacao-SEM_ESCALA {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+  color: #374151;
+}
+.situacao-RASCUNHO {
+  background: #fef3c7;
+  border-color: #d97706;
+  color: #92400e;
+}
+.situacao-APROVADA {
+  background: #dbeafe;
+  border-color: #002279;
+  color: #002279;
+}
+.situacao-COMUNICADA {
+  background: #dcfce7;
+  border-color: #16a34a;
+  color: #14532d;
+}
+.situacao-CANCELADO {
+  background: #f3e8ff;
+  border-color: #9333ea;
+  color: #581c87;
+  text-decoration: line-through;
+}
+.situacao-CONCLUIDO {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+  color: #6b7280;
+}
