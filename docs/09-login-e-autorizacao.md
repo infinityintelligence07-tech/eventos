@@ -541,6 +541,59 @@ líder, registrar e auditar um custo) e conferência do `registro_acao`. Revisã
 
 ## 11. Ações manuais
 
+> **29/10: o Vitor assumiu de ponta a ponta**, inclusive o que estava com o Lucas (GH-System). A ordem a seguir
+> substitui as duas listas abaixo, que ficam como referência. O Lucas só precisa ficar ciente (ver o passo 15).
+
+### 11.0 Roteiro único (Vitor)
+
+**A. Preparar o GH-System** (repositório `/Users/vitorguedes/IAM/GH-System`, migrations do schema `core`)
+1. Migration no GH com os perfis `EVENTOS_TIME` e `EVENTOS_LIDER` em `core.perfil` (ver o formato real dos perfis
+   existentes no GH) e, se quiser, listar esses perfis no admin de usuários do GH.
+2. Migration no GH com o conteúdo de `docs/gh-proposta-papeis-do-eventos.sql` deste repositório (grants por coluna e
+   políticas de `SELECT` em `core` para os papéis do Eventos). **Só depois** da 0004 e da 0005 do Eventos (passo 6),
+   porque a política de `core.pessoa` lê `eventos.pessoa_evento` e `eventos.registro_acao`.
+3. "Anonimizar pessoa" no GH no lugar de apagar (decisão M6, opção A): o histórico do Eventos recusa apagar pessoa,
+   usuário ou evento citados nele.
+4. Corrigir o redirecionamento aberto do callback de login do GH (`src/app/auth/callback/route.ts`): `//site-externo`
+   passa no `startsWith("/")`. Usar o mesmo critério de `src/core/auth/destino.ts` do Eventos.
+
+**B. Login no Supabase `iam-pessoas`**
+5. Google Cloud: cliente OAuth "Aplicativo da Web" com a URI `https://<ref>.supabase.co/auth/v1/callback`; Supabase ›
+   Authentication › Providers › Google: ligar e colar ID e segredo; URL Configuration: incluir
+   `https://<dominio-do-eventos>/auth/callback` nas Redirect URLs (sem curinga). Decidir "Allow new users to sign up"
+   (§2.4) — vale também para o GH.
+
+**C. Banco de produção** (nesta ordem; fazer um backup antes)
+6. Aplicar as migrations 0004 e 0005 do Eventos (`npm run db:migrate` exige `EVENTOS_CONFIRMO_MIGRAR_REMOTO=sim`).
+   A 0004 troca CHECKs em `evento` e `convocacao` (o GH lê essas tabelas: conferir o GH depois).
+7. Aplicar as migrations do GH dos passos 1 e 2.
+8. Papéis: `ALTER ROLE app_eventos LOGIN PASSWORD '…'`, idem `app_eventos_leitura` e `app_eventos_copia`; e
+   `ALTER ROLE app_eventos SET eventos.ambiente = 'producao'`. Senhas fortes, guardadas só no Easypanel (a da cópia no
+   `.env` local como `ORIGEM_DATABASE_URL`).
+9. Atribuir os perfis às pessoas reais (`core.usuario_perfil`, escopo `GLOBAL`): a Patricia com `EVENTOS_LIDER`; o
+   restante do time com `EVENTOS_TIME`. Conferir que o e-mail do Google de cada uma é o mesmo de `core.usuario.email`.
+10. Só depois que o código desta branch estiver no ar: incluir `{"funcao":"STAFF","digitado":true}` na regra de vagas
+    do Confronto (pela tela Configurações › Vagas ou migration de dados).
+
+**D. Deploy somente leitura (P3)**
+11. Easypanel (web): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `EVENTOS_URL_PUBLICA` (também como
+    argumento de build), `DATABASE_URL` (pooler 6543, `app_eventos_leitura`). Nunca `EVENTOS_MODO` nem a
+    `service_role`. Worker: segue com a URL atual até existir o papel próprio (R7).
+12. Conferir no ar: login com Google entrando; pessoa sem perfil indo para `/sem-acesso`; cabeçalhos com `curl -I`;
+    `SHOW default_transaction_read_only` = `on` pelo pooler; refazer a prova RSC do C1 contra o domínio real.
+
+**E. Liberar escrita (P4)**
+13. Validar a privacidade com quem cuida de LGPD na IAM (rascunho na §9.2).
+14. Easypanel: `DATABASE_URL_ESCRITA` (pooler 6543, `app_eventos`) e `EVENTOS_ESCRITA=producao`; teste de fumaça num
+    evento de teste (montar, enviar, aprovar, comunicar, auditar um custo) e conferir o `registro_acao`.
+
+**F. Avisar**
+15. Avisar o Lucas do que mudou no banco compartilhado: os CHECKs novos de `status_escala` e `convocacao.status`, os
+    perfis `EVENTOS_*`, as políticas em `core`, o RESTRICT do histórico (apagar pessoa vira anonimizar) e o callback
+    corrigido.
+
+### 11.1 Listas originais (referência)
+
 **Vitor (Supabase `iam-pessoas` e Easypanel):**
 1. Google Cloud: cliente OAuth "Aplicativo da Web" com a URI de redirecionamento
    `https://<ref>.supabase.co/auth/v1/callback` (se ainda não existir, ADR 0001 passo 3).
