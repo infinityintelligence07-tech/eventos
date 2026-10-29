@@ -120,7 +120,7 @@ docker build --target worker -t eventos-worker .  # pg-boss
 
 Variáveis: `DATABASE_URL`, `WORKER_DATABASE_URL` (opcional, conexão direta para o worker),
 `IAM_CONTROL_URL`, `IAM_CONTROL_EVENTOS_TOKEN` (worker), `LOG_LEVEL`; no web, também `NEXT_PUBLIC_SUPABASE_URL`,
-`NEXT_PUBLIC_SUPABASE_ANON_KEY` e `EVENTOS_URL_PUBLICA` (ver "Login"). Nunca `EVENTOS_MODO` nem `SUPABASE_SERVICE_ROLE_KEY`.
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` e `EVENTOS_URL_PUBLICA` (ver "Login"). Nunca `EVENTOS_MODO=local` nem `SUPABASE_SERVICE_ROLE_KEY`; `EVENTOS_MODO=demo` só na demo sem login (docs/10).
 
 ## Banco
 

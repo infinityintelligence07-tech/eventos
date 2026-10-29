@@ -10,7 +10,7 @@ export type PerfilDoEventos = "EVENTOS_TIME" | "EVENTOS_LIDER";
 
 export const PERFIS_DO_EVENTOS: readonly PerfilDoEventos[] = ["EVENTOS_TIME", "EVENTOS_LIDER"];
 
-export type OrigemDoAtor = "SESSAO" | "LOCAL";
+export type OrigemDoAtor = "SESSAO" | "LOCAL" | "DEMO";
 
 export type Ator = {
   /** core.usuario.id */
@@ -26,6 +26,19 @@ export type Ator = {
 };
 
 export type ResolucaoDoAtor = { situacao: "OK"; ator: Ator } | { situacao: "SEM_CADASTRO" } | { situacao: "SEM_PERFIL"; email: string };
+
+/**
+ * Visitante da demo sem login (EVENTOS_MODO=demo, docs/10). Não existe em core.usuario e nunca grava: a guarda recusa
+ * a escrita na demo e o ator DEMO não passa na trava 4 da produção.
+ */
+export const ATOR_DA_DEMO: Ator = {
+  usuarioId: "de300000-0000-7000-8000-000000000001",
+  pessoaId: null,
+  nome: "Visitante (demo)",
+  email: "demo@eventos.iamcontrol.com.br",
+  perfis: ["EVENTOS_TIME", "EVENTOS_LIDER"],
+  origem: "DEMO",
+};
 
 export function rotuloDoPerfil(perfil: PerfilDoEventos): string {
   switch (perfil) {

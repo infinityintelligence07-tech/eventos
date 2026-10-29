@@ -1,8 +1,12 @@
 # Publicar a demo — Easypanel + Cloudflare (v0.1, 29/10/2026)
 
-Demo **somente leitura** (etapa P3 da doc 09) em `https://eventos.iamcontrol.com.br`, apontada para o Supabase
-`iam-pessoas`, com login Google e o Cloudflare Access na frente. Nenhuma tela grava: sem `EVENTOS_ESCRITA`, a guarda
-de escrita fica fechada, e o papel `app_eventos_leitura` é somente leitura no próprio banco.
+Demo **somente leitura** em `https://eventos.iamcontrol.com.br`, apontada para o Supabase `iam-pessoas`, **sem login
+no app** (`EVENTOS_MODO=demo`): todos entram como "Visitante (demo)", com a visão da líder. A porta é o **Cloudflare
+Access** (lista de e-mails) e é obrigatório: sem ele, qualquer pessoa com o link vê os dados.
+
+Nada grava, por três motivos independentes: a guarda de escrita fecha na demo (e recusa `EVENTOS_ESCRITA=producao`
+junto), o ator `DEMO` não passa na trava 4 em nenhum modo, e o papel `app_eventos_leitura` é somente leitura no banco.
+O login com Google (passos 2 e 3) fica para quando a demo virar a P3 de verdade: basta tirar `EVENTOS_MODO=demo`.
 
 O que a demo mostra hoje: os 850 eventos, os 8 polos e as vagas geradas pela sincronização. `core.pessoa` está vazia
 no `iam-pessoas`, então Pessoas, Escalas com nomes, Comunicação e Custos aparecem vazios até o GH cadastrar o staff.
@@ -47,7 +51,7 @@ postgresql://app_eventos_leitura.rpnyvqinqdvqwripqlxj:<senha>@aws-1-sa-east-1.po
 
 A senha fica só no Easypanel. `app_eventos` e `app_eventos_copia` continuam sem login.
 
-### 2. Google no Supabase Auth
+### 2. Google no Supabase Auth (depois; não precisa para a demo sem login)
 
 1. Google Cloud › APIs e serviços › Credenciais › Criar ID do cliente OAuth › "Aplicativo da Web".
    URI de redirecionamento autorizado: `https://rpnyvqinqdvqwripqlxj.supabase.co/auth/v1/callback`.
@@ -56,7 +60,7 @@ A senha fica só no Easypanel. `app_eventos` e `app_eventos_copia` continuam sem
    (sem curinga). **Não trocar a Site URL** se o GH já usa.
 4. Decidir "Allow new users to sign up" (doc 09 §2.4). Conta nova sem `core.usuario` não entra no Eventos de qualquer jeito.
 
-### 3. Quem entra
+### 3. Quem entra (depois; não precisa para a demo sem login)
 
 O login procura `core.usuario` pelo e-mail da conta Google (ativo, sem `deleted_at`) e exige o perfil com escopo
 `GLOBAL`. Hoje `core.usuario` está vazia. Para cada pessoa da demo (troque e-mail e nome):
@@ -80,14 +84,16 @@ Só a Patricia recebe `EVENTOS_LIDER` (doc 09 §13.1). Na demo somente leitura o
 - **Variáveis** (o Easypanel também as passa como build args; `EVENTOS_URL_PUBLICA` é lida no build):
 
   ```
+  EVENTOS_MODO=demo
   DATABASE_URL=<a do passo 1>
-  NEXT_PUBLIC_SUPABASE_URL=https://rpnyvqinqdvqwripqlxj.supabase.co
-  NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_6xd4FjpJcUNtKcpUYoRsKg_sctjPGE4
   EVENTOS_URL_PUBLICA=https://eventos.iamcontrol.com.br
   LOG_LEVEL=info
   ```
 
-  Nunca `EVENTOS_MODO`, `EVENTOS_ESCRITA`, `DATABASE_URL_ESCRITA` nem a `service_role`.
+  Quando ligar o login (passos 2 e 3): tirar `EVENTOS_MODO=demo` e incluir
+  `NEXT_PUBLIC_SUPABASE_URL=https://rpnyvqinqdvqwripqlxj.supabase.co` e
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_6xd4FjpJcUNtKcpUYoRsKg_sctjPGE4` (chave pública).
+  Nunca `EVENTOS_ESCRITA`, `DATABASE_URL_ESCRITA` nem a `service_role`.
 - **Domínio:** `eventos.iamcontrol.com.br` → porta `3000`, HTTPS ligado.
 - **Worker:** não precisa para a demo. A sincronização de turmas pode continuar à mão (`npm run sync:turmas`).
   O worker com papel próprio (`app_eventos_worker`, R7) fica para a próxima rodada.
@@ -100,8 +106,8 @@ Só a Patricia recebe `EVENTOS_LIDER` (doc 09 §13.1). Na demo somente leitura o
 3. **Access** (Zero Trust › Access › Applications › Add › Self-hosted):
    - domínio `eventos.iamcontrol.com.br`, caminho vazio (o site inteiro);
    - política **Allow** com *Include › Emails* (a lista da demo: Patricia, time, Vitor);
-   - método de login: One-time PIN (código por e-mail) ou Google.
-   O retorno do Google (`/auth/callback`) passa pelo Access sem problema: quem chega lá já tem o cookie do Access.
+   - método de login: One-time PIN (código por e-mail; não precisa configurar nada) ou Google.
+   **Ligue o Access antes de ligar o proxy do DNS**: sem ele a demo fica aberta.
 4. Deixe desligados o Rocket Loader e o "Email Address Obfuscation" (mexem no HTML do Next).
 
 ### 6. Conferir no ar (doc 09 §11.0, passo 12)
@@ -112,8 +118,8 @@ curl -sI https://eventos.iamcontrol.com.br/login
 
 Sem o cookie do Access, a resposta deve ser um redirecionamento para `*.cloudflareaccess.com`. No navegador:
 
-- conta da lista → Access → `/login` → Google → `/inicio`;
-- conta Google sem `core.usuario` → volta ao login com "sem cadastro"; com usuário e sem perfil → `/sem-acesso`;
+- e-mail da lista → código do Access → `/inicio`, com "Visitante (demo)" e o selo "Demo · somente leitura";
+- e-mail fora da lista → o Access recusa;
 - botões de gravar aparecem desabilitados (somente leitura);
 - no SQL Editor, `SELECT usename, application_name FROM pg_stat_activity WHERE usename = 'app_eventos_leitura';`
   mostra as conexões da web com o papel de leitura.

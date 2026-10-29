@@ -5,7 +5,7 @@ import { lerConfig } from "@/core/config/leitura";
 
 // Só autentica (docs/09 L2): renova a sessão do Supabase e manda para /login quem não tem. Quem decide o acesso é o
 // servidor (layout do (time), executarAcao e o fluxo). Roda no edge: não importa banco nem @/core/auth (que lê o banco).
-// No modo local não fala com o Supabase; o layout leva para "Entrar como".
+// No modo local não fala com o Supabase; o layout leva para "Entrar como". Na demo (sem login) também não.
 
 function paraOLogin(request: NextRequest): NextResponse {
   const destino = request.nextUrl.clone();
@@ -23,7 +23,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   } catch {
     return paraOLogin(request);
   }
-  if (config.EVENTOS_MODO === "local") return NextResponse.next();
+  if (config.EVENTOS_MODO === "local" || config.EVENTOS_MODO === "demo") return NextResponse.next();
   if (!config.NEXT_PUBLIC_SUPABASE_URL || !config.NEXT_PUBLIC_SUPABASE_ANON_KEY) return paraOLogin(request);
 
   const reforco: CookieOptions = { httpOnly: true, secure: config.NODE_ENV === "production", sameSite: "lax", path: "/" };

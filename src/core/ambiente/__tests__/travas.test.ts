@@ -30,6 +30,12 @@ describe("travas 1 e 2 do ambiente", () => {
     expect(verificarAmbiente({ ...LOCAL, EVENTOS_MODO: undefined })).toMatchObject({ liberada: false, trava: "MODO_LOCAL" });
   });
 
+  it("trava 1: a demo nunca grava, nem com banco em localhost", () => {
+    for (const NODE_ENV of ["development", "production"] as const) {
+      expect(verificarAmbiente({ ...LOCAL, NODE_ENV, EVENTOS_MODO: "demo" })).toMatchObject({ liberada: false, trava: "MODO_LOCAL" });
+    }
+  });
+
   it("trava 1: recusa com NODE_ENV=production, mesmo em modo local", () => {
     expect(verificarAmbiente({ ...LOCAL, NODE_ENV: "production" })).toMatchObject({ liberada: false, trava: "MODO_LOCAL" });
   });
@@ -121,6 +127,7 @@ describe("modo PRODUCAO: travas 1 e 2 no ambiente", () => {
     ["escrita com dois hosts", { DATABASE_URL_ESCRITA: "postgresql://app_eventos.ref:y@pooler.supabase.com,outro.com:6543/postgres" }, "PAPEL_DE_ESCRITA"],
     ["escrita com URL inválida", { DATABASE_URL_ESCRITA: "não é url" }, "PAPEL_DE_ESCRITA"],
     ["EVENTOS_MODO=local junto", { EVENTOS_MODO: "local" }, "MODO_PRODUCAO"],
+    ["EVENTOS_MODO=demo junto", { EVENTOS_MODO: "demo" }, "MODO_PRODUCAO"],
     ["sem EVENTOS_ESCRITA (npm run dev com o .env de hoje)", { EVENTOS_ESCRITA: undefined }, "MODO_LOCAL"],
   ])("%s recusa", (_caso, mudanca, trava) => {
     expect(verificarAmbiente({ ...PRODUCAO, ...mudanca })).toMatchObject({ liberada: false, trava });
@@ -161,5 +168,10 @@ describe("trava 4: ator", () => {
     expect(verificarAtor("PRODUCAO", null)).toMatchObject({ liberada: false, trava: "ATOR" });
     for (const ator of [sessao, local]) expect(verificarAtor("LOCAL", ator)).toEqual({ liberada: true, modo: "LOCAL" });
     expect(verificarAtor("LOCAL", null)).toMatchObject({ liberada: false, trava: "ATOR" });
+  });
+
+  it("o visitante da demo não grava em nenhum modo", () => {
+    const demo = { ...sessao, origem: "DEMO" as const };
+    for (const modo of ["LOCAL", "PRODUCAO"] as const) expect(verificarAtor(modo, demo)).toMatchObject({ liberada: false, trava: "ATOR" });
   });
 });

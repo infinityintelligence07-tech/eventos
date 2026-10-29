@@ -1,5 +1,6 @@
 export {
   type Ator,
+  ATOR_DA_DEMO,
   type CadastroDoUsuario,
   decidirAcesso,
   listarUsuariosLocais,

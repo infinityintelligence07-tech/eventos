@@ -2,9 +2,10 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 
-import { modoLocal } from "@/core/ambiente";
+import { modoDemo, modoLocal } from "@/core/ambiente";
 import {
   type Ator,
+  ATOR_DA_DEMO,
   COOKIE_ATOR_LOCAL,
   criarSupabaseDoServidor,
   resolverAtorPorEmail,
@@ -55,7 +56,10 @@ async function situacaoDaSessao(): Promise<SituacaoDoAtor> {
 }
 
 /** Uma vez por requisição. */
-export const situacaoDoAtor = cache(async (): Promise<SituacaoDoAtor> => (modoLocal() ? situacaoLocal() : situacaoDaSessao()));
+export const situacaoDoAtor = cache(async (): Promise<SituacaoDoAtor> => {
+  if (modoDemo()) return { situacao: "OK", ator: ATOR_DA_DEMO };
+  return modoLocal() ? situacaoLocal() : situacaoDaSessao();
+});
 
 /** Contrato com a autorização (docs/09 §3.2, `atorDaRequisicao`): nulo = sem sessão, sem cadastro ou sem perfil do Eventos. */
 export async function obterAtor(): Promise<Ator | null> {

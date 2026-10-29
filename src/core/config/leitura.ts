@@ -21,11 +21,12 @@ const environmentSchema = z.object({
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),
   // "local": npm run dev:local, banco em .banco-local/ com staff fictício. Ausente = ambiente normal.
+  // "demo": sem login, entra direto como o visitante da demo (docs/10); a porta é o Cloudflare Access e nada grava.
   EVENTOS_MODO: z
     .string()
     .optional()
     .transform((value) => (value === "" ? undefined : value))
-    .pipe(z.enum(["local"]).optional()),
+    .pipe(z.enum(["local", "demo"]).optional()),
   // Login (Supabase Auth do iam-pessoas, só a chave pública). Opcionais fora de produção: o modo local usa "Entrar como".
   NEXT_PUBLIC_SUPABASE_URL: z
     .string()
@@ -48,7 +49,7 @@ const environmentSchema = z.object({
     { path: ["DATABASE_URL"], message: "com EVENTOS_MODO=local, DATABASE_URL precisa apontar para localhost" },
   )
   .superRefine((env, contexto) => {
-    if (env.NODE_ENV !== "production") return;
+    if (env.NODE_ENV !== "production" || env.EVENTOS_MODO === "demo") return;
     for (const nome of ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "EVENTOS_URL_PUBLICA"] as const) {
       if (!env[nome]) contexto.addIssue({ code: "custom", path: [nome], message: "obrigatória em produção (login)" });
     }

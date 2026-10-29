@@ -43,7 +43,7 @@ const ICONES: Record<ItemDoMenu, LucideIcon> = {
 export type UsuarioDoPainel = {
   nome: string;
   email: string;
-  origem: "SESSAO" | "LOCAL";
+  origem: "SESSAO" | "LOCAL" | "DEMO";
   perfis: ("EVENTOS_TIME" | "EVENTOS_LIDER")[];
 };
 
@@ -135,7 +135,7 @@ function SeloDoAmbiente({ ambiente }: { ambiente: AmbienteDoPainel }) {
       title="Escrita desligada neste ambiente: dá para consultar, mas nada é gravado."
     >
       <Lock size={14} aria-hidden />
-      Somente leitura
+      {ambiente.usuario?.origem === "DEMO" ? "Demo · somente leitura" : "Somente leitura"}
     </span>
   );
 }
@@ -144,7 +144,7 @@ function rotuloDosPerfis(perfis: UsuarioDoPainel["perfis"]): string {
   return perfis.includes("EVENTOS_LIDER") ? "Líder do time" : "Time de eventos";
 }
 
-/** Nome, perfil, "trocar" (só no modo local) e "Sair" (docs/09 §3.3). */
+/** Nome, perfil, "trocar" (só no modo local) e "Sair" (docs/09 §3.3; a demo sem login não tem "Sair"). */
 function UsuarioNoCabecalho({ usuario }: { usuario: UsuarioDoPainel }) {
   return (
     <div className="flex items-center gap-3">
@@ -164,16 +164,18 @@ function UsuarioNoCabecalho({ usuario }: { usuario: UsuarioDoPainel }) {
           )}
         </p>
       </div>
-      <form action={sair}>
-        <button
-          type="submit"
-          className="inline-flex h-10 items-center gap-1.5 rounded-[10px] border border-[var(--ds-separator)] bg-[var(--ds-surface)] px-3 text-[14px] font-medium text-[var(--ds-label)] hover:bg-[var(--ds-surface-2)]"
-          aria-label={`Sair (${usuario.nome})`}
-        >
-          <LogOut size={18} aria-hidden />
-          <span className="hidden md:inline">Sair</span>
-        </button>
-      </form>
+      {usuario.origem !== "DEMO" && (
+        <form action={sair}>
+          <button
+            type="submit"
+            className="inline-flex h-10 items-center gap-1.5 rounded-[10px] border border-[var(--ds-separator)] bg-[var(--ds-surface)] px-3 text-[14px] font-medium text-[var(--ds-label)] hover:bg-[var(--ds-surface-2)]"
+            aria-label={`Sair (${usuario.nome})`}
+          >
+            <LogOut size={18} aria-hidden />
+            <span className="hidden md:inline">Sair</span>
+          </button>
+        </form>
+      )}
     </div>
   );
 }

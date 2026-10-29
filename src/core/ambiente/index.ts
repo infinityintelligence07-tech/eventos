@@ -44,7 +44,8 @@ const fechada = (trava: TravaDeEscrita, motivo: string): Fechada => ({ liberada:
 export function modoPedido(ambiente: Pick<AmbienteDeEscrita, "EVENTOS_MODO" | "EVENTOS_ESCRITA">): ModoDeEscrita | null | "CONFLITO" {
   const local = ambiente.EVENTOS_MODO === "local";
   const producao = ambiente.EVENTOS_ESCRITA === "producao";
-  if (local && producao) return "CONFLITO";
+  // A demo nunca grava: pedir escrita junto com ela é configuração contraditória (fecha).
+  if ((local || ambiente.EVENTOS_MODO === "demo") && producao) return "CONFLITO";
   if (local) return "LOCAL";
   if (producao) return "PRODUCAO";
   return null;
@@ -77,7 +78,7 @@ export function verificarAmbiente(ambiente: AmbienteDeEscrita): SituacaoDaEscrit
     case null:
       return fechada("MODO_LOCAL", "Nenhum modo de escrita configurado (EVENTOS_MODO=local ou EVENTOS_ESCRITA=producao).");
     case "CONFLITO":
-      return fechada("MODO_PRODUCAO", "EVENTOS_MODO=local e EVENTOS_ESCRITA=producao ao mesmo tempo.");
+      return fechada("MODO_PRODUCAO", `EVENTOS_MODO=${ambiente.EVENTOS_MODO} e EVENTOS_ESCRITA=producao ao mesmo tempo.`);
     case "LOCAL": {
       const local = verificarModoLocal(ambiente);
       if (!local.liberada) return local;
@@ -152,11 +153,12 @@ export function verificarServidor(leitura: LeituraDoServidor, portaEsperada: num
   }
 }
 
-/** Trava 4: quem pede a transação. Em PRODUCAO, só ator de sessão (o "Entrar como" do local nunca grava lá). */
+/** Trava 4: quem pede a transação. Em PRODUCAO, só ator de sessão (o "Entrar como" do local nunca grava lá); o visitante da demo, em nenhum. */
 export function verificarAtor(modo: ModoDeEscrita, ator: AtorDaEscrita | null): SituacaoDaEscrita {
   switch (modo) {
     case "LOCAL":
       if (!ator) return fechada("ATOR", "Escrita sem usuário.");
+      if (ator.origem === "DEMO") return fechada("ATOR", "O visitante da demo nunca grava.");
       return { liberada: true, modo };
     case "PRODUCAO":
       if (!ator) return fechada("ATOR", "Escrita em produção sem usuário de sessão.");
@@ -194,6 +196,12 @@ export function portaDoBancoConfigurado(): number | null {
 export function urlDeEscritaDeProducao(): string | null {
   const ambiente = ambienteAtual();
   return ambiente?.DATABASE_URL_ESCRITA ?? null;
+}
+
+/** Demo sem login (docs/10): entra como o visitante, sempre somente leitura. */
+export function modoDemo(): boolean {
+  const ambiente = ambienteAtual();
+  return ambiente?.EVENTOS_MODO === "demo";
 }
 
 export function modoLocal(): boolean {

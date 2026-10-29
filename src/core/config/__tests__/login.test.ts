@@ -23,6 +23,12 @@ describe("variáveis do login", () => {
     expect(parseEnvironment({ ...BASE, ...LOGIN, NODE_ENV: "production" })).toMatchObject(LOGIN);
   });
 
+  it("são opcionais na demo sem login, também em produção", () => {
+    const demo = parseEnvironment({ ...BASE, NODE_ENV: "production", EVENTOS_MODO: "demo" });
+    expect(demo.EVENTOS_MODO).toBe("demo");
+    expect(() => parseEnvironment({ ...BASE, NODE_ENV: "production", EVENTOS_MODO: "outro" })).toThrow(/EVENTOS_MODO/);
+  });
+
   it("URLs precisam ser válidas", () => {
     expect(() => parseEnvironment({ ...BASE, NODE_ENV: "development", EVENTOS_URL_PUBLICA: "eventos" })).toThrow(/EVENTOS_URL_PUBLICA/);
   });

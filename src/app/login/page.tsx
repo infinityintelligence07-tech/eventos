@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { entradaLocalLiberada, situacaoDoAtor } from "@/app/(time)/_servidor/usuario-atual";
-import { modoLocal } from "@/core/ambiente";
+import { modoDemo, modoLocal } from "@/core/ambiente";
 import { configuracaoDoLogin, destinoSeguro } from "@/core/auth";
 
 import { MolduraDeEntrada } from "./_componentes/moldura";
@@ -32,6 +32,7 @@ function IconeDoGoogle() {
 
 export default async function PaginaLogin({ searchParams }: { searchParams: Promise<{ erro?: string; proximo?: string }> }) {
   const { erro, proximo } = await searchParams;
+  if (modoDemo()) redirect("/inicio");
 
   if (modoLocal()) {
     if (await entradaLocalLiberada()) redirect("/entrar-local");
