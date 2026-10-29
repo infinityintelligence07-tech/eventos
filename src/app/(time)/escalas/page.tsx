@@ -12,6 +12,7 @@ import { EstadoVazio } from "../_componentes/ui/estados";
 import { nomeCurtoDoEvento as nomeCurto, periodo } from "../_componentes/ui/formatos";
 import { ChipDaEscala } from "../_componentes/ui/situacao";
 import { CabecaDaTabela, CelulaDaTabela, ColunaDaTabela, LinhaDaTabela, Tabela } from "../_componentes/ui/tabela";
+import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Escalas" };
@@ -28,6 +29,7 @@ function acaoDaLinha(statusEscala: string, status: string): string {
 }
 
 export default async function PaginaEscalas({ searchParams }: Parametros) {
+  await exigirAtor();
   const lista = await listarEscalas(await searchParams, new Date());
   const { contagem, filtros } = lista;
   const algumFiltro = Boolean(filtros.situacao || filtros.polo || filtros.tipo || filtros.busca || !filtros.esconderMasterclasses);

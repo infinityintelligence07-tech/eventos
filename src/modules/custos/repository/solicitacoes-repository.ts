@@ -429,6 +429,7 @@ export function criarRepositorioSolicitacoes(executor: Executor): RepositorioSol
           auditoria: solicitacaoCusto.statusAuditoria,
           financeiro: solicitacaoCusto.statusFinanceiro,
           nivel: solicitacaoCusto.nivelExcecao,
+          registradoPor: solicitacaoCusto.registradoPor,
         })
         .from(solicitacaoCusto)
         .where(eq(solicitacaoCusto.id, solicitacaoId))
@@ -436,6 +437,25 @@ export function criarRepositorioSolicitacoes(executor: Executor): RepositorioSol
       if (!linha) return null;
       const { auditoria, financeiro, nivel, ...resto } = linha;
       return { ...resto, situacao: { auditoria: auditoria as StatusAuditoria, financeiro: financeiro as StatusFinanceiro }, nivel: nivel as NivelDeExcecao };
+    },
+
+    async autoresDoRegistro(solicitacaoId) {
+      const linhas = await executor
+        .selectDistinct({ usuarioId: registroAcao.usuarioId })
+        .from(registroAcao)
+        .where(
+          and(
+            eq(registroAcao.entidade, "SOLICITACAO_CUSTO"),
+            eq(registroAcao.entidadeId, solicitacaoId),
+            inArray(registroAcao.acao, ["SOLICITACAO_REGISTRADA", "CORRECAO_REGISTRADA"]),
+          ),
+        );
+      return linhas.flatMap((linha) => (linha.usuarioId ? [linha.usuarioId] : []));
+    },
+
+    async cadastroDaPessoa(pessoaId) {
+      const [linha] = await executor.select({ usuarioId: pessoa.usuarioId, email: pessoa.email }).from(pessoa).where(eq(pessoa.id, pessoaId));
+      return { usuarioId: linha?.usuarioId ?? null, email: linha?.email ?? null };
     },
 
     async mudarSolicitacao(solicitacaoId, condicao, mudanca) {

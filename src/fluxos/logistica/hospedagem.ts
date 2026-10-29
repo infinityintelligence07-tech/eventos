@@ -1,4 +1,4 @@
-import { bancoParaLeitura, transacao } from "@/fluxos/_base";
+import { bancoParaLeitura, transacao, type AtorDaEscrita } from "@/fluxos/_base";
 import {
   type AdicionarQuarto,
   type AlterarHospedagem,
@@ -86,36 +86,36 @@ export async function carregarHospedagem(eventoId: string | null, agora: Date): 
 
 const contexto = (usuarioId: string, agora: Date) => ({ usuarioId, instante: agora });
 
-export function criarHospedagem(entrada: CriarHospedagem, usuarioId: string, agora: Date) {
-  return traduzirErros(() => transacao((tx) => servicoDeHospedagem.criarHospedagem(criarRepositorioHospedagem(tx), entrada, contexto(usuarioId, agora))));
+export function criarHospedagem(entrada: CriarHospedagem, ator: AtorDaEscrita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDeHospedagem.criarHospedagem(criarRepositorioHospedagem(tx), entrada, contexto(ator.usuarioId, agora))));
 }
 
-export function alterarHospedagem(entrada: AlterarHospedagem, usuarioId: string, agora: Date) {
-  return traduzirErros(() => transacao((tx) => servicoDeHospedagem.alterarHospedagem(criarRepositorioHospedagem(tx), entrada, contexto(usuarioId, agora))));
+export function alterarHospedagem(entrada: AlterarHospedagem, ator: AtorDaEscrita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDeHospedagem.alterarHospedagem(criarRepositorioHospedagem(tx), entrada, contexto(ator.usuarioId, agora))));
 }
 
-export function registrarPedidoDeHospedagem(entrada: RegistrarPedidoDeHospedagem, usuarioId: string, agora: Date) {
-  return traduzirErros(() => transacao((tx) => servicoDePedidos.registrarPedidoDeHospedagem(criarRepositorioPedidos(tx), entrada, contexto(usuarioId, agora))));
+export function registrarPedidoDeHospedagem(entrada: RegistrarPedidoDeHospedagem, ator: AtorDaEscrita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDePedidos.registrarPedidoDeHospedagem(criarRepositorioPedidos(tx), entrada, contexto(ator.usuarioId, agora))));
 }
 
-export function adicionarQuarto(entrada: AdicionarQuarto, usuarioId: string, agora: Date) {
-  return traduzirErros(() => transacao((tx) => servicoDeHospedagem.adicionarQuarto(criarRepositorioHospedagem(tx), entrada, contexto(usuarioId, agora))));
+export function adicionarQuarto(entrada: AdicionarQuarto, ator: AtorDaEscrita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDeHospedagem.adicionarQuarto(criarRepositorioHospedagem(tx), entrada, contexto(ator.usuarioId, agora))));
 }
 
-export function removerQuarto(quartoId: string, usuarioId: string, agora: Date) {
-  return traduzirErros(() => transacao((tx) => servicoDeHospedagem.removerQuarto(criarRepositorioHospedagem(tx), quartoId, contexto(usuarioId, agora))));
+export function removerQuarto(quartoId: string, ator: AtorDaEscrita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDeHospedagem.removerQuarto(criarRepositorioHospedagem(tx), quartoId, contexto(ator.usuarioId, agora))));
 }
 
 /** Pôr no quarto ou "Mover para…" outro quarto. */
-export function porNoQuarto(entrada: PorNoQuarto, usuarioId: string, agora: Date) {
-  return traduzirErros(() => transacao((tx) => servicoDeHospedagem.porNoQuarto(criarRepositorioHospedagem(tx), entrada, contexto(usuarioId, agora))));
+export function porNoQuarto(entrada: PorNoQuarto, ator: AtorDaEscrita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDeHospedagem.porNoQuarto(criarRepositorioHospedagem(tx), entrada, contexto(ator.usuarioId, agora))));
 }
 
-export function tirarDoQuarto(entrada: PorNoQuarto, usuarioId: string, agora: Date) {
-  return traduzirErros(() => transacao((tx) => servicoDeHospedagem.tirarDoQuarto(criarRepositorioHospedagem(tx), entrada, contexto(usuarioId, agora))));
+export function tirarDoQuarto(entrada: PorNoQuarto, ator: AtorDaEscrita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDeHospedagem.tirarDoQuarto(criarRepositorioHospedagem(tx), entrada, contexto(ator.usuarioId, agora))));
 }
 
 /** Rooming sugerido por sexo para quem está sem quarto. */
-export function aplicarRoomingSugerido(eventoId: string, usuarioId: string, agora: Date) {
-  return traduzirErros(() => transacao((tx) => servicoDeHospedagem.aplicarRoomingSugerido(criarRepositorioHospedagem(tx), eventoId, contexto(usuarioId, agora))));
+export function aplicarRoomingSugerido(eventoId: string, ator: AtorDaEscrita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDeHospedagem.aplicarRoomingSugerido(criarRepositorioHospedagem(tx), eventoId, contexto(ator.usuarioId, agora))));
 }

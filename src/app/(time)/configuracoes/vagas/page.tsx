@@ -1,22 +1,27 @@
 import type { Metadata } from "next";
 
+import { permissoesDoAtor } from "@/app/(time)/_servidor/usuario-atual";
 import { situacaoDaEscrita } from "@/fluxos/_base";
 import { FILA_DE_EXEMPLO, listarRegrasDeVagas, PUBLICO_DE_EXEMPLO } from "@/fluxos/escalas";
 
 import { Aviso, FaixaSomenteLeitura } from "../../_componentes/ui/aviso";
 import { Cartao } from "../../_componentes/ui/cartao";
+import { FaixaSemPermissao } from "../../_componentes/ui/permissao";
 import { EditorDeRegra } from "./_componentes/editor-de-regra";
+import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Vagas por tipo de evento" };
 
 export default async function PaginaRegrasDeVagas() {
-  const [{ tipos, funcoes }, escrita] = await Promise.all([listarRegrasDeVagas(), situacaoDaEscrita()]);
+  await exigirAtor();
+  const [{ tipos, funcoes }, escrita, permissoes] = await Promise.all([listarRegrasDeVagas(), situacaoDaEscrita(), permissoesDoAtor("config.regras_vagas")]);
+  const edita = escrita.liberada && permissoes["config.regras_vagas"];
   const nomes = new Map(funcoes.map((funcao) => [funcao.codigo, funcao.nome]));
 
   return (
     <>
-      {!escrita.liberada && <FaixaSomenteLeitura />}
+      {!escrita.liberada ? <FaixaSomenteLeitura /> : !edita && <FaixaSemPermissao permissao="config.regras_vagas" />}
       <div className="grid gap-3 md:grid-cols-2">
         {tipos.map((tipo) => (
           <Cartao
@@ -32,7 +37,7 @@ export default async function PaginaRegrasDeVagas() {
                   funcoes={funcoes}
                   publicoDeExemplo={PUBLICO_DE_EXEMPLO}
                   filaDeExemplo={FILA_DE_EXEMPLO}
-                  escritaLiberada={escrita.liberada}
+                  escritaLiberada={edita}
                 />
               )
             }

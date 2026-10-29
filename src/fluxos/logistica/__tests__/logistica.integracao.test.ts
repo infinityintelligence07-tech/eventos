@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import type { Db, Executor } from "@/core/db/database";
+import type { Db } from "@/core/db/database";
 import { ConflitoDeVersaoError, RegraDeNegocioError } from "@/fluxos/_base";
 import { type BancoDeTeste, criarBancoDeTeste, TEST_DATABASE_URL } from "@/test/banco";
 
@@ -17,8 +17,10 @@ import {
   criarHospedagem,
   definirCarona,
   porNoQuarto,
+  registrarPedidoDeHospedagem,
   registrarPedidoDeVoo,
   registrarRetornoDaSdc,
+  registrarRetornoDeHospedagem,
   resumoParaInicio,
   tirarDoQuarto,
 } from "..";
@@ -30,13 +32,15 @@ vi.mock("@/fluxos/_base", async (importOriginal) => {
   return {
     ...original,
     bancoParaLeitura: async () => banco.db!,
-    transacao: <T>(trabalho: (tx: Executor) => Promise<T>) => banco.db!.transaction(trabalho),
+    // A transação real (limite e "sem registro, desfaz"), no banco de teste.
+    transacao: async (_ator: unknown, trabalho: (tx: never) => Promise<unknown>) => (await import("@/fluxos/_base/banco")).transacaoNoBanco(banco.db!, trabalho as never),
   };
 });
 
 describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
   let teste: BancoDeTeste;
   let usuarioId: string;
+  const ator = () => ({ usuarioId, pessoaId: null, origem: "LOCAL" as const });
   let eventoId: string;
   let escalaId: string;
   const agora = new Date("2026-10-28T15:00:00Z");
@@ -91,11 +95,11 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
     expect(antes.aPedirNaJanela).toBe(1);
     expect((await resumoParaInicio(agora)).find((item) => item.chave === "voos-a-pedir")?.quantidade).toBe(1);
 
-    await expect(registrarPedidoDeVoo({ convocacaoId: carro.convocacaoId, trechos: [ida] }, usuarioId, agora)).rejects.toThrow(/Avião/);
+    await expect(registrarPedidoDeVoo({ convocacaoId: carro.convocacaoId, trechos: [ida] }, ator(), agora)).rejects.toThrow(/Avião/);
 
-    const pedido = await registrarPedidoDeVoo({ convocacaoId: ana.convocacaoId, trechos: [ida, volta], observacaoTime: "Bagagem de mão" }, usuarioId, agora);
+    const pedido = await registrarPedidoDeVoo({ convocacaoId: ana.convocacaoId, trechos: [ida, volta], observacaoTime: "Bagagem de mão" }, ator(), agora);
     expect(pedido.referencia).toMatch(/^SDC-\d{6}$/);
-    await expect(registrarPedidoDeVoo({ convocacaoId: ana.convocacaoId, trechos: [ida] }, usuarioId, agora)).rejects.toBeInstanceOf(RegraDeNegocioError);
+    await expect(registrarPedidoDeVoo({ convocacaoId: ana.convocacaoId, trechos: [ida] }, ator(), agora)).rejects.toBeInstanceOf(RegraDeNegocioError);
 
     const carregado = await carregarPedido(pedido.referencia);
     expect(carregado?.situacao).toBe("PEDIDO");
@@ -106,7 +110,7 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
       valorCentavos: 98000,
       trechos: [{ sentido: "IDA" as const, companhia: "Azul", numeroVoo: "AD4120", localizador: "KXQ7PZ", partidaEm: "2026-12-14T08:10", chegadaEm: "2026-12-14T11:45" }],
     };
-    await expect(registrarRetornoDaSdc(retorno, usuarioId, agora)).rejects.toThrow(/volta/);
+    await expect(registrarRetornoDaSdc(retorno, ator(), agora)).rejects.toThrow(/volta/);
     await registrarRetornoDaSdc(
       {
         ...retorno,
@@ -115,30 +119,42 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
           { sentido: "VOLTA", companhia: "Azul", numeroVoo: "AD4121", localizador: "KXQ7PZ", partidaEm: "2026-12-17T19:20", chegadaEm: "2026-12-17T22:05", cartaoEmbarqueUrl: "https://exemplo.test/cartao" },
         ],
       },
-      usuarioId,
+      ator(),
       agora,
     );
     const emitido = await um(`select situacao, valor_centavos, retorno_registrado_por, emitido_em from eventos.pedido_sdc where id = $1`, [pedido.id]);
     expect(emitido).toMatchObject({ situacao: "EMITIDO", valor_centavos: 98000, retorno_registrado_por: usuarioId });
     expect(await um(`select partida_em from eventos.trecho_voo where pedido_id = $1 and sentido = 'IDA'`, [pedido.id])).toEqual({ partida_em: new Date("2026-12-14T11:10:00Z") });
-    await expect(registrarRetornoDaSdc({ ...retorno, trechos: [] }, usuarioId, agora)).rejects.toThrow(/já foi emitido/);
+    await expect(registrarRetornoDaSdc({ ...retorno, trechos: [] }, ator(), agora)).rejects.toThrow(/já foi emitido/);
 
     const versao = (await carregarPedido(pedido.referencia))!.atualizadoEm;
-    await expect(alterarPedido({ pedidoId: pedido.id, atualizadoEm: "2020-01-01T00:00:00.000Z" }, usuarioId, agora)).rejects.toBeInstanceOf(ConflitoDeVersaoError);
+    await expect(alterarPedido({ pedidoId: pedido.id, atualizadoEm: "2020-01-01T00:00:00.000Z" }, ator(), agora)).rejects.toBeInstanceOf(ConflitoDeVersaoError);
     const depois = new Date(agora.getTime() + 60_000);
-    await alterarPedido({ pedidoId: pedido.id, atualizadoEm: versao, trechos: [ida, { ...volta, dataDesejada: "2026-12-18" }] }, usuarioId, depois);
+    await alterarPedido({ pedidoId: pedido.id, atualizadoEm: versao, trechos: [ida, { ...volta, dataDesejada: "2026-12-18" }] }, ator(), depois);
     expect((await carregarPedido(pedido.referencia))?.situacao).toBe("ALTERADO");
     expect((await resumoParaInicio(depois)).find((item) => item.chave === "pedidos-alterados")?.quantidade).toBe(1);
 
-    await cancelarPedido({ pedidoId: pedido.id, motivo: "Vai de carro com a equipe" }, usuarioId, depois);
+    await cancelarPedido({ pedidoId: pedido.id, motivo: "Vai de carro com a equipe" }, ator(), depois);
     expect((await carregarVoos({ situacao: "A_PEDIR" }, depois)).linhas).toHaveLength(1);
-    const novo = await registrarPedidoDeVoo({ convocacaoId: ana.convocacaoId, trechos: [ida] }, usuarioId, depois);
+    const novo = await registrarPedidoDeVoo({ convocacaoId: ana.convocacaoId, trechos: [ida] }, ator(), depois);
     expect(novo.referencia).not.toBe(pedido.referencia);
 
     const acoes = await teste.sql(`select acao, status_de, status_para, usuario_id from eventos.registro_acao where entidade = 'PEDIDO_SDC' and entidade_id = $1 order by criado_em`, [
       pedido.id,
     ]);
     expect(acoes.map((linha) => (linha as { acao: string }).acao)).toEqual(["PEDIDO_REGISTRADO", "RETORNO_REGISTRADO", "ALTERADO", "CANCELADO"]);
+    // O localizador fica só no trecho: o histórico imutável diz apenas que houve.
+    expect(await um(`select dados from eventos.registro_acao where entidade_id = $1 and acao = 'RETORNO_REGISTRADO'`, [pedido.id])).toEqual({
+      dados: { emNomeDe: "SDC", valorCentavos: 98000, trechos: 2, temLocalizador: true },
+    });
+    expect(await um(`select comentario, dados from eventos.registro_acao where entidade_id = $1 and acao = 'CANCELADO'`, [pedido.id])).toEqual({
+      comentario: null,
+      dados: { temMotivo: true },
+    });
+    expect(await um(`select motivo_cancelamento from eventos.pedido_sdc where id = $1`, [pedido.id])).toEqual({ motivo_cancelamento: "Vai de carro com a equipe" });
+    const historico = JSON.stringify(await teste.sql(`select dados, comentario from eventos.registro_acao where entidade_id = $1`, [pedido.id]));
+    expect(historico).not.toContain("KXQ7PZ");
+    expect(historico).not.toContain("Vai de carro");
   });
 
   it("hospedagem e quartos: sexo, capacidade, mover para outro quarto e rooming sugerido", async () => {
@@ -148,26 +164,33 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
     const { id: localEvento } = await um(`select local_id as id from eventos.evento where id = $1`, [eventoId]);
     const { id: hotelId } = await um(`insert into eventos.local (nome, tipo, cidade, uf) values ('Hotel Teste', 'HOTEL', 'Manaus', 'AM') returning id`);
 
-    await expect(criarHospedagem({ eventoId, localId: localEvento!, checkIn: "2026-12-14", checkOut: "2026-12-18" }, usuarioId, agora)).rejects.toThrow(/hotel ou um apartamento/);
-    const hospedagemId = await criarHospedagem({ eventoId, localId: hotelId!, checkIn: "2026-12-14", checkOut: "2026-12-18" }, usuarioId, agora);
-    await adicionarQuarto({ hospedagemId, nome: "Quarto 1", capacidade: 1, sexo: "F" }, usuarioId, agora);
-    await adicionarQuarto({ hospedagemId, nome: "Quarto 2", capacidade: 3 }, usuarioId, agora);
-    await expect(adicionarQuarto({ hospedagemId, nome: "quarto 1", capacidade: 2 }, usuarioId, agora)).rejects.toThrow(/Já existe/);
+    await expect(criarHospedagem({ eventoId, localId: localEvento!, checkIn: "2026-12-14", checkOut: "2026-12-18" }, ator(), agora)).rejects.toThrow(/hotel ou um apartamento/);
+    const hospedagemId = await criarHospedagem({ eventoId, localId: hotelId!, checkIn: "2026-12-14", checkOut: "2026-12-18" }, ator(), agora);
+    await adicionarQuarto({ hospedagemId, nome: "Quarto 1", capacidade: 1, sexo: "F" }, ator(), agora);
+    await adicionarQuarto({ hospedagemId, nome: "Quarto 2", capacidade: 3 }, ator(), agora);
+
+    const { id: pedidoId } = await registrarPedidoDeHospedagem({ hospedagemId }, ator(), agora);
+    await registrarRetornoDeHospedagem({ pedidoId, valorCentavos: 120000, numeroReserva: "RES-99812" }, ator(), agora);
+    expect(await um(`select numero_reserva from eventos.hospedagem where id = $1`, [hospedagemId])).toEqual({ numero_reserva: "RES-99812" });
+    expect(await um(`select dados from eventos.registro_acao where entidade_id = $1 and acao = 'RETORNO_REGISTRADO'`, [pedidoId])).toEqual({
+      dados: { emNomeDe: "SDC", valorCentavos: 120000, temNumeroReserva: true },
+    });
+    await expect(adicionarQuarto({ hospedagemId, nome: "quarto 1", capacidade: 2 }, ator(), agora)).rejects.toThrow(/Já existe/);
 
     const carregada = await carregarHospedagem(eventoId, agora);
     const [quarto1, quarto2] = carregada.hospedagens[0]!.quartos;
-    await expect(porNoQuarto({ quartoId: quarto1!.id, convocacaoId: edu.convocacaoId }, usuarioId, agora)).rejects.toThrow(/outro sexo/);
-    await porNoQuarto({ quartoId: quarto1!.id, convocacaoId: bia.convocacaoId }, usuarioId, agora);
-    await expect(porNoQuarto({ quartoId: quarto1!.id, convocacaoId: duda.convocacaoId }, usuarioId, agora)).rejects.toThrow(/todas as camas/);
+    await expect(porNoQuarto({ quartoId: quarto1!.id, convocacaoId: edu.convocacaoId }, ator(), agora)).rejects.toThrow(/outro sexo/);
+    await porNoQuarto({ quartoId: quarto1!.id, convocacaoId: bia.convocacaoId }, ator(), agora);
+    await expect(porNoQuarto({ quartoId: quarto1!.id, convocacaoId: duda.convocacaoId }, ator(), agora)).rejects.toThrow(/todas as camas/);
 
     // "Mover para…": Bia sai do Quarto 1 e vai para o Quarto 2 (uma cama por convocação).
-    const movida = await porNoQuarto({ quartoId: quarto2!.id, convocacaoId: bia.convocacaoId }, usuarioId, agora);
+    const movida = await porNoQuarto({ quartoId: quarto2!.id, convocacaoId: bia.convocacaoId }, ator(), agora);
     expect(movida.mudou).toBe(true);
     expect(await teste.sql(`select quarto_id from eventos.quarto_ocupante where convocacao_id = $1`, [bia.convocacaoId])).toEqual([{ quarto_id: quarto2!.id }]);
-    await tirarDoQuarto({ quartoId: quarto2!.id, convocacaoId: bia.convocacaoId }, usuarioId, agora);
-    await expect(tirarDoQuarto({ quartoId: quarto2!.id, convocacaoId: bia.convocacaoId }, usuarioId, agora)).rejects.toBeInstanceOf(ConflitoDeVersaoError);
+    await tirarDoQuarto({ quartoId: quarto2!.id, convocacaoId: bia.convocacaoId }, ator(), agora);
+    await expect(tirarDoQuarto({ quartoId: quarto2!.id, convocacaoId: bia.convocacaoId }, ator(), agora)).rejects.toBeInstanceOf(ConflitoDeVersaoError);
 
-    const resultado = await aplicarRoomingSugerido(eventoId, usuarioId, agora);
+    const resultado = await aplicarRoomingSugerido(eventoId, ator(), agora);
     expect(resultado.alocadas).toBeGreaterThanOrEqual(3);
     const depois = await carregarHospedagem(eventoId, agora);
     const porNome = Object.fromEntries(depois.hospedagens[0]!.quartos.map((quarto) => [quarto.nome, quarto.ocupantes.map((ocupante) => ocupante.nome)]));
@@ -182,10 +205,10 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
     const semCarro = await convocar("Gil Sem Carro", { deslocamento: "CARONA" });
     const outro = await convocar("Hugo Carona", { deslocamento: "CARONA" });
 
-    await expect(criarCarona({ eventoId, motoristaConvocacaoId: semCarro.convocacaoId }, usuarioId, agora)).rejects.toThrow(/não tem veículo/);
-    const caronaId = await criarCarona({ eventoId, motoristaConvocacaoId: motorista.convocacaoId }, usuarioId, agora);
-    await definirCarona({ convocacaoId: semCarro.convocacaoId, caronaId }, usuarioId, agora);
-    await expect(definirCarona({ convocacaoId: outro.convocacaoId, caronaId }, usuarioId, agora)).rejects.toThrow(/lugares ocupados/);
+    await expect(criarCarona({ eventoId, motoristaConvocacaoId: semCarro.convocacaoId }, ator(), agora)).rejects.toThrow(/não tem veículo/);
+    const caronaId = await criarCarona({ eventoId, motoristaConvocacaoId: motorista.convocacaoId }, ator(), agora);
+    await definirCarona({ convocacaoId: semCarro.convocacaoId, caronaId }, ator(), agora);
+    await expect(definirCarona({ convocacaoId: outro.convocacaoId, caronaId }, ator(), agora)).rejects.toThrow(/lugares ocupados/);
 
     const caronas = await carregarCaronas(eventoId, agora);
     expect(caronas.caronas[0]).toMatchObject({ motoristaNome: "Fabi Motorista", livres: 0 });

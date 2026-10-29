@@ -19,6 +19,7 @@ import { listarPessoas } from "@/fluxos/pessoas";
 import { lerFiltrosDaLista, limiteDaLista, PAGINA_DA_LISTA, rotuloDaCamiseta, rotuloDaFuncao, rotuloDoVeiculo, rotuloSimNao } from "@/modules/pessoas";
 
 import { ChipDoCadastro } from "./_componentes/chip-do-cadastro";
+import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Pessoas" };
@@ -38,6 +39,7 @@ function enderecoComLimite(parametros: Parametros, limite: number): string {
 }
 
 export default async function PaginaPessoas({ searchParams }: { searchParams: Promise<Parametros> }) {
+  await exigirAtor();
   const parametros = await searchParams;
   const filtros = lerFiltrosDaLista(parametros);
   const limite = limiteDaLista(parametros.limite);

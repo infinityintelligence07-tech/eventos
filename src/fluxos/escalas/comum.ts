@@ -1,4 +1,4 @@
-import { ConflitoDeVersaoError, type Executor, RegraDeNegocioError, transacao } from "@/fluxos/_base";
+import { type AtorDaEscrita, ConflitoDeVersaoError, type Executor, RegraDeNegocioError, transacao } from "@/fluxos/_base";
 import { ErroDaEscala, EscalaMudouError, RegraVagasInvalidaError } from "@/modules/escala";
 
 /** Mesmo formato em todos os fluxos (docs/07 §7.3). */
@@ -20,9 +20,9 @@ export function traduzirErro(erro: unknown): never {
   throw erro;
 }
 
-export async function escrever<T>(trabalho: (tx: Executor) => Promise<T>): Promise<T> {
+export async function escrever<T>(ator: AtorDaEscrita, trabalho: (tx: Executor) => Promise<T>): Promise<T> {
   try {
-    return await transacao(trabalho);
+    return await transacao(ator, trabalho);
   } catch (erro: unknown) {
     traduzirErro(erro);
   }

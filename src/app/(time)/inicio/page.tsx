@@ -13,6 +13,7 @@ import { EstadoVazio } from "../_componentes/ui/estados";
 import { dataEHora, periodo } from "../_componentes/ui/formatos";
 import { ChipDaEscala } from "../_componentes/ui/situacao";
 import { CabecaDaTabela, CelulaDaTabela, ColunaDaTabela, LinhaDaTabela, Tabela } from "../_componentes/ui/tabela";
+import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Início" };
@@ -59,6 +60,7 @@ function LinhaDaSemana({ evento }: { evento: EventoDaSemana }) {
 }
 
 export default async function PaginaInicio() {
+  await exigirAtor();
   const inicio = await carregarInicio(new Date());
 
   return (

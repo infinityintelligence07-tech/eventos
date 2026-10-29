@@ -5,6 +5,7 @@ import { listarLocais } from "@/fluxos/eventos";
 import { rotuloDoTipoDeLocal, type TipoDeLocal, TIPOS_DE_LOCAL } from "@/modules/eventos";
 
 import { LocaisCadastrados } from "./_componentes/locais-cadastrados";
+import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Locais e hotéis" };
@@ -12,6 +13,7 @@ export const metadata: Metadata = { title: "Locais e hotéis" };
 const PLURAL: Record<TipoDeLocal, string> = { EVENTO: "Locais de evento", HOTEL: "Hotéis", APARTAMENTO: "Apartamentos" };
 
 export default async function PaginaLocais({ searchParams }: { searchParams: Promise<{ tipo?: string; busca?: string }> }) {
+  await exigirAtor();
   const busca = await searchParams;
   const tipo = TIPOS_DE_LOCAL.find((valor) => valor === busca.tipo);
   const texto = busca.busca?.trim().slice(0, 80) || undefined;

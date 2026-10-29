@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import type { Executor } from "@/core/db/database";
+import { type AutoriaDoRegistro, registrarAcao } from "@/core/db/registro-acao";
 import { convocacao, escala, evento, funcao, tipoEvento } from "@/core/db/schema/eventos";
 
 import type { RepositorioVagas, TransacaoVagas } from "../service/gerar-vagas";
@@ -8,8 +9,11 @@ import type { RepositorioVagas, TransacaoVagas } from "../service/gerar-vagas";
 /** Horário das vagas geradas pela regra até o time ajustar a escala. */
 export const HORARIO_PADRAO = { inicio: "08:00", fim: "18:00" } as const;
 
-/** Com um Executor de transação, `db.transaction` vira savepoint dentro da transação do fluxo. */
-export function criarRepositorioVagas(db: Executor): RepositorioVagas {
+/**
+ * Com um Executor de transação, `db.transaction` vira savepoint dentro da transação do fluxo.
+ * `autoria`: quem pediu o recálculo (alguém do time) ou SISTEMA (a sincronização de turmas).
+ */
+export function criarRepositorioVagas(db: Executor, autoria: AutoriaDoRegistro): RepositorioVagas {
   return {
     comEventoTravado(eventoId, trabalho) {
       return db.transaction(async (tx) => {
@@ -97,6 +101,20 @@ export function criarRepositorioVagas(db: Executor): RepositorioVagas {
                 .set({ deletedAt: agora, atualizadoEm: agora })
                 .where(inArray(escala.id, plano.remover.map((item) => item.id)));
             }
+
+            await registrarAcao(tx, {
+              ...autoria,
+              entidade: "VAGA",
+              entidadeId: eventoId,
+              eventoId,
+              acao: "VAGAS_RECALCULADAS",
+              dados: {
+                inserir: plano.inserir.map(({ funcao: codigo, quantidade }) => ({ funcao: codigo, quantidade })),
+                atualizar: plano.atualizar.map(({ id, funcao: codigo, quantidade }) => ({ escalaId: id, funcao: codigo, quantidade })),
+                remover: plano.remover.map(({ id, funcao: codigo }) => ({ escalaId: id, funcao: codigo })),
+                funcoesNaoCadastradas,
+              },
+            });
 
             if (linhaEvento.statusEscala === "SEM_ESCALA" && novas.length) {
               await tx

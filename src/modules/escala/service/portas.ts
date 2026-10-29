@@ -33,7 +33,7 @@ export type LinhaTravada = {
 export type ConvocacaoTravada = { id: string; escalaId: string; eventoId: string; pessoaId: string; nome: string; status: StatusConvocacao };
 
 export type EntradaDoHistorico = {
-  entidade: "ESCALA_DO_EVENTO" | "CONVOCACAO";
+  entidade: "ESCALA_DO_EVENTO" | "CONVOCACAO" | "VAGA";
   entidadeId: string;
   eventoId: string;
   acao: string;

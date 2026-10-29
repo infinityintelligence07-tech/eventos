@@ -17,16 +17,16 @@ function revalidarRegras() {
 }
 
 export async function criarVigenciaDeRegraAcao(_estado: ResultadoAcao, form: FormData): Promise<ResultadoAcao> {
-  return executarAcao(form, criarVigenciaDeRegraSchema, async (dados, usuario) => {
-    const regra = await criarVigenciaDeRegra(dados, usuario.id, new Date());
+  return executarAcao(form, criarVigenciaDeRegraSchema, "config.regras_custo", async (dados, ator) => {
+    const regra = await criarVigenciaDeRegra(dados, ator, new Date());
     revalidarRegras();
     return `Novo valor de ${regra.nome} vale a partir de ${dataCurta(regra.vigenteDesde)}.`;
   });
 }
 
 export async function desativarRegraAcao(_estado: ResultadoAcao, form: FormData): Promise<ResultadoAcao> {
-  return executarAcao(form, desativarRegraSchema, async (dados, usuario) => {
-    const regra = await desativarRegra(dados.regraId, usuario.id, new Date());
+  return executarAcao(form, desativarRegraSchema, "config.regras_custo", async (dados, ator) => {
+    const regra = await desativarRegra(dados.regraId, ator, new Date());
     revalidarRegras();
     return `${regra.nome} desativada.`;
   });

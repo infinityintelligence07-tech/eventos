@@ -48,8 +48,9 @@ export async function confirmarVagas(
 ): Promise<{ confirmadas: number }> {
   await travarEventoEditavel(repo, eventoId, instante);
   for (const { escalaId, quantidade } of linhas) {
-    await linhaDoEvento(repo, eventoId, escalaId);
+    const linha = await linhaDoEvento(repo, eventoId, escalaId);
     await repo.definirVagas(escalaId, { quantidade, confirmadaPor: usuarioId, instante });
+    await registrarVaga(repo, linha, { acao: "VAGAS_CONFIRMADAS", para: quantidade, usuarioId });
   }
   return { confirmadas: linhas.length };
 }
@@ -57,11 +58,12 @@ export async function confirmarVagas(
 /** Mudar o número desfaz a confirmação: quem monta confirma de novo. */
 export async function alterarVagas(
   repo: RepositorioMontagem,
-  { eventoId, escalaId, quantidade, instante }: { eventoId: string; escalaId: string; quantidade: number; instante: Date },
+  { eventoId, escalaId, quantidade, usuarioId, instante }: { eventoId: string; escalaId: string; quantidade: number; usuarioId: string; instante: Date },
 ): Promise<void> {
   await travarEventoEditavel(repo, eventoId, instante);
-  await linhaDoEvento(repo, eventoId, escalaId);
+  const linha = await linhaDoEvento(repo, eventoId, escalaId);
   await repo.definirVagas(escalaId, { quantidade, confirmadaPor: null, instante });
+  await registrarVaga(repo, linha, { acao: "VAGAS_ALTERADAS", para: quantidade, usuarioId });
 }
 
 /** Função da regra sem número (`digitado`): cria a linha já confirmada, ou corrige e confirma a existente. */
@@ -81,6 +83,7 @@ export async function definirVagaDigitada(
   const existente = (await repo.linhasDoEvento(eventoId)).find((linha) => linha.funcao === funcao && linha.origem === "REGRA");
   if (existente) {
     await repo.definirVagas(existente.id, { quantidade, confirmadaPor: usuarioId, instante });
+    await repo.registrar({ entidade: "VAGA", entidadeId: existente.id, eventoId, acao: "VAGA_DIGITADA", usuarioId, dados: { funcao, de: existente.quantidade, para: quantidade } });
     return { escalaId: existente.id };
   }
   const cadastrada = await repo.funcaoPorCodigo(funcao);
@@ -94,6 +97,7 @@ export async function definirVagaDigitada(
     confirmadaPor: usuarioId,
     instante,
   });
+  await repo.registrar({ entidade: "VAGA", entidadeId: escalaId, eventoId, acao: "VAGA_DIGITADA", usuarioId, dados: { funcao, de: null, para: quantidade } });
   return { escalaId };
 }
 
@@ -111,18 +115,34 @@ export async function adicionarVagaManual(
   if (repetida) throw new TransicaoInvalidaError(`${funcao.nome} já está na escala neste dia. Ajuste o número de vagas na linha dela.`);
 
   const escalaId = await repo.inserirLinha({ ...entrada, origem: "MANUAL", confirmadaPor: entrada.usuarioId });
+  await repo.registrar({
+    entidade: "VAGA",
+    entidadeId: escalaId,
+    eventoId: entrada.eventoId,
+    acao: "VAGA_MANUAL_ADICIONADA",
+    usuarioId: entrada.usuarioId,
+    dados: { funcao: funcao.nome, data: entrada.data, quantidade: entrada.quantidade },
+  });
   return { escalaId, nomeDaFuncao: funcao.nome };
 }
 
 export async function removerVagaManual(
   repo: RepositorioMontagem,
-  { eventoId, escalaId, instante }: { eventoId: string; escalaId: string; instante: Date },
+  { eventoId, escalaId, usuarioId, instante }: { eventoId: string; escalaId: string; usuarioId: string; instante: Date },
 ): Promise<{ nomeDaFuncao: string }> {
   await travarEventoEditavel(repo, eventoId, instante);
   const linha = await linhaDoEvento(repo, eventoId, escalaId);
   if (linha.origem !== "MANUAL") throw new TransicaoInvalidaError("Funções da regra não são removidas. Ajuste o número de vagas.");
   if (linha.ativas > 0) throw new TransicaoInvalidaError(`Tire as pessoas de ${linha.nomeDaFuncao} antes de remover a função.`);
   await repo.apagarLinha(escalaId, instante);
+  await repo.registrar({
+    entidade: "VAGA",
+    entidadeId: escalaId,
+    eventoId,
+    acao: "VAGA_MANUAL_REMOVIDA",
+    usuarioId,
+    dados: { funcao: linha.nomeDaFuncao, data: linha.data, quantidade: linha.quantidade },
+  });
   return { nomeDaFuncao: linha.nomeDaFuncao };
 }
 
@@ -149,11 +169,24 @@ export async function porNaVaga(
   if (conflitos.length > 0) throw new ConflitoDeAgendaError(`${pessoa.nome} já está na escala de ${conflitos.join(", ")}, com datas que coincidem.`);
 
   const dados = { usuarioId: entrada.usuarioId, sugestaoScore: entrada.sugestaoScore, instante: entrada.instante };
+  const incluida = (convocacaoId: string, de: string | null) =>
+    repo.registrar({
+      entidade: "CONVOCACAO",
+      entidadeId: convocacaoId,
+      eventoId: entrada.eventoId,
+      acao: "CONVOCACAO_INCLUIDA",
+      statusDe: de,
+      statusPara: "SUGERIDA",
+      usuarioId: entrada.usuarioId,
+      dados: { funcao: linha.nomeDaFuncao },
+    });
   if (existente) {
     if (!(await repo.reativarConvocacao(existente.id, { de: existente.status, ...dados }))) throw new EscalaMudouError("a convocação mudou");
+    await incluida(existente.id, existente.status);
     return { convocacaoId: existente.id, nome: pessoa.nome, nomeDaFuncao: linha.nomeDaFuncao };
   }
   const convocacaoId = await repo.inserirConvocacao({ escalaId: entrada.escalaId, pessoaId: entrada.pessoaId, ...dados });
+  await incluida(convocacaoId, null);
   return { convocacaoId, nome: pessoa.nome, nomeDaFuncao: linha.nomeDaFuncao };
 }
 
@@ -170,6 +203,7 @@ export async function tirarDaVaga(
   if ("erro" in transicao) throw new TransicaoInvalidaError(`${convocacao.nome} já não ocupa a vaga.`);
   if ("apagar" in transicao) {
     if (!(await repo.apagarConvocacao(convocacaoId, convocacao.status))) throw new EscalaMudouError("a convocação mudou");
+    await repo.registrar({ entidade: "CONVOCACAO", entidadeId: convocacaoId, eventoId, acao: "CONVOCACAO_REMOVIDA", statusDe: convocacao.status, usuarioId });
     return { nome: convocacao.nome, jaAvisada: false };
   }
   if (!(await repo.mudarConvocacao(convocacaoId, { de: convocacao.status, para: transicao.para, instante }))) {
@@ -190,7 +224,13 @@ export async function tirarDaVaga(
 /** Deslocamento é dado de logística: muda em qualquer momento, menos com a escala na mão da líder. */
 export async function definirDeslocamento(
   repo: RepositorioMontagem,
-  { eventoId, convocacaoId, deslocamento, instante }: { eventoId: string; convocacaoId: string; deslocamento: Deslocamento | null; instante: Date },
+  {
+    eventoId,
+    convocacaoId,
+    deslocamento,
+    usuarioId,
+    instante,
+  }: { eventoId: string; convocacaoId: string; deslocamento: Deslocamento | null; usuarioId: string; instante: Date },
 ): Promise<void> {
   const evento = await repo.travarEvento(eventoId);
   if (!evento) throw new NaoEncontradoError("Evento não encontrado.");
@@ -201,4 +241,28 @@ export async function definirDeslocamento(
     throw new NaoEncontradoError("A pessoa não está mais nesta escala.");
   }
   await repo.definirDeslocamento(convocacaoId, deslocamento, instante);
+  // Só o deslocamento leva valor (docs/09 §7.1): é logística, não dado pessoal.
+  await repo.registrar({
+    entidade: "CONVOCACAO",
+    entidadeId: convocacaoId,
+    eventoId,
+    acao: "CONVOCACAO_ATUALIZADA",
+    usuarioId,
+    dados: { campos: ["deslocamento"], deslocamento },
+  });
+}
+
+async function registrarVaga(
+  repo: RepositorioMontagem,
+  linha: LinhaTravada,
+  { acao, para, usuarioId }: { acao: "VAGAS_CONFIRMADAS" | "VAGAS_ALTERADAS"; para: number; usuarioId: string },
+): Promise<void> {
+  await repo.registrar({
+    entidade: "VAGA",
+    entidadeId: linha.id,
+    eventoId: linha.eventoId,
+    acao,
+    usuarioId,
+    dados: { funcao: linha.funcao ?? linha.nomeDaFuncao, de: linha.quantidade, para },
+  });
 }

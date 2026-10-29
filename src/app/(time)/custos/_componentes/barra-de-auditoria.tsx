@@ -9,6 +9,7 @@ import { type AcaoDoFormulario, useAcao } from "@/app/(time)/_componentes/ui";
 import { Botao, BotaoDeEnvio } from "../../_componentes/ui/botao";
 import { CampoDeTextoLongo } from "../../_componentes/ui/campo";
 import { Confirmacao } from "../../_componentes/ui/dialogo";
+import { SemPermissaoNaAcao } from "../../_componentes/ui/permissao";
 
 type Versao = { solicitacaoId: string; atualizadoEm: string };
 
@@ -121,12 +122,16 @@ export function BarraDeAuditada({
   versao,
   texto,
   podeReabrir,
+  liderPodeReabrir,
   hrefCorrigir,
   reabrir,
 }: {
   versao: Versao;
   texto: string;
+  /** A solicitação ainda pode ser reaberta (aprovada e não paga). */
   podeReabrir: boolean;
+  /** O ator tem custos.reabrir_auditoria (só a líder). */
+  liderPodeReabrir: boolean;
   hrefCorrigir: string | null;
   reabrir: AcaoDoFormulario;
 }) {
@@ -141,23 +146,28 @@ export function BarraDeAuditada({
             Registrar correção
           </Link>
         )}
-        {podeReabrir && (
-          <Botao variante="texto" onClick={() => setAberto(true)}>
-            Reabrir auditoria
-          </Botao>
-        )}
+        {podeReabrir &&
+          (liderPodeReabrir ? (
+            <Botao variante="texto" onClick={() => setAberto(true)}>
+              Reabrir auditoria
+            </Botao>
+          ) : (
+            <SemPermissaoNaAcao permissao="custos.reabrir_auditoria" />
+          ))}
       </div>
-      <Confirmacao
-        aberto={aberto}
-        aoFechar={() => setAberto(false)}
-        titulo="Reabrir a auditoria?"
-        descricao="A solicitação volta para Para auditar e sai da fila do financeiro."
-        rotuloConfirmar="Reabrir auditoria"
-        carregando={reabertura.pendente}
-        acao={reabertura.despachar}
-      >
-        <CamposDaVersao versao={versao} />
-      </Confirmacao>
+      {podeReabrir && liderPodeReabrir && (
+        <Confirmacao
+          aberto={aberto}
+          aoFechar={() => setAberto(false)}
+          titulo="Reabrir a auditoria?"
+          descricao="A solicitação volta para Para auditar e sai da fila do financeiro."
+          rotuloConfirmar="Reabrir auditoria"
+          carregando={reabertura.pendente}
+          acao={reabertura.despachar}
+        >
+          <CamposDaVersao versao={versao} />
+        </Confirmacao>
+      )}
     </div>
   );
 }

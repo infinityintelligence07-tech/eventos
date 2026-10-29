@@ -189,7 +189,8 @@ export async function cancelarPedido(repo: RepositorioPedidos, entrada: Cancelar
     acao: "CANCELADO",
     statusDe: pedido.situacao,
     statusPara: para,
-    comentario: entrada.motivo,
+    // O motivo fica só em pedido_sdc.motivo_cancelamento (texto livre fora do histórico imutável, docs/09 §7.1).
+    dados: { temMotivo: Boolean(entrada.motivo) },
     usuarioId,
   });
   return { ...pedido, situacao: para };
@@ -237,7 +238,8 @@ export async function registrarRetornoDeVoo(
     statusDe: pedido.situacao,
     statusPara: para,
     usuarioId,
-    dados: { emNomeDe: "SDC", valorCentavos: entrada.valorCentavos, localizadores: entrada.trechos.map((trecho) => trecho.localizador) },
+    // Localizador e número da reserva ficam no trecho/hospedagem; o histórico imutável só diz que houve (docs/09 §7.1).
+    dados: { emNomeDe: "SDC", valorCentavos: entrada.valorCentavos, trechos: entrada.trechos.length, temLocalizador: entrada.trechos.some((trecho) => Boolean(trecho.localizador)) },
   });
   return { ...pedido, situacao: para };
 }
@@ -295,7 +297,7 @@ export async function registrarRetornoDeHospedagem(
     statusDe: pedido.situacao,
     statusPara: para,
     usuarioId,
-    dados: { emNomeDe: "SDC", valorCentavos: entrada.valorCentavos, numeroReserva: entrada.numeroReserva },
+    dados: { emNomeDe: "SDC", valorCentavos: entrada.valorCentavos, temNumeroReserva: Boolean(entrada.numeroReserva) },
   });
   return { ...pedido, situacao: para };
 }

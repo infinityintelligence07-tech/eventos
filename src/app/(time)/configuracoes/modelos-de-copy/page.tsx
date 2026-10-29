@@ -2,18 +2,21 @@ import { CircleCheck, CircleMinus, FilePlus2, MessageSquareText } from "lucide-r
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { Aviso, BotaoLink, Cartao, Chip, EstadoVazio, FaixaSomenteLeitura, formatar, TITULO_DE_SECAO } from "@/app/(time)/_componentes/ui";
+import { Aviso, BotaoLink, Cartao, Chip, EstadoVazio, FaixaSomenteLeitura, formatar, SemPermissaoNaAcao, TITULO_DE_SECAO } from "@/app/(time)/_componentes/ui";
 import { CabecaDaTabela, CelulaDaTabela, ColunaDaTabela, LinhaDaTabela, Tabela } from "@/app/(time)/_componentes/ui/tabela";
+import { permissoesDoAtor } from "@/app/(time)/_servidor/usuario-atual";
 import { listarModelos } from "@/fluxos/comunicacao";
 import { rotuloDoTipoDeModelo } from "@/modules/comunicacao";
 
 import { FormularioDoLink } from "./_componentes/formulario-do-link";
+import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Modelos de copy" };
 
 export default async function PaginaModelosDeCopy() {
-  const { modelos, linkCustos, escritaLiberada } = await listarModelos();
+  await exigirAtor();
+  const [{ modelos, linkCustos, escritaLiberada }, permissoes] = await Promise.all([listarModelos(), permissoesDoAtor("config.link_custos")]);
 
   return (
     <>
@@ -25,7 +28,14 @@ export default async function PaginaModelosDeCopy() {
             Sem o link, todas as copys de escalação ficam bloqueadas com &quot;falta link do formulário de custos&quot;.
           </Aviso>
         )}
-        <FormularioDoLink linkCustos={linkCustos} escritaLiberada={escritaLiberada} />
+        {permissoes["config.link_custos"] ? (
+          <FormularioDoLink linkCustos={linkCustos} escritaLiberada={escritaLiberada} />
+        ) : (
+          <div className="flex flex-col gap-1">
+            <p className="text-[14px] break-all">{linkCustos ?? "Sem link cadastrado."}</p>
+            <SemPermissaoNaAcao permissao="config.link_custos" />
+          </div>
+        )}
       </Cartao>
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

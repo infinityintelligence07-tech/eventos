@@ -18,7 +18,7 @@ describe.skipIf(!TEST_DATABASE_URL)("sincronização de turmas no Postgres (GH +
     sincronizarTurmas({
       iamControl: { listarTurmas: async () => ({ a_partir_de: "2026-09-26", ate: null, total: turmas.length, turmas }) },
       eventos: criarRepositorioSincronizacao(banco.db),
-      vagas: criarRepositorioVagas(banco.db),
+      vagas: criarRepositorioVagas(banco.db, { origem: "SISTEMA" }),
       agora: new Date(agora),
     });
 

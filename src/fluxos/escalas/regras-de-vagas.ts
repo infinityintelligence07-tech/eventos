@@ -1,4 +1,4 @@
-import { bancoParaLeitura, RegraDeNegocioError } from "@/fluxos/_base";
+import { type AtorDaEscrita, bancoParaLeitura, RegraDeNegocioError } from "@/fluxos/_base";
 import {
   calcularVagas,
   criarConsultaDaEscala,
@@ -65,9 +65,9 @@ export async function listarRegrasDeVagas(): Promise<RegrasDeVagas> {
  */
 export async function salvarRegraDeVagas(
   { tipoEventoId, funcoes }: { tipoEventoId: string; funcoes: LinhaGuiada[] },
-  { usuarioId, agora }: { usuarioId: string; agora: Date },
+  { ator, agora }: { ator: AtorDaEscrita; agora: Date },
 ): Promise<{ nome: string }> {
-  return escrever(async (tx) => {
+  return escrever(ator, async (tx) => {
     const repositorio = criarRepositorioRegras(tx);
     const tipo = await repositorio.travarTipo(tipoEventoId);
     if (!tipo) throw new RegraDeNegocioError("Tipo de evento não encontrado.");
@@ -84,7 +84,7 @@ export async function salvarRegraDeVagas(
     const desconhecidas = funcoes.filter((linha) => !cadastradas.has(linha.funcao)).map((linha) => linha.funcao);
     if (desconhecidas.length > 0) throw new RegraDeNegocioError(`Função não cadastrada: ${desconhecidas.join(", ")}.`);
 
-    await repositorio.gravarRegra(tipoEventoId, { antes: tipo.regraVagas, depois: regraDasLinhas(funcoes), usuarioId, instante: agora });
+    await repositorio.gravarRegra(tipoEventoId, { antes: tipo.regraVagas, depois: regraDasLinhas(funcoes), usuarioId: ator.usuarioId, instante: agora });
     return { nome: tipo.nome };
   });
 }
@@ -92,12 +92,15 @@ export async function salvarRegraDeVagas(
 export type ResultadoDoRecalculo = { eventos: number; alterados: number; avisos: string[] };
 
 /** Recalcula os eventos do tipo ainda em montagem (SEM_ESCALA, RASCUNHO, DEVOLVIDA). Linha confirmada não muda. */
-export async function recalcularVagasDoTipo({ tipoEventoId }: { tipoEventoId: string }, { agora }: { agora: Date }): Promise<ResultadoDoRecalculo> {
-  return escrever(async (tx) => {
+export async function recalcularVagasDoTipo(
+  { tipoEventoId }: { tipoEventoId: string },
+  { ator, agora }: { ator: AtorDaEscrita; agora: Date },
+): Promise<ResultadoDoRecalculo> {
+  return escrever(ator, async (tx) => {
     const tipo = await criarRepositorioRegras(tx).travarTipo(tipoEventoId);
     if (!tipo) throw new RegraDeNegocioError("Tipo de evento não encontrado.");
     const eventos = await criarRepositorioRegras(tx).eventosParaRecalcular(tipoEventoId, agora);
-    const vagas = criarRepositorioVagas(tx);
+    const vagas = criarRepositorioVagas(tx, { usuarioId: ator.usuarioId });
     let alterados = 0;
     const avisos: string[] = [];
     for (const eventoId of eventos) {
@@ -106,6 +109,8 @@ export async function recalcularVagasDoTipo({ tipoEventoId }: { tipoEventoId: st
       if (resultado.situacao === "GERADA") alterados += 1;
       if (resultado.situacao === "GERADA" || resultado.situacao === "SEM_MUDANCA") avisos.push(...resultado.plano.avisos);
     }
+    // Um registro do pedido mesmo sem evento mudado (cada evento alterado tem o seu VAGAS_RECALCULADAS).
+    await criarRepositorioRegras(tx).registrarRecalculo(tipoEventoId, { eventos: eventos.length, alterados, usuarioId: ator.usuarioId });
     return { eventos: eventos.length, alterados, avisos };
   });
 }

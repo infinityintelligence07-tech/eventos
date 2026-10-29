@@ -16,6 +16,7 @@ import { carregarComunicacaoDoEvento } from "@/fluxos/comunicacao";
 import { rotuloDoTipoDeModelo, type SituacaoDaCopy, type TipoDeModelo, TIPOS_DE_MODELO } from "@/modules/comunicacao";
 
 import { ComunicacaoDoEvento } from "./_componentes/comunicacao-do-evento";
+import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Comunicação" };
@@ -37,6 +38,7 @@ function lerTipo(valor: string | undefined): TipoDeModelo {
 }
 
 export default async function PaginaComunicacaoDoEvento({ params, searchParams }: Parametros) {
+  await exigirAtor();
   const [{ eventoId }, busca] = await Promise.all([params, searchParams]);
   const tipo = lerTipo(busca.modelo);
   const dados = await carregarComunicacaoDoEvento(eventoId, tipo, new Date());

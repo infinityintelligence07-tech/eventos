@@ -26,7 +26,8 @@ vi.mock("@/fluxos/_base", async (importOriginal) => {
     ...real,
     bancoParaLeitura: async () => teste.banco!.db,
     situacaoDaEscrita: async () => ({ liberada: true }),
-    transacao: (trabalho: (tx: Base.Executor) => Promise<unknown>) => teste.banco!.db.transaction(trabalho),
+    // A transação real (limite e "sem registro, desfaz"), no banco de teste.
+    transacao: async (_ator: unknown, trabalho: (tx: never) => Promise<unknown>) => (await import("@/fluxos/_base/banco")).transacaoNoBanco(teste.banco!.db, trabalho as never),
   };
 });
 
@@ -39,6 +40,7 @@ const ESCALACAO = `Uaaaau que top você está {{genero:ESCALADO|ESCALADA}}
 describe.skipIf(!TEST_DATABASE_URL)("fluxos da Comunicação no banco", () => {
   const agora = new Date("2026-11-05T15:00:00Z");
   let usuarioId: string;
+  const ator = () => ({ usuarioId, pessoaId: null, origem: "LOCAL" as const });
   let eventoId: string;
   let escalaId: string;
   let modeloEscalacao: string;
@@ -66,7 +68,7 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da Comunicação no banco", () => {
   const enviar = async (convocacaoId: string, tipo: "ESCALACAO" | "HOSPEDAGEM" = "ESCALACAO") => {
     const atual = await comunicacao(tipo);
     const copy = atual.pessoas.find((pessoa) => pessoa.convocacaoId === convocacaoId)!;
-    return registrarEnvioDaCopy({ convocacaoId, modeloId: atual.modelo!.id, dadosHash: copy.dadosHash }, usuarioId, agora);
+    return registrarEnvioDaCopy({ convocacaoId, modeloId: atual.modelo!.id, dadosHash: copy.dadosHash }, ator(), agora);
   };
 
   beforeAll(async () => {
@@ -116,9 +118,9 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da Comunicação no banco", () => {
     const { id: quartoId } = await um(`insert into eventos.quarto (hospedagem_id, nome, capacidade, sexo) values ($1, 'Quarto 1', 2, 'F') returning id`, [hospedagemId]);
     await banco().sql(`insert into eventos.quarto_ocupante (quarto_id, convocacao_id) values ($1, $2), ($1, $3)`, [quartoId, ana, carla]);
 
-    await salvarLinkDeCustos("https://exemplo.test/custos", usuarioId, agora);
+    await salvarLinkDeCustos("https://exemplo.test/custos", ator(), agora);
     modeloEscalacao = (await um(`select id from eventos.modelo_copy where tipo = 'ESCALACAO'`)).id!;
-    await salvarModelo({ modeloId: modeloEscalacao, tipo: "ESCALACAO", nome: "Escalação", corpo: ESCALACAO, ativar: false }, usuarioId, agora);
+    await salvarModelo({ modeloId: modeloEscalacao, tipo: "ESCALACAO", nome: "Escalação", corpo: ESCALACAO, ativar: false }, ator(), agora);
   }, 60_000);
 
   afterAll(async () => {
@@ -145,13 +147,13 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da Comunicação no banco", () => {
   it("recusa copy bloqueada, copy que mudou e convocação recusada", async () => {
     const tela = await comunicacao();
     const daCarla = tela.pessoas.find((pessoa) => pessoa.convocacaoId === carla)!;
-    await expect(registrarEnvioDaCopy({ convocacaoId: carla, modeloId: modeloEscalacao, dadosHash: daCarla.dadosHash }, usuarioId, agora)).rejects.toEqual(
+    await expect(registrarEnvioDaCopy({ convocacaoId: carla, modeloId: modeloEscalacao, dadosHash: daCarla.dadosHash }, ator(), agora)).rejects.toEqual(
       new RegraDeNegocioError("Esta copy está bloqueada: falta sexo da pessoa."),
     );
-    await expect(registrarEnvioDaCopy({ convocacaoId: ana, modeloId: modeloEscalacao, dadosHash: "0".repeat(64) }, usuarioId, agora)).rejects.toEqual(
+    await expect(registrarEnvioDaCopy({ convocacaoId: ana, modeloId: modeloEscalacao, dadosHash: "0".repeat(64) }, ator(), agora)).rejects.toEqual(
       new RegraDeNegocioError("A copy mudou desde que você copiou. Copie de novo."),
     );
-    await expect(registrarEnvioDaCopy({ convocacaoId: recusada, modeloId: modeloEscalacao, dadosHash: "0".repeat(64) }, usuarioId, agora)).rejects.toEqual(
+    await expect(registrarEnvioDaCopy({ convocacaoId: recusada, modeloId: modeloEscalacao, dadosHash: "0".repeat(64) }, ator(), agora)).rejects.toEqual(
       new RegraDeNegocioError("A pessoa não está mais nesta escala. Recarregue a página."),
     );
     expect(await banco().sql(`select 1 from eventos.mensagem`)).toEqual([]);
@@ -172,7 +174,7 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da Comunicação no banco", () => {
     expect((await copyDe(ana)).situacao).toBe("ENVIADA");
 
     const copy = await copyDe(ana);
-    await expect(registrarEnvioDaCopy({ convocacaoId: ana, modeloId: modeloEscalacao, dadosHash: copy.dadosHash }, usuarioId, agora)).rejects.toEqual(
+    await expect(registrarEnvioDaCopy({ convocacaoId: ana, modeloId: modeloEscalacao, dadosHash: copy.dadosHash }, ator(), agora)).rejects.toEqual(
       new RegraDeNegocioError("Esta copy já foi marcada como enviada."),
     );
   });
@@ -211,7 +213,7 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da Comunicação no banco", () => {
         corpo: "{{hospedagem.hotel}} ({{hospedagem.endereco}}) com {{hospedagem.colega}}. Ida: {{voo.ida}}",
         ativar: false,
       },
-      usuarioId,
+      ator(),
       agora,
     );
     const daAna = await copyDe(ana, "HOSPEDAGEM");
@@ -224,10 +226,10 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da Comunicação no banco", () => {
   });
 
   it("link de custos vazio bloqueia a copy de escalação", async () => {
-    await salvarLinkDeCustos(null, usuarioId, agora);
+    await salvarLinkDeCustos(null, ator(), agora);
     expect((await copyDe(bruno)).faltando.map((falta) => falta.variavel)).toEqual(["link_custos"]);
     expect((await listarModelos()).linkCustos).toBeNull();
-    await salvarLinkDeCustos("https://exemplo.test/custos", usuarioId, agora);
+    await salvarLinkDeCustos("https://exemplo.test/custos", ator(), agora);
     expect((await copyDe(bruno)).situacao).toBe("ENVIADA");
   });
 
@@ -255,18 +257,18 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da Comunicação no banco", () => {
     await banco().sql(`update eventos.evento set status_escala = 'RASCUNHO', aprovado_em = null where id = $1`, [eventoId]);
     const tela = await comunicacao();
     expect(tela).toMatchObject({ escalaComunicavel: false, pessoas: [] });
-    await expect(registrarEnvioDaCopy({ convocacaoId: bruno, modeloId: modeloEscalacao, dadosHash: "0".repeat(64) }, usuarioId, agora)).rejects.toEqual(
+    await expect(registrarEnvioDaCopy({ convocacaoId: bruno, modeloId: modeloEscalacao, dadosHash: "0".repeat(64) }, ator(), agora)).rejects.toEqual(
       new RegraDeNegocioError("A escala deste evento não está aprovada. As copys saem depois da aprovação."),
     );
     await banco().sql(`update eventos.evento set status_escala = 'COMUNICADA', aprovado_em = now() where id = $1`, [eventoId]);
   });
 
   it("modelos: lista, desativa e prévia com pessoa de exemplo", async () => {
-    await definirModeloAtivo(modeloEscalacao, false, usuarioId, agora);
+    await definirModeloAtivo(modeloEscalacao, false, ator(), agora);
     expect((await listarModelos()).modelos.find((modelo) => modelo.id === modeloEscalacao)).toMatchObject({ ativo: false, emUso: false });
     expect((await comunicacao()).modelo).toBeNull();
     expect((await listarComunicacao({}, agora)).semModelo).toBe(true);
-    await definirModeloAtivo(modeloEscalacao, true, usuarioId, agora);
+    await definirModeloAtivo(modeloEscalacao, true, ator(), agora);
 
     const editor = (await carregarEditorDeModelo(modeloEscalacao, agora))!;
     expect(editor.modelo?.corpo).toBe(ESCALACAO);
@@ -292,14 +294,14 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da Comunicação no banco", () => {
       ]);
 
     it("modelo novo nasce inativo e a Comunicação continua com o anterior", async () => {
-      const novo = await salvarModelo({ tipo: "ESCALACAO", nome: "Escalação curta", corpo: "Oi {{pessoa.primeiro_nome}}", ativar: false }, usuarioId, agora);
+      const novo = await salvarModelo({ tipo: "ESCALACAO", nome: "Escalação curta", corpo: "Oi {{pessoa.primeiro_nome}}", ativar: false }, ator(), agora);
       expect(novo.ativo).toBe(false);
       expect(await ativos("ESCALACAO")).toEqual([{ id: modeloEscalacao }]);
       expect(await historico(novo.id)).toEqual([{ acao: "MODELO_CRIADO", status_de: null, status_para: "INATIVO", usuario_id: usuarioId }]);
     });
 
     it("ativar troca o modelo do tipo na mesma transação e registra os dois lados", async () => {
-      const novo = await salvarModelo({ tipo: "ESCALACAO", nome: "Escalação nova", corpo: "Oi {{pessoa.primeiro_nome}}!", ativar: true }, usuarioId, agora);
+      const novo = await salvarModelo({ tipo: "ESCALACAO", nome: "Escalação nova", corpo: "Oi {{pessoa.primeiro_nome}}!", ativar: true }, ator(), agora);
       expect(novo.ativo).toBe(true);
       expect(await ativos("ESCALACAO")).toEqual([{ id: novo.id }]);
       expect((await comunicacao()).modelo?.id).toBe(novo.id);
@@ -309,11 +311,11 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da Comunicação no banco", () => {
         { acao: "MODELO_CRIADO", status_de: null, status_para: "INATIVO", usuario_id: usuarioId },
       ]);
 
-      await definirModeloAtivo(modeloEscalacao, true, usuarioId, agora);
+      await definirModeloAtivo(modeloEscalacao, true, ator(), agora);
       expect(await ativos("ESCALACAO")).toEqual([{ id: modeloEscalacao }]);
       // Já ativo: nada muda e nada é registrado.
       const antes = (await historico(modeloEscalacao)).length;
-      await definirModeloAtivo(modeloEscalacao, true, usuarioId, agora);
+      await definirModeloAtivo(modeloEscalacao, true, ator(), agora);
       expect(await historico(modeloEscalacao)).toHaveLength(antes);
     });
 
@@ -322,27 +324,27 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da Comunicação no banco", () => {
         banco().sql(`insert into eventos.modelo_copy (tipo, nome, corpo, ativo) values ('ESCALACAO', 'Duplicado', 'Oi', true)`),
       ).rejects.toMatchObject({ code: "23505", constraint: "modelo_copy_ativo_unique" });
 
-      const a = await salvarModelo({ tipo: "LEMBRETE", nome: "Lembrete A", corpo: "Amanhã: {{evento.horario}}", ativar: false }, usuarioId, agora);
-      const b = await salvarModelo({ tipo: "LEMBRETE", nome: "Lembrete B", corpo: "Até amanhã, {{pessoa.primeiro_nome}}", ativar: false }, usuarioId, agora);
-      await Promise.all([definirModeloAtivo(a.id, true, usuarioId, agora), definirModeloAtivo(b.id, true, usuarioId, agora)]);
+      const a = await salvarModelo({ tipo: "LEMBRETE", nome: "Lembrete A", corpo: "Amanhã: {{evento.horario}}", ativar: false }, ator(), agora);
+      const b = await salvarModelo({ tipo: "LEMBRETE", nome: "Lembrete B", corpo: "Até amanhã, {{pessoa.primeiro_nome}}", ativar: false }, ator(), agora);
+      await Promise.all([definirModeloAtivo(a.id, true, ator(), agora), definirModeloAtivo(b.id, true, ator(), agora)]);
       expect(await ativos("LEMBRETE")).toHaveLength(1);
     });
 
     it("modelo ativo não troca de tipo; desativar registra", async () => {
       await expect(
-        salvarModelo({ modeloId: modeloEscalacao, tipo: "ALTERACAO", nome: "Escalação", corpo: ESCALACAO, ativar: false }, usuarioId, agora),
+        salvarModelo({ modeloId: modeloEscalacao, tipo: "ALTERACAO", nome: "Escalação", corpo: ESCALACAO, ativar: false }, ator(), agora),
       ).rejects.toEqual(new RegraDeNegocioError("Este modelo está em uso na Comunicação. Desative-o antes de trocar o tipo."));
 
-      await definirModeloAtivo(modeloEscalacao, false, usuarioId, agora);
+      await definirModeloAtivo(modeloEscalacao, false, ator(), agora);
       expect(await ativos("ESCALACAO")).toEqual([]);
-      await definirModeloAtivo(modeloEscalacao, true, usuarioId, agora);
-      await expect(definirModeloAtivo("01a16511-dd29-71a1-8399-acd55d254fb2", true, usuarioId, agora)).rejects.toEqual(
+      await definirModeloAtivo(modeloEscalacao, true, ator(), agora);
+      await expect(definirModeloAtivo("01a16511-dd29-71a1-8399-acd55d254fb2", true, ator(), agora)).rejects.toEqual(
         new RegraDeNegocioError("Este modelo não existe mais. Recarregue a página."),
       );
     });
 
     it("alterar o link de custos fica no histórico como CONFIGURACAO", async () => {
-      await salvarLinkDeCustos("https://exemplo.test/novo", usuarioId, agora);
+      await salvarLinkDeCustos("https://exemplo.test/novo", ator(), agora);
       const registros = await banco().sql(
         `select acao, usuario_id, dados from eventos.registro_acao where entidade = 'CONFIGURACAO' and entidade_id = $1 order by criado_em`,
         [idDaConfiguracao("link_custos")],

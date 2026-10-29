@@ -1,4 +1,4 @@
-import { bancoParaLeitura, transacao } from "@/fluxos/_base";
+import { bancoParaLeitura, transacao, type AtorDaEscrita } from "@/fluxos/_base";
 import {
   type AlterarPedido,
   type CancelarPedido,
@@ -117,24 +117,24 @@ export async function carregarPedido(referencia: string): Promise<PedidoCarregad
   };
 }
 
-export function registrarPedidoDeVoo(entrada: RegistrarPedidoDeVoo, usuarioId: string, agora: Date) {
-  return traduzirErros(() => transacao((tx) => servicoDePedidos.registrarPedidoDeVoo(criarRepositorioPedidos(tx), entrada, { usuarioId, instante: agora })));
+export function registrarPedidoDeVoo(entrada: RegistrarPedidoDeVoo, ator: AtorDaEscrita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDePedidos.registrarPedidoDeVoo(criarRepositorioPedidos(tx), entrada, { usuarioId: ator.usuarioId, instante: agora })));
 }
 
-export function alterarPedido(entrada: AlterarPedido, usuarioId: string, agora: Date) {
-  return traduzirErros(() => transacao((tx) => servicoDePedidos.alterarPedido(criarRepositorioPedidos(tx), entrada, { usuarioId, instante: agora })));
+export function alterarPedido(entrada: AlterarPedido, ator: AtorDaEscrita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDePedidos.alterarPedido(criarRepositorioPedidos(tx), entrada, { usuarioId: ator.usuarioId, instante: agora })));
 }
 
-export function cancelarPedido(entrada: CancelarPedido, usuarioId: string, agora: Date) {
-  return traduzirErros(() => transacao((tx) => servicoDePedidos.cancelarPedido(criarRepositorioPedidos(tx), entrada, { usuarioId, instante: agora })));
+export function cancelarPedido(entrada: CancelarPedido, ator: AtorDaEscrita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDePedidos.cancelarPedido(criarRepositorioPedidos(tx), entrada, { usuarioId: ator.usuarioId, instante: agora })));
 }
 
 /** "Registrar voo" em nome da SDC. */
-export function registrarRetornoDaSdc(entrada: RegistrarRetornoDeVoo, usuarioId: string, agora: Date) {
-  return traduzirErros(() => transacao((tx) => servicoDePedidos.registrarRetornoDeVoo(criarRepositorioPedidos(tx), entrada, { usuarioId, instante: agora })));
+export function registrarRetornoDaSdc(entrada: RegistrarRetornoDeVoo, ator: AtorDaEscrita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDePedidos.registrarRetornoDeVoo(criarRepositorioPedidos(tx), entrada, { usuarioId: ator.usuarioId, instante: agora })));
 }
 
 /** "Registrar reserva" do hotel em nome da SDC. */
-export function registrarRetornoDeHospedagem(entrada: RegistrarRetornoDeHospedagem, usuarioId: string, agora: Date) {
-  return traduzirErros(() => transacao((tx) => servicoDePedidos.registrarRetornoDeHospedagem(criarRepositorioPedidos(tx), entrada, { usuarioId, instante: agora })));
+export function registrarRetornoDeHospedagem(entrada: RegistrarRetornoDeHospedagem, ator: AtorDaEscrita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDePedidos.registrarRetornoDeHospedagem(criarRepositorioPedidos(tx), entrada, { usuarioId: ator.usuarioId, instante: agora })));
 }

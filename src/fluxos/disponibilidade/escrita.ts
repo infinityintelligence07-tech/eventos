@@ -1,4 +1,4 @@
-import { type Executor, RegraDeNegocioError, transacao } from "@/fluxos/_base";
+import { type Executor, RegraDeNegocioError, transacao, type AtorDaEscrita } from "@/fluxos/_base";
 import {
   abrirEnquete as abrirEnqueteNoModulo,
   type AbrirEnquete,
@@ -28,28 +28,28 @@ function traduzir(erro: unknown): never {
   throw erro;
 }
 
-async function emTransacao<T>(trabalho: (tx: Executor) => Promise<T>): Promise<T> {
+async function emTransacao<T>(ator: AtorDaEscrita, trabalho: (tx: Executor) => Promise<T>): Promise<T> {
   try {
-    return await transacao(trabalho);
+    return await transacao(ator, trabalho);
   } catch (erro: unknown) {
     traduzir(erro);
   }
 }
 
 /** Devolve o id da enquete criada. */
-export function abrirEnquete(dados: AbrirEnquete, usuarioId: string, agora: Date): Promise<string> {
-  return emTransacao((tx) => abrirEnqueteNoModulo(criarRepositorioEnquete(tx), { ...dados, usuarioId, agora }));
+export function abrirEnquete(dados: AbrirEnquete, ator: AtorDaEscrita, agora: Date): Promise<string> {
+  return emTransacao(ator, (tx) => abrirEnqueteNoModulo(criarRepositorioEnquete(tx), { ...dados, usuarioId: ator.usuarioId, agora }));
 }
 
-export function alterarEnquete(dados: AlterarEnquete, agora: Date): Promise<void> {
-  return emTransacao((tx) => alterarEnqueteNoModulo(criarRepositorioEnquete(tx), { ...dados, agora }));
+export function alterarEnquete(dados: AlterarEnquete, ator: AtorDaEscrita, agora: Date): Promise<void> {
+  return emTransacao(ator, (tx) => alterarEnqueteNoModulo(criarRepositorioEnquete(tx), { ...dados, usuarioId: ator.usuarioId, agora }));
 }
 
-export function encerrarEnquete({ enqueteId }: EncerrarEnquete, agora: Date): Promise<void> {
-  return emTransacao((tx) => encerrarEnqueteNoModulo(criarRepositorioEnquete(tx), { enqueteId, agora }));
+export function encerrarEnquete({ enqueteId }: EncerrarEnquete, ator: AtorDaEscrita, agora: Date): Promise<void> {
+  return emTransacao(ator, (tx) => encerrarEnqueteNoModulo(criarRepositorioEnquete(tx), { enqueteId, usuarioId: ator.usuarioId, agora }));
 }
 
 /** Resposta em nome da pessoa: `registrado_por` = usuário do time e `registro_acao` por evento que mudou. */
-export function registrarDisponibilidade(dados: RegistrarDisponibilidade, usuarioId: string, agora: Date): Promise<ResultadoDoRegistro> {
-  return emTransacao((tx) => registrarDisponibilidadeNoModulo(criarRepositorioEnquete(tx), { ...dados, usuarioId, agora }));
+export function registrarDisponibilidade(dados: RegistrarDisponibilidade, ator: AtorDaEscrita, agora: Date): Promise<ResultadoDoRegistro> {
+  return emTransacao(ator, (tx) => registrarDisponibilidadeNoModulo(criarRepositorioEnquete(tx), { ...dados, usuarioId: ator.usuarioId, agora }));
 }

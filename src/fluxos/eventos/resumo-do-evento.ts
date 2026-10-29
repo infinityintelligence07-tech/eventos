@@ -1,4 +1,4 @@
-import { bancoParaLeitura, ConflitoDeVersaoError, RegraDeNegocioError, transacao } from "@/fluxos/_base";
+import { type AtorDaEscrita, bancoParaLeitura, ConflitoDeVersaoError, RegraDeNegocioError, transacao } from "@/fluxos/_base";
 import {
   andamentoDoEvento,
   criarConsultaDaEscala,
@@ -65,16 +65,22 @@ export type ResultadoDosDados = { vagas: ResultadoGerarVagas["situacao"] };
  */
 export async function salvarDadosDoEvento(
   entrada: { eventoId: string; expectativaPublico: number | null; pessoasNaFila: number | null; atualizadoEm: string },
-  { agora }: { agora: Date },
+  ator: AtorDaEscrita,
+  agora: Date,
 ): Promise<ResultadoDosDados> {
-  return transacao(async (tx) => {
+  return transacao(ator, async (tx) => {
     const repositorio = criarRepositorioEvento(tx);
     const atual = await repositorio.dadosDoEvento(entrada.eventoId);
     if (!atual) throw new RegraDeNegocioError("Evento não encontrado.");
     const dados = dadosEditados(atual.tipoSigla, atual, entrada);
     const gravou = await repositorio.atualizarDadosDoEvento(entrada.eventoId, dados, { versaoEsperada: entrada.atualizadoEm, instante: agora });
     if (!gravou) throw new ConflitoDeVersaoError("o evento mudou desde que a tela abriu");
-    const { situacao } = await gerarVagasDoEvento(criarRepositorioVagas(tx), entrada.eventoId);
+    await repositorio.registrarDadosAlterados(entrada.eventoId, {
+      de: { expectativaPublico: atual.expectativaPublico, pessoasNaFila: atual.pessoasNaFila },
+      para: dados,
+      usuarioId: ator.usuarioId,
+    });
+    const { situacao } = await gerarVagasDoEvento(criarRepositorioVagas(tx, { usuarioId: ator.usuarioId }), entrada.eventoId);
     return { vagas: situacao };
   });
 }

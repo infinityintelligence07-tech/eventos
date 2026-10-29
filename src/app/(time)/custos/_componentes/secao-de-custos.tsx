@@ -89,11 +89,13 @@ function PainelDaSolicitacao({
   base,
   parametros,
   escrita,
+  podeReabrirAuditoria,
 }: {
   solicitacao: SolicitacaoCarregada;
   base: string;
   parametros: ParametrosDeCustos;
   escrita: boolean;
+  podeReabrirAuditoria: boolean;
 }) {
   const semAviso = { registrada: null, corrigida: null };
   const fechar = enderecoCom(base, parametros, { protocolo: null, ...semAviso });
@@ -119,6 +121,7 @@ function PainelDaSolicitacao({
       versao={versao}
       texto={[decisao, textoDoFinanceiro(solicitacao.financeiro, solicitacao.pagoEm)].filter(Boolean).join(" · ")}
       podeReabrir={solicitacao.auditoria === "APROVADO" && solicitacao.financeiro === "AGUARDANDO_PAGAMENTO"}
+      liderPodeReabrir={podeReabrirAuditoria}
       hrefCorrigir={solicitacao.auditoria === "REPROVADO" ? `/custos/nova?protocolo=${solicitacao.protocolo}` : null}
       reabrir={reabrirAuditoriaAcao}
     />
@@ -289,6 +292,7 @@ export function SecaoDeCustos({
   base,
   parametros,
   escrita,
+  podeReabrirAuditoria,
   comSeletorDeEvento,
   hrefRegistrar,
 }: {
@@ -297,6 +301,8 @@ export function SecaoDeCustos({
   base: string;
   parametros: ParametrosDeCustos;
   escrita: boolean;
+  /** custos.reabrir_auditoria (só a líder). */
+  podeReabrirAuditoria: boolean;
   comSeletorDeEvento: boolean;
   /** Sem isto, a ação "Registrar solicitação" fica no cabeçalho da página. */
   hrefRegistrar?: string;
@@ -375,7 +381,7 @@ export function SecaoDeCustos({
           </tbody>
         </Tabela>
       )}
-      {parametros.protocolo && solicitacao && <PainelDaSolicitacao solicitacao={solicitacao} base={base} parametros={parametros} escrita={escrita} />}
+      {parametros.protocolo && solicitacao && <PainelDaSolicitacao solicitacao={solicitacao} base={base} parametros={parametros} escrita={escrita} podeReabrirAuditoria={podeReabrirAuditoria} />}
       {parametros.protocolo && !solicitacao && (
         <PainelPelaUrl titulo="Solicitação não encontrada" aoFecharIrPara={enderecoCom(base, parametros, { protocolo: null })}>
           <Aviso tom="atencao">Não encontramos a solicitação {parametros.protocolo}.</Aviso>

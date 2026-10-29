@@ -4,11 +4,13 @@ import type { Metadata } from "next";
 import { Cartao, Chip, EstadoVazio } from "@/app/(time)/_componentes/ui";
 
 import { CabecalhoDaLogistica } from "../_componentes/cabecalho-da-logistica";
+import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Créditos de hotel" };
 
-export default function PaginaCreditos() {
+export default async function PaginaCreditos() {
+  await exigirAtor();
   return (
     <>
       <CabecalhoDaLogistica />

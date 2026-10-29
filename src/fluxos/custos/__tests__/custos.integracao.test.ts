@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import type { Db, Executor } from "@/core/db/database";
+import type { Db } from "@/core/db/database";
 import { ConflitoDeVersaoError, RegraDeNegocioError } from "@/fluxos/_base";
 import { type BancoDeTeste, criarBancoDeTeste, TEST_DATABASE_URL } from "@/test/banco";
 
@@ -27,13 +27,21 @@ vi.mock("@/fluxos/_base", async (importOriginal) => {
   return {
     ...original,
     bancoParaLeitura: async () => banco.db!,
-    transacao: <T>(trabalho: (tx: Executor) => Promise<T>) => banco.db!.transaction(trabalho),
+    // A transação real (limite e "sem registro, desfaz"), no banco de teste.
+    transacao: async (_ator: unknown, trabalho: (tx: never) => Promise<unknown>) => (await import("@/fluxos/_base/banco")).transacaoNoBanco(banco.db!, trabalho as never),
   };
 });
 
 describe.skipIf(!TEST_DATABASE_URL)("fluxos de custos no banco", () => {
   let teste: BancoDeTeste;
   let usuarioId: string;
+  let auditorId: string;
+  let pessoaDoTime: string;
+  let pessoaDoAuditor: string;
+  // Cada usuário do time com a sua pessoa no cadastro (a SoD-3 confere por ela).
+  const ator = () => ({ usuarioId, pessoaId: pessoaDoTime, email: "time@exemplo.test", origem: "LOCAL" as const });
+  // Outra pessoa do time: quem registrou não audita (SoD-2).
+  const auditor = () => ({ usuarioId: auditorId, pessoaId: pessoaDoAuditor, email: "auditor@exemplo.test", origem: "LOCAL" as const });
   let eventoId: string;
   let escalaId: string;
   const agora = new Date("2026-10-28T15:00:00Z");
@@ -52,6 +60,9 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos de custos no banco", () => {
     teste = await criarBancoDeTeste();
     banco.db = teste.db;
     usuarioId = (await um(`insert into core.usuario (email) values ('time@exemplo.test') returning id`)).id!;
+    auditorId = (await um(`insert into core.usuario (email) values ('auditor@exemplo.test') returning id`)).id!;
+    pessoaDoTime = (await um(`insert into core.pessoa (nome_completo, usuario_id) values ('Time', $1) returning id`, [usuarioId])).id!;
+    pessoaDoAuditor = (await um(`insert into core.pessoa (nome_completo, usuario_id) values ('Auditor', $1) returning id`, [auditorId])).id!;
     // As regras da carga (migration 0002) valem a partir do dia da migration; aqui, desde antes do evento.
     await teste.sql(`update eventos.regra_custo set vigente_desde = '2026-10-22'`);
     const { id: localId } = await um(`insert into eventos.local (nome, tipo, cidade, uf) values ('Centro', 'EVENTO', 'Manaus', 'AM') returning id`);
@@ -86,7 +97,7 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos de custos no banco", () => {
     expect(previa?.nivel).toBe("CRITICO");
 
     const itens = preparada.sugestoes.itens.map(({ categoria, regraCustoId, descricao, quantidade, valorCentavos }) => ({ categoria, regraCustoId, descricao, quantidade, valorCentavos }));
-    const registrada = await registrarSolicitacao({ eventoId, pessoaId, deslocamentos: [deslocamento(6.5)], itens }, usuarioId, agora);
+    const registrada = await registrarSolicitacao({ eventoId, pessoaId, deslocamentos: [deslocamento(6.5)], itens }, ator(), agora);
     expect(registrada.protocolo).toMatch(/^STF-\d{6}-\d{4}$/);
     expect(registrada.nivel).toBe("CRITICO");
     // 412 km ÷ 6,5 × 6,19 = 392,35; pedágio 12,50 × 2; faixa ≥ 250 km = 250,00; itens 870,00.
@@ -99,41 +110,41 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos de custos no banco", () => {
       acao: "SOLICITACAO_REGISTRADA",
     });
 
-    await expect(registrarSolicitacao({ eventoId, pessoaId, deslocamentos: [deslocamento(12)], itens: [] }, usuarioId, agora)).rejects.toThrow(registrada.protocolo);
+    await expect(registrarSolicitacao({ eventoId, pessoaId, deslocamentos: [deslocamento(12)], itens: [] }, ator(), agora)).rejects.toThrow(registrada.protocolo);
     const fora = (await um(`insert into core.pessoa (nome_completo) values ('Fora da escala') returning id`)).id!;
-    await expect(registrarSolicitacao({ eventoId, pessoaId: fora, deslocamentos: [deslocamento(12)], itens: [] }, usuarioId, agora)).rejects.toBeInstanceOf(RegraDeNegocioError);
+    await expect(registrarSolicitacao({ eventoId, pessoaId: fora, deslocamentos: [deslocamento(12)], itens: [] }, ator(), agora)).rejects.toBeInstanceOf(RegraDeNegocioError);
   });
 
   it("auditoria: reprovar com motivo → corrigir → aprovar crítico só com motivo → reabrir", async () => {
     const pessoaId = await pessoaNaEscala("Bia Auditoria");
-    const { id, protocolo } = await registrarSolicitacao({ eventoId, pessoaId, deslocamentos: [deslocamento(6.8)], itens: [] }, usuarioId, agora);
+    const { id, protocolo } = await registrarSolicitacao({ eventoId, pessoaId, deslocamentos: [deslocamento(6.8)], itens: [] }, ator(), agora);
     const versao = async () => (await carregarSolicitacao(protocolo))!.atualizadoEm;
 
     const detalhe = await carregarSolicitacao(protocolo);
     expect(detalhe?.alertasPorDeslocamento[0]?.map((alerta) => alerta.mensagem)).toContain("Consumo de 6,8 km/l está abaixo do limite de 7,5 km/l.");
 
-    await expect(aprovarSolicitacao({ solicitacaoId: id, atualizadoEm: await versao() }, usuarioId, agora)).rejects.toThrow(/motivo da aprovação/);
-    await expect(reprovarSolicitacao({ solicitacaoId: id, atualizadoEm: "2020-01-01T00:00:00.000Z", motivo: "Falta o comprovante" }, usuarioId, agora)).rejects.toBeInstanceOf(
+    await expect(aprovarSolicitacao({ solicitacaoId: id, atualizadoEm: await versao() }, auditor(), agora)).rejects.toThrow(/motivo da aprovação/);
+    await expect(reprovarSolicitacao({ solicitacaoId: id, atualizadoEm: "2020-01-01T00:00:00.000Z", motivo: "Falta o comprovante" }, auditor(), agora)).rejects.toBeInstanceOf(
       ConflitoDeVersaoError,
     );
-    await reprovarSolicitacao({ solicitacaoId: id, atualizadoEm: await versao(), motivo: "Falta o comprovante do pedágio" }, usuarioId, agora);
+    await reprovarSolicitacao({ solicitacaoId: id, atualizadoEm: await versao(), motivo: "Falta o comprovante do pedágio" }, auditor(), agora);
     expect(await um(`select status_auditoria, parecer, auditado_por from eventos.solicitacao_custo where id = $1`, [id])).toEqual({
       status_auditoria: "REPROVADO",
       parecer: "Falta o comprovante do pedágio",
-      auditado_por: usuarioId,
+      auditado_por: auditorId,
     });
-    await expect(aprovarSolicitacao({ solicitacaoId: id, atualizadoEm: await versao(), parecer: "ok" }, usuarioId, agora)).rejects.toThrow(/já foi auditada/);
+    await expect(aprovarSolicitacao({ solicitacaoId: id, atualizadoEm: await versao(), parecer: "ok" }, auditor(), agora)).rejects.toThrow(/já foi auditada/);
 
     const depois = new Date(agora.getTime() + 60_000);
-    await corrigirSolicitacao({ solicitacaoId: id, atualizadoEm: await versao(), deslocamentos: [deslocamento(9)], itens: [] }, usuarioId, depois);
+    await corrigirSolicitacao({ solicitacaoId: id, atualizadoEm: await versao(), deslocamentos: [deslocamento(9)], itens: [] }, ator(), depois);
     expect(await um(`select status_auditoria, nivel_excecao from eventos.solicitacao_custo where id = $1`, [id])).toEqual({ status_auditoria: "PENDENTE", nivel_excecao: "ALERTA" });
 
-    await aprovarSolicitacao({ solicitacaoId: id, atualizadoEm: await versao() }, usuarioId, depois);
+    await aprovarSolicitacao({ solicitacaoId: id, atualizadoEm: await versao() }, auditor(), depois);
     expect(await um(`select status_auditoria, status_financeiro from eventos.solicitacao_custo where id = $1`, [id])).toEqual({
       status_auditoria: "APROVADO",
       status_financeiro: "AGUARDANDO_PAGAMENTO",
     });
-    await reabrirAuditoria({ solicitacaoId: id, atualizadoEm: await versao() }, usuarioId, depois);
+    await reabrirAuditoria({ solicitacaoId: id, atualizadoEm: await versao() }, auditor(), depois);
     expect(await um(`select status_auditoria, status_financeiro, auditado_por from eventos.solicitacao_custo where id = $1`, [id])).toEqual({
       status_auditoria: "PENDENTE",
       status_financeiro: "AGUARDANDO_AUDITORIA",
@@ -152,7 +163,7 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos de custos no banco", () => {
 
   it("fila põe críticos primeiro e o Início destaca as críticas", async () => {
     const pessoaId = await pessoaNaEscala("Caio Sem Alerta");
-    await registrarSolicitacao({ eventoId, pessoaId, deslocamentos: [deslocamento(12)], itens: [] }, usuarioId, agora);
+    await registrarSolicitacao({ eventoId, pessoaId, deslocamentos: [deslocamento(12)], itens: [] }, ator(), agora);
     const fila = await carregarFilaDeAuditoria({}, agora);
     expect(fila.linhas.map((linha) => linha.nivel)).toEqual(["CRITICO", "ALERTA", "NENHUM"]);
     expect(fila.linhas[0]?.resumoDoAlerta).toBe("consumo 6,5 km/l");
@@ -172,8 +183,8 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos de custos no banco", () => {
       .regras.find((regra) => regra.atual.tipoEventoSigla === "ASM")!;
     expect(alimentacaoAsm.atual.valorCentavos).toBe(27000);
 
-    const nova = await criarVigenciaDeRegra({ regraId: alimentacaoAsm.atual.id, valorCentavos: 30000, vigenteDesde: "2026-12-01" }, usuarioId, agora);
-    await expect(criarVigenciaDeRegra({ regraId: alimentacaoAsm.atual.id, valorCentavos: 31000, vigenteDesde: "2026-12-01" }, usuarioId, agora)).rejects.toThrow(/Já existe/);
+    const nova = await criarVigenciaDeRegra({ regraId: alimentacaoAsm.atual.id, valorCentavos: 30000, vigenteDesde: "2026-12-01" }, ator(), agora);
+    await expect(criarVigenciaDeRegra({ regraId: alimentacaoAsm.atual.id, valorCentavos: 31000, vigenteDesde: "2026-12-01" }, ator(), agora)).rejects.toThrow(/Já existe/);
     expect(
       await um(`select acao, usuario_id, dados->>'vigenciaAnteriorId' as anterior, dados->>'valorCentavos' as valor from eventos.registro_acao where entidade = 'REGRA_CUSTO' and entidade_id = $1`, [nova.id]),
     ).toEqual({ acao: "VIGENCIA_CRIADA", usuario_id: usuarioId, anterior: alimentacaoAsm.atual.id, valor: "30000" });
@@ -187,9 +198,59 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos de custos no banco", () => {
     const preparada = await prepararSolicitacao({ eventoId, pessoaId }, agora);
     expect(preparada.sugestoes.itens.find((item) => item.categoria === "ALIMENTACAO")?.valorCentavos).toBe(30000);
 
-    await desativarRegra(nova.id, usuarioId, agora);
-    await expect(desativarRegra(nova.id, usuarioId, agora)).rejects.toThrow(/já está inativa/);
+    await desativarRegra(nova.id, ator(), agora);
+    await expect(desativarRegra(nova.id, ator(), agora)).rejects.toThrow(/já está inativa/);
     const desativacoes = await teste.sql(`select acao from eventos.registro_acao where entidade = 'REGRA_CUSTO' and entidade_id = $1 order by criado_em`, [nova.id]);
     expect(desativacoes).toEqual([{ acao: "VIGENCIA_CRIADA" }, { acao: "REGRA_DESATIVADA" }]);
+  });
+
+  it("segregação: quem registrou não audita (SoD-2) e ninguém audita o próprio custo (SoD-3)", async () => {
+    const staffUsuario = (await um(`insert into core.usuario (email) values ('staff@exemplo.test') returning id`)).id!;
+    const pessoaId = await pessoaNaEscala("Duda Staff");
+    await teste.sql(`update core.pessoa set usuario_id = $1 where id = $2`, [staffUsuario, pessoaId]);
+    const daPropriaPessoa = { usuarioId: staffUsuario, pessoaId, email: "staff@exemplo.test", origem: "LOCAL" as const };
+
+    const { id, protocolo } = await registrarSolicitacao({ eventoId, pessoaId, deslocamentos: [deslocamento(12)], itens: [] }, ator(), agora);
+    const versao = async () => (await carregarSolicitacao(protocolo))!.atualizadoEm;
+    const auditorias = async () =>
+      (await teste.sql(`select count(*)::int as n from eventos.registro_acao where entidade_id = $1 and acao like 'AUDITORIA_%'`, [id])) as [{ n: number }];
+
+    await expect(aprovarSolicitacao({ solicitacaoId: id, atualizadoEm: await versao() }, ator(), agora)).rejects.toThrow(/Quem registrou ou corrigiu/);
+    await expect(reprovarSolicitacao({ solicitacaoId: id, atualizadoEm: await versao(), motivo: "Sem comprovante" }, ator(), agora)).rejects.toThrow(/Quem registrou/);
+    await expect(aprovarSolicitacao({ solicitacaoId: id, atualizadoEm: await versao() }, daPropriaPessoa, agora)).rejects.toThrow(/próprio custo/);
+    expect(await um(`select status_auditoria from eventos.solicitacao_custo where id = $1`, [id])).toEqual({ status_auditoria: "PENDENTE" });
+    expect((await auditorias())[0].n).toBe(0);
+
+    await aprovarSolicitacao({ solicitacaoId: id, atualizadoEm: await versao() }, auditor(), agora);
+    await expect(reabrirAuditoria({ solicitacaoId: id, atualizadoEm: await versao() }, daPropriaPessoa, agora)).rejects.toThrow(/próprio custo/);
+    // Reabrir não tem a SoD-2: quem registrou pode reabrir (a permissão é só da líder, conferida na action).
+    await reabrirAuditoria({ solicitacaoId: id, atualizadoEm: await versao() }, ator(), agora);
+    expect((await auditorias())[0].n).toBe(2);
+  });
+
+  it("SoD-3 de quem não tem pessoa no cadastro: confere pelo e-mail e, sem e-mail para comparar, recusa", async () => {
+    const semPessoaId = (await um(`insert into core.usuario (email) values ('sem.pessoa@exemplo.test') returning id`)).id!;
+    const semPessoa = (email: string) => ({ usuarioId: semPessoaId, pessoaId: null, email, origem: "LOCAL" as const });
+    const solicitacao = async (nome: string, email: string | null) => {
+      const pessoaId = await pessoaNaEscala(nome);
+      await teste.sql(`update core.pessoa set email = $1 where id = $2`, [email, pessoaId]);
+      const { id, protocolo } = await registrarSolicitacao({ eventoId, pessoaId, deslocamentos: [deslocamento(12)], itens: [] }, ator(), agora);
+      return { solicitacaoId: id, atualizadoEm: async () => (await carregarSolicitacao(protocolo))!.atualizadoEm };
+    };
+    const aprovar = async (alvo: Awaited<ReturnType<typeof solicitacao>>, quem: ReturnType<typeof semPessoa>) =>
+      aprovarSolicitacao({ solicitacaoId: alvo.solicitacaoId, atualizadoEm: await alvo.atualizadoEm() }, quem, agora);
+
+    const semEmail = await solicitacao("Sem E-mail", null);
+    await expect(aprovar(semEmail, semPessoa("sem.pessoa@exemplo.test"))).rejects.toThrow(/Não dá para confirmar que este custo não é seu/);
+
+    const mesmoEmail = await solicitacao("Mesmo E-mail", "sem.pessoa@exemplo.test");
+    await expect(aprovar(mesmoEmail, semPessoa("Sem.Pessoa@Exemplo.TEST"))).rejects.toThrow(/próprio custo/);
+
+    for (const id of [semEmail.solicitacaoId, mesmoEmail.solicitacaoId]) {
+      expect(await um(`select status_auditoria from eventos.solicitacao_custo where id = $1`, [id])).toEqual({ status_auditoria: "PENDENTE" });
+    }
+
+    const outroEmail = await solicitacao("Outro E-mail", "outra@exemplo.test");
+    await expect(aprovar(outroEmail, semPessoa("sem.pessoa@exemplo.test"))).resolves.toMatchObject({ situacao: { auditoria: "APROVADO" } });
   });
 });

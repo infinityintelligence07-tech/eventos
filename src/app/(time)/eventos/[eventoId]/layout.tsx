@@ -9,6 +9,7 @@ import { Aviso } from "../../_componentes/ui/aviso";
 import { CabecalhoDaPagina } from "../../_componentes/ui/cabecalho";
 import { nomeCurtoDoEvento as nomeCurto, periodo } from "../../_componentes/ui/formatos";
 import { ChipDaEscala } from "../../_componentes/ui/situacao";
+import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 type Parametros = { params: Promise<{ eventoId: string }> };
 
@@ -26,6 +27,7 @@ function abasDoEvento(eventoId: string): AbaDaPagina[] {
 }
 
 export async function generateMetadata({ params }: Parametros): Promise<Metadata> {
+  await exigirAtor();
   const evento = await cabecalhoDoEvento((await params).eventoId);
   if (!evento) return { title: "Evento não encontrado" };
   const identificacao = evento.codigo ?? nomeCurto(evento);
@@ -34,6 +36,7 @@ export async function generateMetadata({ params }: Parametros): Promise<Metadata
 }
 
 export default async function LayoutDoEvento({ params, children }: Parametros & { children: ReactNode }) {
+  await exigirAtor();
   const { eventoId } = await params;
   const evento = await cabecalhoDoEvento(eventoId);
   if (!evento) notFound();

@@ -56,6 +56,7 @@ export { dadosEditados, SIGLA_CONFRONTO, usaFila } from "./domain/resumo";
 export {
   arquivarLocalSchema,
   motivoParaNaoArquivar,
+  mudancasDoLocal,
   rotuloDoTipoDeLocal,
   type SalvarLocal,
   salvarLocalSchema,

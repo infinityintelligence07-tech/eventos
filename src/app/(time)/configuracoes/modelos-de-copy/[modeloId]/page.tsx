@@ -8,6 +8,7 @@ import { carregarEditorDeModelo } from "@/fluxos/comunicacao";
 import { rotuloDoTipoDeModelo, TIPOS_DE_MODELO } from "@/modules/comunicacao";
 
 import { EditorDoModelo } from "../_componentes/editor-de-modelo";
+import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Modelo de copy" };
@@ -16,6 +17,7 @@ const NOVO = "novo";
 const FORMATO_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default async function PaginaDoModelo({ params }: { params: Promise<{ modeloId: string }> }) {
+  await exigirAtor();
   const { modeloId } = await params;
   if (modeloId !== NOVO && !FORMATO_UUID.test(modeloId)) notFound();
   const editor = await carregarEditorDeModelo(modeloId === NOVO ? null : modeloId, new Date());

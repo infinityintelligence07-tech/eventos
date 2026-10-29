@@ -1,3 +1,5 @@
+import { type Ator, pode } from "@/core/autorizacao";
+
 export type ItemDoMenu =
   | "Início"
   | "Calendário"
@@ -21,6 +23,19 @@ export const ROTAS_DO_MENU: { nome: ItemDoMenu; href: string; raiz: string }[] =
   { nome: "Custos", href: "/custos", raiz: "/custos" },
   { nome: "Configurações", href: "/configuracoes/regras-de-custo", raiz: "/configuracoes" },
 ];
+
+/**
+ * Primeira tela de Configurações para o ator: a líder abre em Regras de custo; o time, que só consulta as regras
+ * (docs/09 §4.2), abre em Modelos de copy, que ele edita.
+ */
+export function inicioDasConfiguracoes(ator: Pick<Ator, "perfis">): string {
+  return pode(ator, "config.regras_custo") ? "/configuracoes/regras-de-custo" : "/configuracoes/modelos-de-copy";
+}
+
+/** Todo o menu é de leitura para os dois perfis; muda só o destino de Configurações. */
+export function rotasDoMenu(ator: Pick<Ator, "perfis">): typeof ROTAS_DO_MENU {
+  return ROTAS_DO_MENU.map((rota) => (rota.nome === "Configurações" ? { ...rota, href: inicioDasConfiguracoes(ator) } : rota));
+}
 
 const ABA_DO_EVENTO: Record<string, ItemDoMenu> = {
   escala: "Escalas",

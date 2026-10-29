@@ -1,4 +1,4 @@
-import { bancoParaLeitura, transacao } from "@/fluxos/_base";
+import { bancoParaLeitura, transacao, type AtorDaEscrita } from "@/fluxos/_base";
 import {
   type CaronaDoEvento,
   type CriarCarona,
@@ -50,18 +50,18 @@ export async function carregarCaronas(eventoId: string | null, agora: Date): Pro
 
 const contexto = (usuarioId: string, agora: Date) => ({ usuarioId, instante: agora });
 
-export function criarCarona(entrada: CriarCarona, usuarioId: string, agora: Date) {
-  return traduzirErros(() => transacao((tx) => servicoDeCaronas.criarCarona(criarRepositorioCaronas(tx), entrada, contexto(usuarioId, agora))));
+export function criarCarona(entrada: CriarCarona, ator: AtorDaEscrita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDeCaronas.criarCarona(criarRepositorioCaronas(tx), entrada, contexto(ator.usuarioId, agora))));
 }
 
-export function removerCarona(caronaId: string, usuarioId: string, agora: Date) {
-  return traduzirErros(() => transacao((tx) => servicoDeCaronas.removerCarona(criarRepositorioCaronas(tx), caronaId, contexto(usuarioId, agora))));
+export function removerCarona(caronaId: string, ator: AtorDaEscrita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDeCaronas.removerCarona(criarRepositorioCaronas(tx), caronaId, contexto(ator.usuarioId, agora))));
 }
 
-export function definirCarona(entrada: DefinirCarona, usuarioId: string, agora: Date) {
-  return traduzirErros(() => transacao((tx) => servicoDeCaronas.definirCarona(criarRepositorioCaronas(tx), entrada, contexto(usuarioId, agora))));
+export function definirCarona(entrada: DefinirCarona, ator: AtorDaEscrita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDeCaronas.definirCarona(criarRepositorioCaronas(tx), entrada, contexto(ator.usuarioId, agora))));
 }
 
-export function tirarDaCarona(convocacaoId: string, usuarioId: string, agora: Date) {
-  return traduzirErros(() => transacao((tx) => servicoDeCaronas.tirarDaCarona(criarRepositorioCaronas(tx), convocacaoId, contexto(usuarioId, agora))));
+export function tirarDaCarona(convocacaoId: string, ator: AtorDaEscrita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDeCaronas.tirarDaCarona(criarRepositorioCaronas(tx), convocacaoId, contexto(ator.usuarioId, agora))));
 }

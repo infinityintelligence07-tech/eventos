@@ -22,13 +22,15 @@ vi.mock("@/fluxos/_base", async (importOriginal) => {
   return {
     ...real,
     bancoParaLeitura: async () => teste.banco!.db,
-    transacao: (trabalho: (tx: Base.Executor) => Promise<unknown>) => teste.banco!.db.transaction(trabalho),
+    // A transação real (limite e "sem registro, desfaz"), no banco de teste.
+    transacao: async (_ator: unknown, trabalho: (tx: never) => Promise<unknown>) => (await import("@/fluxos/_base/banco")).transacaoNoBanco(teste.banco!.db, trabalho as never),
   };
 });
 
 describe.skipIf(!TEST_DATABASE_URL)("fluxos da Disponibilidade no banco", () => {
   const agora = new Date("2026-11-01T15:00:00Z");
   let usuarioId: string;
+  const ator = () => ({ usuarioId, pessoaId: null, origem: "LOCAL" as const });
   let ana: string;
   let bruno: string;
   let inativa: string;
@@ -78,19 +80,19 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da Disponibilidade no banco", () => 
     expect(nova.tituloSugerido).toBe("Eventos de 01/11 a 30/11");
     expect(nova.eventos.map((item) => item.id)).not.toContain(cancelado);
 
-    const enqueteId = await abrirEnquete({ titulo: "Novembro", fechaEm: new Date("2026-11-08T02:59:00Z"), eventoIds: [confronto, asm] }, usuarioId, agora);
+    const enqueteId = await abrirEnquete({ titulo: "Novembro", fechaEm: new Date("2026-11-08T02:59:00Z"), eventoIds: [confronto, asm] }, ator(), agora);
     const lista = await listarEnquetes(null, agora);
     expect(lista.enquetes).toEqual([expect.objectContaining({ id: enqueteId, situacao: "ABERTA", eventos: 2, responderam: 0 })]);
     expect(lista.totalDeStaff).toBe(2);
     expect((await um(`select criado_por from eventos.enquete where id = $1`, [enqueteId])).criado_por).toBe(usuarioId);
 
-    await expect(abrirEnquete({ titulo: "Passado", fechaEm: new Date("2026-10-01T00:00:00Z"), eventoIds: [asm] }, usuarioId, agora)).rejects.toEqual(
+    await expect(abrirEnquete({ titulo: "Passado", fechaEm: new Date("2026-10-01T00:00:00Z"), eventoIds: [asm] }, ator(), agora)).rejects.toEqual(
       new RegraDeNegocioError("Escolha uma data a partir de hoje."),
     );
   });
 
   it("Registrar resposta em nome da pessoa: grava registrado_por, registro_acao e aparece na matriz com o selo", async () => {
-    const enqueteId = await abrirEnquete({ titulo: "Registro", fechaEm: new Date("2026-11-08T02:59:00Z"), eventoIds: [confronto, asm] }, usuarioId, agora);
+    const enqueteId = await abrirEnquete({ titulo: "Registro", fechaEm: new Date("2026-11-08T02:59:00Z"), eventoIds: [confronto, asm] }, ator(), agora);
 
     const resultado = await registrarDisponibilidade(
       {
@@ -101,7 +103,7 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da Disponibilidade no banco", () => 
           { eventoId: asm, resposta: "NAO_PODE" },
         ],
       },
-      usuarioId,
+      ator(),
       agora,
     );
     expect(resultado).toEqual({ nome: "Ana Teste", gravadas: 2, apagadas: 0, foraDoPrazo: false });
@@ -147,7 +149,7 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da Disponibilidade no banco", () => 
           { eventoId: asm, resposta: "SEM_RESPOSTA" },
         ],
       },
-      usuarioId,
+      ator(),
       agora,
     );
     expect(segunda).toMatchObject({ gravadas: 0, apagadas: 1 });
@@ -155,17 +157,17 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da Disponibilidade no banco", () => 
   });
 
   it("recusa pessoa fora do staff ativo, evento fora da enquete e enquete inexistente", async () => {
-    const enqueteId = await abrirEnquete({ titulo: "Recusas", fechaEm: new Date("2026-11-08T02:59:00Z"), eventoIds: [confronto] }, usuarioId, agora);
+    const enqueteId = await abrirEnquete({ titulo: "Recusas", fechaEm: new Date("2026-11-08T02:59:00Z"), eventoIds: [confronto] }, ator(), agora);
     await expect(
-      registrarDisponibilidade({ enqueteId, pessoaId: inativa, respostas: [{ eventoId: confronto, resposta: "PODE" }] }, usuarioId, agora),
+      registrarDisponibilidade({ enqueteId, pessoaId: inativa, respostas: [{ eventoId: confronto, resposta: "PODE" }] }, ator(), agora),
     ).rejects.toEqual(new RegraDeNegocioError("Esta pessoa não está no staff ativo."));
     await expect(
-      registrarDisponibilidade({ enqueteId, pessoaId: bruno, respostas: [{ eventoId: asm, resposta: "PODE" }] }, usuarioId, agora),
+      registrarDisponibilidade({ enqueteId, pessoaId: bruno, respostas: [{ eventoId: asm, resposta: "PODE" }] }, ator(), agora),
     ).rejects.toEqual(new RegraDeNegocioError("Algum evento não faz parte desta enquete. Recarregue a página."));
     await expect(
       registrarDisponibilidade(
         { enqueteId: "7e570000-0000-7000-8000-00000000ffff", pessoaId: bruno, respostas: [{ eventoId: asm, resposta: "PODE" }] },
-        usuarioId,
+        ator(),
         agora,
       ),
     ).rejects.toEqual(new RegraDeNegocioError("Enquete não encontrada."));
@@ -173,25 +175,25 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da Disponibilidade no banco", () => 
   });
 
   it("encerrar, registrar fora do prazo e reabrir", async () => {
-    const enqueteId = await abrirEnquete({ titulo: "Encerrar", fechaEm: new Date("2026-11-08T02:59:00Z"), eventoIds: [asm] }, usuarioId, agora);
-    await encerrarEnquete({ enqueteId }, agora);
+    const enqueteId = await abrirEnquete({ titulo: "Encerrar", fechaEm: new Date("2026-11-08T02:59:00Z"), eventoIds: [asm] }, ator(), agora);
+    await encerrarEnquete({ enqueteId }, ator(), agora);
     expect((await carregarEnquete(enqueteId, {}, agora))!.situacao).toBe("ENCERRADA");
-    await expect(encerrarEnquete({ enqueteId }, agora)).rejects.toEqual(new RegraDeNegocioError("A enquete já estava encerrada."));
+    await expect(encerrarEnquete({ enqueteId }, ator(), agora)).rejects.toEqual(new RegraDeNegocioError("A enquete já estava encerrada."));
 
     const depois = new Date(agora.getTime() + 60_000);
-    const registro = await registrarDisponibilidade({ enqueteId, pessoaId: bruno, respostas: [{ eventoId: asm, resposta: "PODE" }] }, usuarioId, depois);
+    const registro = await registrarDisponibilidade({ enqueteId, pessoaId: bruno, respostas: [{ eventoId: asm, resposta: "PODE" }] }, ator(), depois);
     expect(registro.foraDoPrazo).toBe(true);
     expect((await um(`select dados from eventos.registro_acao where entidade_id = $1 and em_nome_de_pessoa_id = $2`, [enqueteId, bruno])).dados).toEqual({
       foraDoPrazo: true,
     });
 
-    await alterarEnquete({ enqueteId, fechaEm: new Date("2026-11-10T02:59:00Z") }, depois);
+    await alterarEnquete({ enqueteId, fechaEm: new Date("2026-11-10T02:59:00Z") }, ator(), depois);
     expect((await carregarEnquete(enqueteId, {}, depois))!.situacao).toBe("ABERTA");
   });
 
   it("resumoParaInicio: só as abertas que fecham em até 3 dias", async () => {
-    const fechaLogo = await abrirEnquete({ titulo: "Fecha logo", fechaEm: new Date("2026-11-03T15:00:00Z"), eventoIds: [asm] }, usuarioId, agora);
-    await abrirEnquete({ titulo: "Fecha depois", fechaEm: new Date("2026-11-05T15:00:00Z"), eventoIds: [asm] }, usuarioId, agora);
+    const fechaLogo = await abrirEnquete({ titulo: "Fecha logo", fechaEm: new Date("2026-11-03T15:00:00Z"), eventoIds: [asm] }, ator(), agora);
+    await abrirEnquete({ titulo: "Fecha depois", fechaEm: new Date("2026-11-05T15:00:00Z"), eventoIds: [asm] }, ator(), agora);
 
     const [item] = await resumoParaInicio(agora);
     expect(item).toEqual({

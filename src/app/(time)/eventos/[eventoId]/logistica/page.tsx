@@ -9,6 +9,7 @@ import { SecaoDeCaronas } from "../../../logistica/_componentes/secao-de-caronas
 import { SecaoDeHospedagem } from "../../../logistica/_componentes/secao-de-hospedagem";
 import { type ParametrosDeVoos, SecaoDeVoos, situacaoDoFiltro } from "../../../logistica/_componentes/secao-de-voos";
 import { parametro } from "../../../logistica/_componentes/situacoes";
+import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Logística" };
@@ -17,6 +18,7 @@ type Props = { params: Promise<{ eventoId: string }>; searchParams: Promise<Reco
 
 /** As mesmas seções da Logística, filtradas por este evento, uma abaixo da outra. */
 export default async function PaginaLogisticaDoEvento({ params, searchParams }: Props) {
+  await exigirAtor();
   const eventoId = z.uuid().safeParse((await params).eventoId).data;
   if (!eventoId) notFound();
   const busca = await searchParams;

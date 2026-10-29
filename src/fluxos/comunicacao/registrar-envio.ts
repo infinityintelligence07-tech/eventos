@@ -1,4 +1,4 @@
-import { ConflitoDeVersaoError, RegraDeNegocioError, transacao } from "@/fluxos/_base";
+import { ConflitoDeVersaoError, RegraDeNegocioError, transacao, type AtorDaEscrita } from "@/fluxos/_base";
 import {
   criarRepositorioComunicacao,
   gerarCopysDaEquipe,
@@ -63,9 +63,9 @@ export type EnvioRegistradoNaTela = {
  * "Marcar como enviada" (docs/07 §4.3): numa transação, grava a mensagem ENVIADA (canal COPIADO) e, na copy de
  * escalação, convida a pessoa e conclui a comunicação da escala quando era a última.
  */
-export async function registrarEnvioDaCopy(entrada: MarcarCopyComoEnviada, usuarioId: string, agora: Date): Promise<EnvioRegistradoNaTela> {
+export async function registrarEnvioDaCopy(entrada: MarcarCopyComoEnviada, ator: AtorDaEscrita, agora: Date): Promise<EnvioRegistradoNaTela> {
   try {
-    return await transacao(async (tx) => {
+    return await transacao(ator, async (tx) => {
       const repo = criarRepositorioComunicacao(tx);
       const travada = await repo.travarConvocacao(entrada.convocacaoId);
       if (!travada) throw new RegraDeNegocioError(PESSOA_FORA_DA_ESCALA);
@@ -95,14 +95,14 @@ export async function registrarEnvioDaCopy(entrada: MarcarCopyComoEnviada, usuar
         dadosHash: daPessoa.copy.dadosHash,
         canal: "COPIADO",
         instante: agora,
-        usuarioId,
+        usuarioId: ator.usuarioId,
       });
 
       if (modelo.tipo !== "ESCALACAO") return { eventoId: evento.id, nome: daPessoa.pessoa.nome, convidada: false, comunicada: false };
 
       const convite = criarRepositorioConvite(tx);
       const convidada = (await registrarConvite(convite, { convocacaoId: entrada.convocacaoId, instante: agora })) === "CONVIDADA";
-      const comunicada = (await concluirComunicacao(convite, { eventoId: evento.id, usuarioId, instante: agora })) === "COMUNICADA";
+      const comunicada = (await concluirComunicacao(convite, { eventoId: evento.id, usuarioId: ator.usuarioId, instante: agora })) === "COMUNICADA";
       return { eventoId: evento.id, nome: daPessoa.pessoa.nome, convidada, comunicada };
     });
   } catch (erro: unknown) {

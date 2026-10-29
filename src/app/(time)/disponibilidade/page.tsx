@@ -7,6 +7,7 @@ import { CabecaDaTabela, CelulaDaTabela, ColunaDaTabela, LinhaDaTabela, Tabela }
 import { type FiltroDaListaDeEnquetes, listarEnquetes } from "@/fluxos/disponibilidade";
 
 import { ChipDaEnquete } from "./_componentes/chip-da-enquete";
+import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Disponibilidade" };
@@ -24,6 +25,7 @@ const NOVA_ENQUETE = (
 );
 
 export default async function PaginaDisponibilidade({ searchParams }: { searchParams: Promise<Parametros> }) {
+  await exigirAtor();
   const filtro = filtroDaUrl((await searchParams).situacao);
   const agora = new Date();
   const { enquetes, totalDeStaff, quantidade } = await listarEnquetes(filtro, agora);

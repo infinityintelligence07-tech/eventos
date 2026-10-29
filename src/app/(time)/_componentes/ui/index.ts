@@ -54,6 +54,7 @@ export * as formatar from "./formatos";
 export { type EstadoDoSalvamento, IndicadorDeSalvamento } from "./indicador-de-salvamento";
 export { PainelPelaUrl } from "./painel-pela-url";
 export { ACAO_NAO_EXECUTADA, errosDoCampo, type FalhaDaAcao, type ResultadoAcao, temErroDeCampo } from "./resultado-acao";
+export { FaixaSemPermissao, motivoSemPermissao, SemPermissaoNaAcao } from "./permissao";
 export { ResumoDeErros } from "./resumo-de-erros";
 export { SeloRegistradoPeloTime } from "./selo";
 export { Chip, ChipDaEscala, iconeDaSituacao, rotuloDaSituacao, type TomDoChip } from "./situacao";

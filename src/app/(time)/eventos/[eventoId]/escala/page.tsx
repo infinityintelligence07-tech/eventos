@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { situacaoDaEscrita } from "@/fluxos/_base";
+import { permissoesDoAtor } from "@/app/(time)/_servidor/usuario-atual";
 import { carregarMontagem, type MontagemDaEscala, sugerirPessoas } from "@/fluxos/escalas";
 
 import { Aviso, FaixaSomenteLeitura } from "../../../_componentes/ui/aviso";
@@ -16,6 +17,7 @@ import { EquipeDaFuncao } from "./_componentes/equipe-da-funcao";
 import { PainelDeResposta } from "./_componentes/painel-de-resposta";
 import { PainelDeSugestoes } from "./_componentes/painel-de-sugestoes";
 import { VagasPorFuncao } from "./_componentes/vagas-por-funcao";
+import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Escala" };
@@ -30,7 +32,11 @@ const ROTULO_DO_HISTORICO: Record<string, string> = {
   COMUNICADA: "Comunicada",
 };
 
-function situacaoDaBarra(montagem: MontagemDaEscala, escreve: boolean): SituacaoDaBarra {
+function situacaoDaBarra(
+  montagem: MontagemDaEscala,
+  escreve: boolean,
+  permissoes: { aprovar: boolean; reabrir: boolean },
+): SituacaoDaBarra {
   if (!escreve || montagem.encerrado) return { tipo: "SO_LEITURA" };
   const status = montagem.evento.statusEscala;
   switch (status) {
@@ -46,10 +52,10 @@ function situacaoDaBarra(montagem: MontagemDaEscala, escreve: boolean): Situacao
       };
     }
     case "AGUARDANDO_APROVACAO":
-      return { tipo: "COM_A_LIDER" };
+      return { tipo: "COM_A_LIDER", podeAprovar: permissoes.aprovar };
     case "APROVADA":
     case "COMUNICADA":
-      return { tipo: "APROVADA", statusEsperado: status };
+      return { tipo: "APROVADA", statusEsperado: status, podeReabrir: permissoes.reabrir };
     case "SEM_ESCALA":
       return { tipo: "SO_LEITURA" };
     default: {
@@ -68,8 +74,13 @@ function resumoDaBarra(montagem: MontagemDaEscala): string {
 }
 
 export default async function PaginaEscalaDoEvento({ params, searchParams }: Parametros) {
+  await exigirAtor();
   const [{ eventoId }, { vaga, responder }] = await Promise.all([params, searchParams]);
-  const [montagem, escrita] = await Promise.all([carregarMontagem(eventoId), situacaoDaEscrita()]);
+  const [montagem, escrita, permissoes] = await Promise.all([
+    carregarMontagem(eventoId),
+    situacaoDaEscrita(),
+    permissoesDoAtor("escala.aprovar", "escala.reabrir"),
+  ]);
   if (!montagem) notFound();
 
   const { evento, resumo } = montagem;
@@ -246,7 +257,7 @@ export default async function PaginaEscalaDoEvento({ params, searchParams }: Par
         </Cartao>
       )}
 
-      <BarraDaEscala eventoId={evento.id} codigo={codigo} resumo={resumoDaBarra(montagem)} situacao={situacaoDaBarra(montagem, escreve)} />
+      <BarraDaEscala eventoId={evento.id} codigo={codigo} resumo={resumoDaBarra(montagem)} situacao={situacaoDaBarra(montagem, escreve, { aprovar: permissoes["escala.aprovar"], reabrir: permissoes["escala.reabrir"] })} />
 
       {sugestoes && <PainelDeSugestoes eventoId={evento.id} sugestoes={sugestoes} periodoDoEvento={periodo(evento.dataInicio, evento.dataFim)} caminho={caminho} />}
       {convocacaoParaResponder && (

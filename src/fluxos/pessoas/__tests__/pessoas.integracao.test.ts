@@ -14,7 +14,8 @@ vi.mock("@/fluxos/_base", async (importOriginal) => {
   return {
     ...real,
     bancoParaLeitura: async () => teste.banco!.db,
-    transacao: (trabalho: (tx: Base.Executor) => Promise<unknown>) => teste.banco!.db.transaction(trabalho),
+    // A transação real (limite e "sem registro, desfaz"), no banco de teste.
+    transacao: async (_ator: unknown, trabalho: (tx: never) => Promise<unknown>) => (await import("@/fluxos/_base/banco")).transacaoNoBanco(teste.banco!.db, trabalho as never),
   };
 });
 
@@ -49,8 +50,12 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos de Pessoas no banco", () => {
     await teste.banco!.sql(`insert into eventos.convocacao (escala_id, pessoa_id, status) values ($1, $2, $3)`, [escalaId, pessoaId, status]);
   }
 
+  let usuarioId: string;
+  const ator = () => ({ usuarioId, pessoaId: null, origem: "LOCAL" as const });
+
   beforeAll(async () => {
     teste.banco = await criarBancoDeTeste();
+    usuarioId = ((await teste.banco.sql(`insert into core.usuario (email) values ('time@exemplo.test') returning id`)) as [{ id: string }])[0].id;
     ana = await pessoa("Ana Maria Teste", { nomeSocial: "Ana" });
     bruno = await pessoa("Bruno Teste");
     semStaff = await pessoa("Só no GH", { staff: false });
@@ -93,6 +98,7 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos de Pessoas no banco", () => {
   it("completar o perfil: sexo, camiseta, funções, veículo e coordenadas", async () => {
     await salvarPerfilDoStaff(
       { pessoaId: bruno, sexo: "M", camisetaModelo: "CAMISETA", camisetaTamanho: "G", possuiCamiseta: true, fezConfronto: false, temCnpj: null },
+      ator(),
       agora,
     );
     await expect(
@@ -102,9 +108,9 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos de Pessoas no banco", () => {
           { funcaoId: staffId, nivel: "HABILITADO" },
           { funcaoId: djId, nivel: "TRAINEE" },
         ],
-      }),
+      }, ator(), agora),
     ).resolves.toEqual({ nome: "Bruno Teste", quantidade: 2 });
-    await salvarVeiculo({ pessoaId: bruno, temCarro: "SIM", lugares: 4, consumoKmL: null }, agora);
+    await salvarVeiculo({ pessoaId: bruno, temCarro: "SIM", lugares: 4, consumoKmL: null }, ator(), agora);
 
     let ficha = (await carregarPessoa(bruno, agora))!;
     expect(ficha.perfil).toMatchObject({ sexo: "M", camisetaModelo: "CAMISETA", camisetaTamanho: "G", possuiCamiseta: true, fezConfronto: false });
@@ -115,25 +121,50 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos de Pessoas no banco", () => {
     expect(ficha.veiculo).toEqual({ lugares: 4, consumoKmL: null });
     expect(ficha.pendencias).toEqual(["LOCALIZACAO", "CONSUMO_DO_CARRO"]);
 
-    await salvarVeiculo({ pessoaId: bruno, temCarro: "SIM", lugares: 5, consumoKmL: 10.5 }, agora);
-    await salvarCoordenadas({ pessoaId: bruno, lat: -22.7349, lng: -47.3311 }, agora);
-    await definirFuncoes({ pessoaId: bruno, funcoes: [{ funcaoId: staffId, nivel: "TRAINEE" }] });
+    await salvarVeiculo({ pessoaId: bruno, temCarro: "SIM", lugares: 5, consumoKmL: 10.5 }, ator(), agora);
+    await salvarCoordenadas({ pessoaId: bruno, lat: -22.7349, lng: -47.3311 }, ator(), agora);
+    await definirFuncoes({ pessoaId: bruno, funcoes: [{ funcaoId: staffId, nivel: "TRAINEE" }] }, ator(), agora);
     ficha = (await carregarPessoa(bruno, agora))!;
     expect(ficha.veiculo).toEqual({ lugares: 5, consumoKmL: 10.5 });
     expect(ficha.perfil).toMatchObject({ lat: -22.7349, lng: -47.3311 });
     expect(ficha.funcoes.map((item) => [item.codigo, item.nivel])).toEqual([["STAFF", "TRAINEE"]]);
     expect(ficha.pendencias).toEqual([]);
 
-    await salvarVeiculo({ pessoaId: bruno, temCarro: "NAO" }, agora);
+    await salvarVeiculo({ pessoaId: bruno, temCarro: "NAO" }, ator(), agora);
     expect((await carregarPessoa(bruno, agora))!.veiculo).toBeNull();
     expect(await teste.banco!.sql(`select nome_completo from core.pessoa where id = $1`, [bruno])).toEqual([{ nome_completo: "Bruno Teste" }]);
+
+    // Trilha (docs/09 §7.1): PESSOA com o nome dos campos, nunca o valor; coordenadas não entram.
+    const registros = (await teste.banco!.sql(
+      `select acao, usuario_id, dados from eventos.registro_acao where entidade = 'PESSOA' and entidade_id = $1 order by criado_em, acao`,
+      [bruno],
+    )) as { acao: string; usuario_id: string; dados: Record<string, unknown> }[];
+    expect(registros.map((registro) => registro.acao)).toEqual([
+      "PERFIL_ALTERADO",
+      "FUNCOES_DEFINIDAS",
+      "VEICULO_SALVO",
+      "VEICULO_SALVO",
+      "COORDENADAS_ALTERADAS",
+      "FUNCOES_DEFINIDAS",
+      "VEICULO_REMOVIDO",
+    ]);
+    expect(registros.every((registro) => registro.usuario_id === usuarioId)).toBe(true);
+    expect(registros[0]!.dados).toEqual({ campos: ["sexo", "camisetaModelo", "camisetaTamanho", "possuiCamiseta", "fezConfronto"] });
+    expect(registros.slice(2, 5).map((registro) => registro.dados)).toEqual([
+      { campos: ["lugares"] },
+      { campos: ["lugares", "consumoKmL"] },
+      {},
+    ]);
+    expect(registros[6]!.dados).toEqual({});
+    const texto = JSON.stringify(registros.map((registro) => registro.dados));
+    expect(texto).not.toMatch(/"M"|CAMISETA"|"G"|-22\.73|-47\.33|10\.5|:\s*[45]\b/);
   });
 
   it("recusa quem não é staff e função inexistente, sem gravar nada", async () => {
-    await expect(salvarVeiculo({ pessoaId: semStaff, temCarro: "SIM", lugares: 4, consumoKmL: null }, agora)).rejects.toEqual(
+    await expect(salvarVeiculo({ pessoaId: semStaff, temCarro: "SIM", lugares: 4, consumoKmL: null }, ator(), agora)).rejects.toEqual(
       new RegraDeNegocioError("Pessoa não encontrada."),
     );
-    await expect(definirFuncoes({ pessoaId: ana, funcoes: [{ funcaoId: "7e570000-0000-7000-8000-00000000ffff", nivel: "HABILITADO" }] })).rejects.toEqual(
+    await expect(definirFuncoes({ pessoaId: ana, funcoes: [{ funcaoId: "7e570000-0000-7000-8000-00000000ffff", nivel: "HABILITADO" }] }, ator(), agora)).rejects.toEqual(
       new RegraDeNegocioError("Alguma função escolhida não existe mais. Recarregue a página."),
     );
     expect(await teste.banco!.sql(`select 1 from eventos.pessoa_veiculo where pessoa_id = $1`, [semStaff])).toEqual([]);

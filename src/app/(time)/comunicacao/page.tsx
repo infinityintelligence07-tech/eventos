@@ -17,6 +17,7 @@ import { listarComunicacao } from "@/fluxos/comunicacao";
 import type { SituacaoDaCopy } from "@/modules/comunicacao";
 
 import { ChipDaCopy } from "../eventos/[eventoId]/comunicacao/_componentes/chip-da-copy";
+import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Comunicação" };
@@ -41,6 +42,7 @@ function Quantidade({ valor, situacao }: { valor: number; situacao: SituacaoDaCo
 }
 
 export default async function PaginaComunicacao({ searchParams }: { searchParams: Promise<{ situacao?: string }> }) {
+  await exigirAtor();
   const { situacao } = await searchParams;
   const filtro = FILTROS.find((opcao) => opcao.valor === situacao) ?? null;
   const lista = await listarComunicacao({ situacao: filtro?.situacao }, new Date());

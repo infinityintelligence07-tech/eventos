@@ -3,9 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { executarAcao, lerFormulario, type ResultadoAcao } from "@/app/(time)/_servidor/acao";
+import { executarAcao, executarLeitura, lerFormulario, type ResultadoAcao } from "@/app/(time)/_servidor/acao";
 import { definirModeloAtivo, previaDoModelo, type PreviaNaTela, salvarLinkDeCustos, salvarModelo } from "@/fluxos/comunicacao";
-import { mensagemDoErro } from "@/fluxos/_base";
 import {
   definirModeloAtivoSchema,
   previaDoModeloSchema,
@@ -22,8 +21,8 @@ function revalidarCopys() {
 }
 
 export async function salvarLinkDeCustosAcao(_estado: ResultadoAcao, form: FormData): Promise<ResultadoAcao> {
-  return executarAcao(form, salvarLinkDeCustosSchema, async ({ linkCustos }, usuario) => {
-    await salvarLinkDeCustos(linkCustos ?? null, usuario.id, new Date());
+  return executarAcao(form, salvarLinkDeCustosSchema, "config.link_custos", async ({ linkCustos }, ator) => {
+    await salvarLinkDeCustos(linkCustos ?? null, ator, new Date());
     revalidarCopys();
     return linkCustos
       ? "Link do formulário de custos salvo."
@@ -32,8 +31,8 @@ export async function salvarLinkDeCustosAcao(_estado: ResultadoAcao, form: FormD
 }
 
 export async function salvarModeloAcao(_estado: ResultadoAcao, form: FormData): Promise<ResultadoAcao> {
-  return executarAcao(form, salvarModeloSchema, async (dados, usuario) => {
-    const salvo = await salvarModelo(dados, usuario.id, new Date());
+  return executarAcao(form, salvarModeloSchema, "config.modelos_copy", async (dados, ator) => {
+    const salvo = await salvarModelo(dados, ator, new Date());
     revalidarCopys();
     if (!dados.modeloId) redirect(`/configuracoes/modelos-de-copy/${salvo.id}`);
     return salvo.ativo
@@ -43,8 +42,8 @@ export async function salvarModeloAcao(_estado: ResultadoAcao, form: FormData): 
 }
 
 export async function definirModeloAtivoAcao(_estado: ResultadoAcao, form: FormData): Promise<ResultadoAcao> {
-  return executarAcao(form, definirModeloAtivoSchema, async ({ modeloId, ativo }, usuario) => {
-    await definirModeloAtivo(modeloId, ativo, usuario.id, new Date());
+  return executarAcao(form, definirModeloAtivoSchema, "config.modelos_copy", async ({ modeloId, ativo }, ator) => {
+    await definirModeloAtivo(modeloId, ativo, ator, new Date());
     revalidarCopys();
     return ativo
       ? "Modelo ativado: a Comunicação passa a usá-lo (o anterior deste tipo foi desativado)."
@@ -52,13 +51,11 @@ export async function definirModeloAtivoAcao(_estado: ResultadoAcao, form: FormD
   });
 }
 
-/** Só lê: funciona também com a escrita desligada. */
+/** Só lê: funciona também com a escrita desligada (mas exige sessão e permissão). */
 export async function previaDoModeloAcao(form: FormData): Promise<PreviaNaTela | { erro: string }> {
-  const lido = lerFormulario(form, previaDoModeloSchema);
-  if (!lido.ok) return { erro: lido.erro };
-  try {
-    return await previaDoModelo(lido.dados, new Date());
-  } catch (erro: unknown) {
-    return { erro: mensagemDoErro(erro) };
-  }
+  const resultado = await executarLeitura("config.modelos_copy", async () => {
+    const lido = lerFormulario(form, previaDoModeloSchema);
+    return lido.ok ? await previaDoModelo(lido.dados, new Date()) : { erro: lido.erro };
+  });
+  return resultado.ok ? resultado.valor : { erro: resultado.erro };
 }

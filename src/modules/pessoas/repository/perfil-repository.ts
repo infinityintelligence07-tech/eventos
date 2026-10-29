@@ -1,6 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 
 import type { Executor } from "@/core/db/database";
+import { registrarAcao } from "@/core/db/registro-acao";
 import { pessoa } from "@/core/db/schema/core";
 import { funcao, pessoaEvento, pessoaFuncao, pessoaVeiculo } from "@/core/db/schema/eventos";
 
@@ -57,6 +58,42 @@ export function criarRepositorioPerfil(executor: Executor): RepositorioPerfil {
     async salvarCoordenadas({ pessoaId, lat, lng, instante }) {
       // Digitadas à mão até existir geocodificação (docs/07 R7): geocodificado_em fica nulo.
       await executor.update(pessoaEvento).set({ lat, lng, atualizadoEm: instante }).where(eq(pessoaEvento.pessoaId, pessoaId));
+    },
+
+    async perfilAtual(pessoaId) {
+      const [linha] = await executor
+        .select({
+          sexo: pessoaEvento.sexo,
+          camisetaModelo: pessoaEvento.camisetaModelo,
+          camisetaTamanho: pessoaEvento.camisetaTamanho,
+          possuiCamiseta: pessoaEvento.possuiCamiseta,
+          fezConfronto: pessoaEvento.fezConfronto,
+          temCnpj: pessoaEvento.temCnpj,
+        })
+        .from(pessoaEvento)
+        .where(eq(pessoaEvento.pessoaId, pessoaId));
+      return linha ?? null;
+    },
+
+    async funcoesDaPessoa(pessoaId) {
+      return executor
+        .select({ codigo: funcao.codigo, nivel: pessoaFuncao.nivel })
+        .from(pessoaFuncao)
+        .innerJoin(funcao, eq(funcao.id, pessoaFuncao.funcaoId))
+        .where(eq(pessoaFuncao.pessoaId, pessoaId))
+        .orderBy(funcao.codigo);
+    },
+
+    async veiculoAtual(pessoaId) {
+      const [linha] = await executor
+        .select({ lugares: pessoaVeiculo.lugares, consumoKmL: pessoaVeiculo.consumoKmL })
+        .from(pessoaVeiculo)
+        .where(eq(pessoaVeiculo.pessoaId, pessoaId));
+      return linha ? { lugares: linha.lugares, consumoKmL: linha.consumoKmL === null ? null : Number(linha.consumoKmL) } : null;
+    },
+
+    async registrar({ pessoaId, acao, usuarioId, dados }) {
+      await registrarAcao(executor, { entidade: "PESSOA", entidadeId: pessoaId, acao, usuarioId, dados });
     },
   };
 }

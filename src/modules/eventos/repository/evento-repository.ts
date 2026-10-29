@@ -2,6 +2,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 
 import { polo } from "@/core/db/schema/core";
 import type { Executor } from "@/core/db/database";
+import { registrarAcao } from "@/core/db/registro-acao";
 import { evento, local, tipoEvento } from "@/core/db/schema/eventos";
 
 import type { StatusEscala } from "../domain/calendario";
@@ -92,6 +93,13 @@ export function criarRepositorioEvento(executor: Executor) {
         .where(and(eq(evento.id, eventoId), isNull(evento.deletedAt), sql`${evento.atualizadoEm} = ${versaoEsperada}::timestamptz`))
         .returning({ id: evento.id });
       return alterados.length === 1;
+    },
+
+    async registrarDadosAlterados(
+      eventoId: string,
+      { de, para, usuarioId }: { de: Record<string, number | null>; para: Record<string, number | null>; usuarioId: string },
+    ): Promise<void> {
+      await registrarAcao(executor, { entidade: "EVENTO", entidadeId: eventoId, eventoId, acao: "DADOS_DO_EVENTO_ALTERADOS", usuarioId, dados: { de, para } });
     },
   };
 }

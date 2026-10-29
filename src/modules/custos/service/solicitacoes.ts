@@ -11,11 +11,13 @@ import type {
   RegistrarSolicitacao,
   ReprovarSolicitacao,
 } from "../domain/schemas";
+import { type AcaoSegregada, exigirSegregacao } from "../domain/segregacao";
 
 // Solicitação de custo registrada pelo time em nome da pessoa e auditoria (docs/07 §4.4 e §6.7).
 // O servidor recalcula combustível, depreciação, alerta e total: não confia no que veio do navegador.
 
-export type ContextoDaAcao = { usuarioId: string; instante: Date };
+/** `pessoaId` e `email`: quem é o usuário no cadastro (SoD-3: ninguém audita o próprio custo). Sem e-mail, só a pessoa conta. */
+export type ContextoDaAcao = { usuarioId: string; pessoaId: string | null; email?: string | null; instante: Date };
 
 export type EventoDoCusto = { id: string; codigo: string | null; tipoEventoId: string | null; uf: string | null; data: string };
 
@@ -26,6 +28,7 @@ export type SolicitacaoTravada = {
   pessoaId: string;
   situacao: SituacaoDaSolicitacao;
   nivel: NivelDeExcecao;
+  registradoPor: string | null;
 };
 
 export type LinhasCalculadas = {
@@ -50,6 +53,10 @@ export type RepositorioSolicitacoes = {
   /** Apaga deslocamentos e itens da solicitação e grava os novos. */
   gravarLinhas(solicitacaoId: string, linhas: LinhasCalculadas, instante: Date): Promise<void>;
   travarSolicitacao(solicitacaoId: string): Promise<SolicitacaoTravada | null>;
+  /** Usuários que registraram ou corrigiram a solicitação (registro_acao), para a SoD-2. */
+  autoresDoRegistro(solicitacaoId: string): Promise<string[]>;
+  /** core.pessoa.usuario_id e email da pessoa da solicitação, para a SoD-3. */
+  cadastroDaPessoa(pessoaId: string): Promise<{ usuarioId: string | null; email: string | null }>;
   /** Compare-and-set: só muda se a auditoria ainda for `de` e a versão for a da tela. false = outra pessoa mudou antes. */
   mudarSolicitacao(
     solicitacaoId: string,
@@ -180,8 +187,21 @@ export async function corrigirSolicitacao(
   return { ...solicitacao, situacao: para, nivel: calculada.nivel };
 }
 
-export async function aprovarSolicitacao(repo: RepositorioSolicitacoes, entrada: AprovarSolicitacao, { usuarioId, instante }: ContextoDaAcao): Promise<SolicitacaoTravada> {
+async function conferirSegregacao(repo: RepositorioSolicitacoes, acao: AcaoSegregada, solicitacao: SolicitacaoTravada, { usuarioId, pessoaId, email }: ContextoDaAcao) {
+  const cadastro = await repo.cadastroDaPessoa(solicitacao.pessoaId);
+  exigirSegregacao(acao, { usuarioId, pessoaId, email: email ?? null }, {
+    pessoaId: solicitacao.pessoaId,
+    usuarioDaPessoa: cadastro.usuarioId,
+    emailDaPessoa: cadastro.email,
+    registradoPor: solicitacao.registradoPor,
+    autoresDoRegistro: await repo.autoresDoRegistro(solicitacao.id),
+  });
+}
+
+export async function aprovarSolicitacao(repo: RepositorioSolicitacoes, entrada: AprovarSolicitacao, contexto: ContextoDaAcao): Promise<SolicitacaoTravada> {
+  const { usuarioId, instante } = contexto;
   const solicitacao = await travada(repo, entrada.solicitacaoId);
+  await conferirSegregacao(repo, "APROVAR", solicitacao, contexto);
   const para = destino(solicitacao, "APROVAR");
   const parecer = entrada.parecer?.trim() || null;
   if (exigeMotivo("APROVAR", solicitacao.nivel) && (!parecer || parecer.length < 3)) {
@@ -206,8 +226,10 @@ export async function aprovarSolicitacao(repo: RepositorioSolicitacoes, entrada:
   return { ...solicitacao, situacao: para };
 }
 
-export async function reprovarSolicitacao(repo: RepositorioSolicitacoes, entrada: ReprovarSolicitacao, { usuarioId, instante }: ContextoDaAcao): Promise<SolicitacaoTravada> {
+export async function reprovarSolicitacao(repo: RepositorioSolicitacoes, entrada: ReprovarSolicitacao, contexto: ContextoDaAcao): Promise<SolicitacaoTravada> {
+  const { usuarioId, instante } = contexto;
   const solicitacao = await travada(repo, entrada.solicitacaoId);
+  await conferirSegregacao(repo, "REPROVAR", solicitacao, contexto);
   const para = destino(solicitacao, "REPROVAR");
   const mudou = await repo.mudarSolicitacao(
     solicitacao.id,
@@ -228,8 +250,10 @@ export async function reprovarSolicitacao(repo: RepositorioSolicitacoes, entrada
   return { ...solicitacao, situacao: para };
 }
 
-export async function reabrirAuditoria(repo: RepositorioSolicitacoes, entrada: ReabrirAuditoria, { usuarioId, instante }: ContextoDaAcao): Promise<SolicitacaoTravada> {
+export async function reabrirAuditoria(repo: RepositorioSolicitacoes, entrada: ReabrirAuditoria, contexto: ContextoDaAcao): Promise<SolicitacaoTravada> {
+  const { usuarioId, instante } = contexto;
   const solicitacao = await travada(repo, entrada.solicitacaoId);
+  await conferirSegregacao(repo, "REABRIR", solicitacao, contexto);
   const para = destino(solicitacao, "REABRIR");
   const mudou = await repo.mudarSolicitacao(solicitacao.id, { de: solicitacao.situacao.auditoria, atualizadoEm: entrada.atualizadoEm }, { para, instante, auditoria: "LIMPAR" });
   if (!mudou) throw new CustosMudouError(`a solicitação ${solicitacao.protocolo} mudou`);

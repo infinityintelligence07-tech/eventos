@@ -10,12 +10,13 @@ import { BotaoLink } from "../../../../_componentes/ui/botao-link";
 import { CampoDeTextoLongo } from "../../../../_componentes/ui/campo";
 import { Confirmacao } from "../../../../_componentes/ui/dialogo";
 import { BarraDeAcao } from "../../../../_componentes/ui/estados";
+import { SemPermissaoNaAcao } from "../../../../_componentes/ui/permissao";
 import { aprovarEscala, devolverEscala, enviarParaAprovacao, reabrirEscala } from "../acoes";
 
 export type SituacaoDaBarra =
   | { tipo: "MONTANDO"; statusEsperado: "RASCUNHO" | "DEVOLVIDA"; pode: boolean; motivos: string[]; vagasAbertas: number }
-  | { tipo: "COM_A_LIDER" }
-  | { tipo: "APROVADA"; statusEsperado: "APROVADA" | "COMUNICADA" }
+  | { tipo: "COM_A_LIDER"; podeAprovar: boolean }
+  | { tipo: "APROVADA"; statusEsperado: "APROVADA" | "COMUNICADA"; podeReabrir: boolean }
   | { tipo: "SO_LEITURA" };
 
 function Enviar({ eventoId, situacao }: { eventoId: string; situacao: Extract<SituacaoDaBarra, { tipo: "MONTANDO" }> }) {
@@ -113,11 +114,19 @@ export function BarraDaEscala({
             case "MONTANDO":
               return <Enviar eventoId={eventoId} situacao={situacao} />;
             case "COM_A_LIDER":
-              return <AprovarOuDevolver eventoId={eventoId} codigo={codigo} aprovar={aprovarEscala} devolver={devolverEscala} />;
+              return situacao.podeAprovar ? (
+                <AprovarOuDevolver eventoId={eventoId} codigo={codigo} aprovar={aprovarEscala} devolver={devolverEscala} />
+              ) : (
+                <SemPermissaoNaAcao permissao="escala.aprovar" />
+              );
             case "APROVADA":
               return (
                 <>
-                  <Reabrir eventoId={eventoId} statusEsperado={situacao.statusEsperado} />
+                  {situacao.podeReabrir ? (
+                    <Reabrir eventoId={eventoId} statusEsperado={situacao.statusEsperado} />
+                  ) : (
+                    <SemPermissaoNaAcao permissao="escala.reabrir" />
+                  )}
                   <BotaoLink href={`/eventos/${eventoId}/comunicacao`} variante="primario">
                     Ir para Comunicação
                   </BotaoLink>

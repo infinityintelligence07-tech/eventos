@@ -42,6 +42,13 @@ export function criarRepositorioRegras(executor: Executor) {
       });
     },
 
+    async registrarRecalculo(
+      tipoEventoId: string,
+      { eventos, alterados, usuarioId }: { eventos: number; alterados: number; usuarioId: string },
+    ): Promise<void> {
+      await registrarAcao(executor, { entidade: "TIPO_EVENTO", entidadeId: tipoEventoId, acao: "VAGAS_DO_TIPO_RECALCULADAS", usuarioId, dados: { eventos, alterados } });
+    },
+
     /** Eventos do tipo que ainda não acabaram, com a escala em montagem. */
     async eventosParaRecalcular(tipoEventoId: string, agora: Date): Promise<string[]> {
       const linhas = await executor

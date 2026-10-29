@@ -15,7 +15,8 @@ vi.mock("@/fluxos/_base", async (importOriginal) => {
     ...real,
     bancoParaLeitura: async () => teste.banco!.db,
     situacaoDaEscrita: async () => ({ liberada: true }),
-    transacao: (trabalho: (tx: Base.Executor) => Promise<unknown>) => teste.banco!.db.transaction(trabalho),
+    // A transação real (limite e "sem registro, desfaz"), no banco de teste.
+    transacao: async (_ator: unknown, trabalho: (tx: never) => Promise<unknown>) => (await import("@/fluxos/_base/banco")).transacaoNoBanco(teste.banco!.db, trabalho as never),
   };
 });
 
@@ -24,8 +25,12 @@ describe.skipIf(!TEST_DATABASE_URL)("Locais e hotéis no banco", () => {
   const banco = () => teste.banco!;
   const formulario = (dados: Record<string, string>) => salvarLocalSchema.parse(dados);
 
+  let usuarioId: string;
+  const ator = () => ({ usuarioId, pessoaId: null, origem: "LOCAL" as const });
+
   beforeAll(async () => {
     teste.banco = await criarBancoDeTeste();
+    usuarioId = ((await teste.banco.sql(`insert into core.usuario (email) values ('time@exemplo.test') returning id`)) as [{ id: string }])[0].id;
   }, 60_000);
 
   afterAll(async () => {
@@ -35,7 +40,7 @@ describe.skipIf(!TEST_DATABASE_URL)("Locais e hotéis no banco", () => {
   it("cadastra um hotel, edita e lista com filtro e busca", async () => {
     const id = await salvarLocal(
       formulario({ nome: "Hotel Central", tipo: "HOTEL", cep: "69005010", logradouro: "Av. Brasil", numero: "100", cidade: "Manaus", uf: "am", capacidade: "120" }),
-      agora,
+      ator(),      agora,
     );
     expect((await banco().sql(`select nome, tipo, cep, uf, lat, capacidade from eventos.local where id = $1`, [id]))[0]).toEqual({
       nome: "Hotel Central",
@@ -46,7 +51,7 @@ describe.skipIf(!TEST_DATABASE_URL)("Locais e hotéis no banco", () => {
       capacidade: 120,
     });
 
-    await salvarLocal(formulario({ localId: id, nome: "Hotel Central", tipo: "HOTEL", cidade: "Manaus", uf: "AM", lat: "-3,119", lng: "-60,02" }), agora);
+    await salvarLocal(formulario({ localId: id, nome: "Hotel Central", tipo: "HOTEL", cidade: "Manaus", uf: "AM", lat: "-3,119", lng: "-60,02" }), ator(), agora);
     const { locais } = await listarLocais({ tipo: "HOTEL", busca: "centr" });
     expect(locais).toEqual([
       expect.objectContaining({ id, lat: -3.119, lng: -60.02, logradouro: null, capacidade: null, uso: { eventos: 0, hospedagens: 0 }, motivoParaNaoArquivar: null }),
@@ -56,23 +61,23 @@ describe.skipIf(!TEST_DATABASE_URL)("Locais e hotéis no banco", () => {
   });
 
   it("recusa outro local do mesmo tipo com o mesmo nome na mesma cidade", async () => {
-    await expect(salvarLocal(formulario({ nome: "hotel central", tipo: "HOTEL", cidade: "MANAUS", uf: "AM" }), agora)).rejects.toEqual(
+    await expect(salvarLocal(formulario({ nome: "hotel central", tipo: "HOTEL", cidade: "MANAUS", uf: "AM" }), ator(), agora)).rejects.toEqual(
       new RegraDeNegocioError('Já existe "hotel central" em MANAUS/AM. Edite o cadastro existente.'),
     );
-    await expect(salvarLocal(formulario({ nome: "Hotel Central", tipo: "APARTAMENTO", cidade: "Manaus", uf: "AM" }), agora)).resolves.toBeTypeOf("string");
+    await expect(salvarLocal(formulario({ nome: "Hotel Central", tipo: "APARTAMENTO", cidade: "Manaus", uf: "AM" }), ator(), agora)).resolves.toBeTypeOf("string");
   });
 
   it("local em uso não é arquivado; sem uso, some da lista", async () => {
-    const emUso = await salvarLocal(formulario({ nome: "Centro de Convenções", tipo: "EVENTO", cidade: "Manaus", uf: "AM" }), agora);
+    const emUso = await salvarLocal(formulario({ nome: "Centro de Convenções", tipo: "EVENTO", cidade: "Manaus", uf: "AM" }), ator(), agora);
     await banco().sql(`insert into eventos.evento (nome, inicio, fim, status, local_id) values ('Evento', now(), now(), 'PLANEJADO', $1)`, [emUso]);
-    await expect(arquivarLocal(emUso, agora)).rejects.toEqual(new RegraDeNegocioError("Este local está em 1 evento."));
+    await expect(arquivarLocal(emUso, ator(), agora)).rejects.toEqual(new RegraDeNegocioError("Este local está em 1 evento."));
     expect((await listarLocais({ busca: "Convenções" })).locais[0]).toMatchObject({ uso: { eventos: 1, hospedagens: 0 }, motivoParaNaoArquivar: "Este local está em 1 evento." });
 
-    const livre = await salvarLocal(formulario({ nome: "Apartamento IAM", tipo: "APARTAMENTO", cidade: "Belém", uf: "PA" }), agora);
-    await arquivarLocal(livre, agora);
+    const livre = await salvarLocal(formulario({ nome: "Apartamento IAM", tipo: "APARTAMENTO", cidade: "Belém", uf: "PA" }), ator(), agora);
+    await arquivarLocal(livre, ator(), agora);
     expect((await listarLocais({ busca: "Apartamento IAM" })).locais).toEqual([]);
-    await expect(arquivarLocal(livre, agora)).rejects.toEqual(new RegraDeNegocioError("Este local não existe mais. Recarregue a página."));
-    await expect(salvarLocal(formulario({ localId: livre, nome: "Apartamento IAM", tipo: "APARTAMENTO", cidade: "Belém", uf: "PA" }), agora)).rejects.toEqual(
+    await expect(arquivarLocal(livre, ator(), agora)).rejects.toEqual(new RegraDeNegocioError("Este local não existe mais. Recarregue a página."));
+    await expect(salvarLocal(formulario({ localId: livre, nome: "Apartamento IAM", tipo: "APARTAMENTO", cidade: "Belém", uf: "PA" }), ator(), agora)).rejects.toEqual(
       new RegraDeNegocioError("Este local não existe mais. Recarregue a página."),
     );
   });

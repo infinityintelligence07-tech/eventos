@@ -51,7 +51,8 @@ export async function registrarRespostaDoStaff(
     acao: "RESPOSTA_REGISTRADA",
     statusDe: convocacao.status,
     statusPara: transicao.para,
-    comentario: motivoRecusa,
+    // O motivo fica só na convocação (dado pessoal fora do histórico imutável, docs/09 §7.1).
+    dados: { temMotivoRecusa: motivoRecusa !== null },
     emNomeDePessoaId: convocacao.pessoaId,
     usuarioId: entrada.usuarioId,
   });

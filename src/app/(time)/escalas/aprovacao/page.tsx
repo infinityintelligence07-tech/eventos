@@ -6,6 +6,8 @@ import { situacaoDaEscrita } from "@/fluxos/_base";
 import { carregarFilaDeAprovacao } from "@/fluxos/escalas";
 
 import { FaixaSomenteLeitura } from "../../_componentes/ui/aviso";
+import { FaixaSemPermissao } from "../../_componentes/ui/permissao";
+import { exigirAtor, permissoesDoAtor } from "../../_servidor/usuario-atual";
 import { BotaoLink } from "../../_componentes/ui/botao-link";
 import { CabecalhoDaPagina, Migalha } from "../../_componentes/ui/cabecalho";
 import { Cartao } from "../../_componentes/ui/cartao";
@@ -18,7 +20,9 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Aprovação de escalas" };
 
 export default async function PaginaAprovacao() {
-  const [fila, escrita] = await Promise.all([carregarFilaDeAprovacao(), situacaoDaEscrita()]);
+  await exigirAtor();
+  const [fila, escrita, permissoes] = await Promise.all([carregarFilaDeAprovacao(), situacaoDaEscrita(), permissoesDoAtor("escala.aprovar")]);
+  const podeAprovar = permissoes["escala.aprovar"];
 
   return (
     <>
@@ -27,7 +31,7 @@ export default async function PaginaAprovacao() {
         titulo="Aprovação de escalas"
         subtitulo="Escalas enviadas para a líder aprovar. Aprovar só registra; nada é enviado às pessoas."
       />
-      {!escrita.liberada && <FaixaSomenteLeitura />}
+      {!escrita.liberada ? <FaixaSomenteLeitura /> : !podeAprovar && <FaixaSemPermissao permissao="escala.aprovar" />}
 
       {fila.length === 0 ? (
         <Cartao espacamento="nenhum">
@@ -70,7 +74,7 @@ export default async function PaginaAprovacao() {
                     <BotaoLink href={`/eventos/${escala.id}/escala`} aria-label={`Ver escala ${codigo}`}>
                       Ver escala
                     </BotaoLink>
-                    {escrita.liberada && <AprovarOuDevolver eventoId={escala.id} codigo={codigo} aprovar={aprovarEscala} devolver={devolverEscala} />}
+                    {escrita.liberada && podeAprovar && <AprovarOuDevolver eventoId={escala.id} codigo={codigo} aprovar={aprovarEscala} devolver={devolverEscala} />}
                   </div>
                 </div>
                 <div className="mt-3">

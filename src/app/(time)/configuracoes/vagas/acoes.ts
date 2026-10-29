@@ -8,16 +8,16 @@ import { recalcularVagasDoTipoSchema, salvarRegraDeVagasSchema } from "@/modules
 import { executarAcao, type ResultadoAcao } from "../../_servidor/acao";
 
 export async function salvarRegraDeVagas(_estado: ResultadoAcao, form: FormData): Promise<ResultadoAcao> {
-  return executarAcao(form, salvarRegraDeVagasSchema, async (dados, usuario) => {
-    const { nome } = await salvarNoFluxo(dados, { usuarioId: usuario.id, agora: new Date() });
+  return executarAcao(form, salvarRegraDeVagasSchema, "config.regras_vagas", async (dados, ator) => {
+    const { nome } = await salvarNoFluxo(dados, { ator, agora: new Date() });
     revalidatePath("/configuracoes/vagas");
     return `Regra de vagas de ${nome} salva. Use "Recalcular vagas" para aplicar aos eventos em montagem.`;
   });
 }
 
 export async function recalcularVagasDoTipo(_estado: ResultadoAcao, form: FormData): Promise<ResultadoAcao> {
-  return executarAcao(form, recalcularVagasDoTipoSchema, async (dados) => {
-    const { eventos, alterados } = await recalcularNoFluxo(dados, { agora: new Date() });
+  return executarAcao(form, recalcularVagasDoTipoSchema, "config.regras_vagas", async (dados, ator) => {
+    const { eventos, alterados } = await recalcularNoFluxo(dados, { ator, agora: new Date() });
     revalidatePath("/configuracoes/vagas");
     revalidatePath("/escalas");
     revalidatePath("/calendario");

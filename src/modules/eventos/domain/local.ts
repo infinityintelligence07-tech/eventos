@@ -90,3 +90,16 @@ export const salvarLocalSchema = z
 export type SalvarLocal = z.output<typeof salvarLocalSchema>;
 
 export const arquivarLocalSchema = z.object({ localId: z.uuid() });
+
+/** Campos que mudaram, com de/para (para o registro_acao do local: endereço de local não é dado pessoal). */
+export function mudancasDoLocal(
+  antes: Record<string, unknown> | null,
+  depois: Record<string, unknown>,
+): Record<string, { de: unknown; para: unknown }> {
+  const iguais = (a: unknown, b: unknown) => (a ?? null) === (b ?? null);
+  return Object.fromEntries(
+    Object.entries(depois)
+      .filter(([campo, valor]) => !iguais(antes?.[campo], valor))
+      .map(([campo, valor]) => [campo, { de: antes?.[campo] ?? null, para: valor ?? null }]),
+  );
+}

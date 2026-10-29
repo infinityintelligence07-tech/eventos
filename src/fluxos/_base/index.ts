@@ -1,17 +1,27 @@
 export type { Db, Executor } from "@/core/db/database";
-export { type EntidadeRegistrada, type EntradaDoRegistro, registrarAcao } from "@/core/db/registro-acao";
-export { type LeituraDoServidor, type SituacaoDaEscrita, type TravaDeEscrita, USUARIO_TESTE } from "@/core/ambiente";
+export { type AutoriaDoRegistro, type EntidadeRegistrada, type EntradaDoRegistro, registrarAcao } from "@/core/db/registro-acao";
+export {
+  type LeituraDoServidor,
+  type ModoDeEscrita,
+  type SituacaoDaEscrita,
+  type TravaDeEscrita,
+  USUARIO_TESTE,
+} from "@/core/ambiente";
+export { AcessoNegadoError, type AtorDaEscrita } from "@/core/autorizacao";
 export {
   bancoParaEscrita,
   bancoParaLeitura,
   criarGuardaDeEscrita,
   type DependenciasDaGuarda,
   type GuardaDeEscrita,
+  lerEmTransacao,
   marcadorDoBanco,
   situacaoDaEscrita,
   transacao,
+  transacaoNoBanco,
 } from "./banco";
 export {
+  AcaoSemRegistroError,
   ConflitoDeVersaoError,
   EscritaDesligadaError,
   MENSAGEM_CONFLITO,

@@ -29,7 +29,7 @@ export async function executarSincronizacaoCom(filtros: { aPartirDe?: string; at
     {
       iamControl: iamControlDoAmbiente(),
       eventos: criarRepositorioSincronizacao(db),
-      vagas: criarRepositorioVagas(db),
+      vagas: criarRepositorioVagas(db, { origem: "SISTEMA" }),
       agora: new Date(),
     },
     filtros,

@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 
+import { permissoesDoAtor } from "@/app/(time)/_servidor/usuario-atual";
 import { situacaoDaEscrita } from "@/fluxos/_base";
 import { listarRegrasDeCusto, type RegraNaTela } from "@/fluxos/custos";
 import { descricaoDosParametros, type RegraDeCusto, rotuloDaCategoriaDaRegra, rotuloDaUnidade } from "@/modules/custos";
 import { FormularioDeAcao } from "@/app/(time)/_componentes/ui";
 
 import { FaixaSomenteLeitura } from "../../_componentes/ui/aviso";
+import { FaixaSemPermissao } from "../../_componentes/ui/permissao";
 import { BotaoDeEnvio } from "../../_componentes/ui/botao";
 import { Cartao } from "../../_componentes/ui/cartao";
 import { TITULO_DE_CARTAO } from "../../_componentes/ui/classes";
@@ -16,6 +18,7 @@ import { CabecaDaTabela, CelulaDaTabela, ColunaDaTabela, LinhaDaTabela, Tabela }
 import { paraCampoDeDinheiro } from "../../logistica/_componentes/situacoes";
 import { criarVigenciaDeRegraAcao, desativarRegraAcao } from "./acoes";
 import { type CamposDaRegra, EditarRegra } from "./_componentes/editar-regra";
+import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Regras de custo" };
@@ -103,12 +106,14 @@ function LinhaDaRegra({ regra, escrita, hoje }: { regra: RegraNaTela; escrita: b
 }
 
 export default async function PaginaRegrasDeCusto() {
+  await exigirAtor();
   const agora = new Date();
   const hoje = hojeEmSaoPaulo(agora);
-  const [categorias, escrita] = await Promise.all([listarRegrasDeCusto(agora), situacaoDaEscrita()]);
+  const [categorias, escrita, permissoes] = await Promise.all([listarRegrasDeCusto(agora), situacaoDaEscrita(), permissoesDoAtor("config.regras_custo")]);
+  const edita = escrita.liberada && permissoes["config.regras_custo"];
   return (
     <div className="flex flex-col gap-5">
-      {!escrita.liberada && <FaixaSomenteLeitura className="" />}
+      {!escrita.liberada ? <FaixaSomenteLeitura className="" /> : !edita && <FaixaSemPermissao permissao="config.regras_custo" className="" />}
       {categorias.map(({ categoria, regras }) => (
         <section key={categoria} aria-labelledby={`regras-${categoria}`}>
           <h3 id={`regras-${categoria}`} className={`${TITULO_DE_CARTAO} mb-2`}>
@@ -138,7 +143,7 @@ export default async function PaginaRegrasDeCusto() {
               </CabecaDaTabela>
               <tbody>
                 {regras.map((regra) => (
-                  <LinhaDaRegra key={regra.atual.id} regra={regra} escrita={escrita.liberada} hoje={hoje} />
+                  <LinhaDaRegra key={regra.atual.id} regra={regra} escrita={edita} hoje={hoje} />
                 ))}
               </tbody>
             </Tabela>

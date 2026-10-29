@@ -6,6 +6,7 @@ import { carregarNovaEnquete } from "@/fluxos/disponibilidade";
 import { periodoCurto } from "@/modules/disponibilidade";
 
 import { type EventoParaEscolher, FormularioDaEnquete } from "./_componentes/formulario-da-enquete";
+import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Nova enquete" };
@@ -15,6 +16,7 @@ type Parametros = { de?: string; ate?: string; polo?: string; tipo?: string };
 const ROTULO = "mb-1 block text-[13px] font-medium text-[var(--ds-label)]";
 
 export default async function PaginaNovaEnquete({ searchParams }: { searchParams: Promise<Parametros> }) {
+  await exigirAtor();
   const parametros = await searchParams;
   const [nova, escrita] = await Promise.all([carregarNovaEnquete(parametros, new Date()), situacaoDaEscrita()]);
   const polos = new Map(nova.opcoes.polos.map((polo) => [polo.codigo, polo.nome]));

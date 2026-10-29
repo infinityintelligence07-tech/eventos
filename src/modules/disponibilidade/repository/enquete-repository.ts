@@ -96,5 +96,19 @@ export function criarRepositorioEnquete(executor: Executor): RepositorioEnquete 
         dados: { foraDoPrazo },
       });
     },
+
+    async registrarSemMudanca({ enqueteId, pessoaId, usuarioId }) {
+      await registrarAcao(executor, {
+        entidade: "DISPONIBILIDADE",
+        entidadeId: enqueteId,
+        acao: "RESPOSTAS_SEM_MUDANCA",
+        emNomeDePessoaId: pessoaId,
+        usuarioId,
+      });
+    },
+
+    async registrarEnquete({ enqueteId, acao, usuarioId, dados }) {
+      await registrarAcao(executor, { entidade: "ENQUETE", entidadeId: enqueteId, acao, usuarioId, dados });
+    },
   };
 }

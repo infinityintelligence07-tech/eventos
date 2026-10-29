@@ -15,6 +15,7 @@ import { dataEHora, periodo } from "../../_componentes/ui/formatos";
 import { CabecaDaTabela, CelulaDaTabela, ColunaDaTabela, LinhaDaTabela, Tabela } from "../../_componentes/ui/tabela";
 import { PublicoEFila } from "./_componentes/resumo-publico-e-fila";
 import { salvarDadosDoEvento } from "./acoes";
+import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 export const dynamic = "force-dynamic";
 
@@ -83,6 +84,7 @@ function Dado({ rotulo, children }: { rotulo: string; children: ReactNode }) {
 }
 
 export default async function PaginaResumoDoEvento({ params }: { params: Promise<{ eventoId: string }> }) {
+  await exigirAtor();
   const { eventoId } = await params;
   const [resumo, escrita] = await Promise.all([carregarResumoDoEvento(eventoId), situacaoDaEscrita()]);
   if (!resumo) notFound();

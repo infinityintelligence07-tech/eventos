@@ -14,7 +14,8 @@ vi.mock("@/fluxos/_base", async (original) => {
   const base = await original<typeof import("@/fluxos/_base")>();
   return {
     ...base,
-    transacao: <T>(trabalho: Parameters<typeof base.transacao<T>>[0]) => estado.banco!.db.transaction(trabalho),
+    // A transação real (limite e "sem registro, desfaz"), no banco de teste.
+    transacao: async (_ator: unknown, trabalho: (tx: never) => Promise<unknown>) => (await import("@/fluxos/_base/banco")).transacaoNoBanco(estado.banco!.db, trabalho as never),
     bancoParaLeitura: async () => estado.banco!.db,
   };
 });
@@ -26,7 +27,7 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da escala no banco", () => {
   let tipoConfronto: string;
   const pessoas: Record<string, string> = {};
   const agora = new Date("2026-10-28T15:00:00Z");
-  const quem = () => ({ usuarioId, agora });
+  const quem = () => ({ ator: { usuarioId, pessoaId: null, origem: "LOCAL" as const }, agora });
 
   const um = async (texto: string, params: unknown[] = []) => ((await banco.sql(texto, params)) as Record<string, unknown>[])[0]!;
   const linhaDa = async (codigo: string) =>
@@ -105,11 +106,11 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da escala no banco", () => {
     expect(resumo.usaFila).toBe(true);
     expect(resumo.vagas.pendencias.map((pendencia) => pendencia.motivo)).toEqual(["FALTA_FILA", "DIGITAR"]);
 
-    await expect(salvarDadosDoEvento({ eventoId, expectativaPublico: 180, pessoasNaFila: 90, atualizadoEm: resumo.evento.atualizadoEm }, quem())).resolves.toEqual({
+    await expect(salvarDadosDoEvento({ eventoId, expectativaPublico: 180, pessoasNaFila: 90, atualizadoEm: resumo.evento.atualizadoEm }, quem().ator, agora)).resolves.toEqual({
       vagas: "GERADA",
     });
     await expect(
-      salvarDadosDoEvento({ eventoId, expectativaPublico: 200, pessoasNaFila: 90, atualizadoEm: resumo.evento.atualizadoEm }, quem()),
+      salvarDadosDoEvento({ eventoId, expectativaPublico: 200, pessoasNaFila: 90, atualizadoEm: resumo.evento.atualizadoEm }, quem().ator, agora),
     ).rejects.toBeInstanceOf(ConflitoDeVersaoError);
 
     expect((await statusDaEscala()).status_escala).toBe("RASCUNHO");
@@ -232,8 +233,19 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da escala no banco", () => {
       respondida: true,
     });
     expect(
-      await um(`select acao, status_de, status_para, em_nome_de_pessoa_id from eventos.registro_acao where entidade = 'CONVOCACAO' and entidade_id = $1`, [ana]),
-    ).toEqual({ acao: "RESPOSTA_REGISTRADA", status_de: "CONVIDADA", status_para: "RECUSADA", em_nome_de_pessoa_id: pessoas["Ana Perto"] });
+      await um(
+        `select acao, status_de, status_para, em_nome_de_pessoa_id, comentario, dados from eventos.registro_acao where entidade = 'CONVOCACAO' and entidade_id = $1 and acao = 'RESPOSTA_REGISTRADA'`,
+        [ana],
+      ),
+    ).toEqual({
+      acao: "RESPOSTA_REGISTRADA",
+      status_de: "CONVIDADA",
+      status_para: "RECUSADA",
+      em_nome_de_pessoa_id: pessoas["Ana Perto"],
+      // O motivo ("Viagem") fica só na convocação.
+      comentario: null,
+      dados: { temMotivoRecusa: true },
+    });
 
     await expect(escalas.porNaVaga({ eventoId, escalaId: (await linhaDa("STAFF")).id, pessoaId: pessoas["Caio Sem Funcao"]! }, quem())).rejects.toThrow(
       /Reabra a escala/,

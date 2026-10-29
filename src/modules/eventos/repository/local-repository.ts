@@ -1,6 +1,7 @@
 import { and, asc, eq, isNull, ne, or, sql } from "drizzle-orm";
 
 import type { Executor } from "@/core/db/database";
+import { registrarAcao } from "@/core/db/registro-acao";
 import { evento, hospedagem, local } from "@/core/db/schema/eventos";
 
 import type { SalvarLocal, TipoDeLocal, UsoDoLocal } from "../domain/local";
@@ -122,6 +123,14 @@ export function criarRepositorioLocal(executor: Executor) {
 
     async arquivar(localId: string, instante: Date): Promise<void> {
       await executor.update(local).set({ deletedAt: instante, atualizadoEm: instante }).where(eq(local.id, localId));
+    },
+
+    /** Endereço de local de evento ou hotel não é dado pessoal: as mudanças vão com os valores. */
+    async registrar(
+      localId: string,
+      { acao, usuarioId, dados }: { acao: "LOCAL_CRIADO" | "LOCAL_ALTERADO" | "LOCAL_ARQUIVADO"; usuarioId: string; dados: Record<string, unknown> },
+    ): Promise<void> {
+      await registrarAcao(executor, { entidade: "LOCAL", entidadeId: localId, acao, usuarioId, dados });
     },
   };
 }

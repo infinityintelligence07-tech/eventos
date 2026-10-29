@@ -1,3 +1,4 @@
+import { AcessoNegadoError } from "@/core/autorizacao";
 import { logger, serializarErro } from "@/core/logging";
 
 export const MENSAGEM_ESCRITA_DESLIGADA = "Escrita desligada neste ambiente. As telas estão em modo somente leitura.";
@@ -29,6 +30,17 @@ export class RegraDeNegocioError extends Error {
   }
 }
 
+/**
+ * Erro de programação: a transação de escrita terminou sem nenhum registrarAcao (docs/09 §7.2). A transação é desfeita
+ * e a pessoa vê a mensagem genérica; o log mostra qual fluxo esqueceu o registro.
+ */
+export class AcaoSemRegistroError extends Error {
+  constructor() {
+    super("a transação de escrita terminou sem registro_acao");
+    this.name = "AcaoSemRegistroError";
+  }
+}
+
 function codigoDoPostgres(erro: unknown): string | null {
   for (let atual: unknown = erro; atual instanceof Error; atual = atual.cause) {
     const codigo = (atual as { code?: unknown }).code;
@@ -45,8 +57,11 @@ export function mensagemDoErro(erro: unknown): string {
   if (erro instanceof RegraDeNegocioError) return erro.mensagem;
   if (erro instanceof EscritaDesligadaError) return MENSAGEM_ESCRITA_DESLIGADA;
   if (erro instanceof ConflitoDeVersaoError) return MENSAGEM_CONFLITO;
+  if (erro instanceof AcessoNegadoError) return erro.message;
 
   const codigo = codigoDoPostgres(erro);
+  // 25006: tentativa de escrita numa conexão somente leitura (a leitura fora do modo local).
+  if (codigo === "25006") return MENSAGEM_ESCRITA_DESLIGADA;
   if (codigo === "40001" || codigo === "40P01") return MENSAGEM_CONFLITO;
   logger.error({ err: serializarErro(erro), codigo }, "falha numa ação do time");
   return codigo?.startsWith("23") ? MENSAGEM_DADOS_RECUSADOS : MENSAGEM_FALHA;

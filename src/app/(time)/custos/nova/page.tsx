@@ -15,6 +15,7 @@ import { dataCurta } from "../../_componentes/ui/formatos";
 import { paraCampoDeDinheiro, parametro } from "../../logistica/_componentes/situacoes";
 import { calcularPreviaAcao, corrigirSolicitacaoAcao, registrarSolicitacaoAcao } from "../acoes";
 import { FormularioDeSolicitacao, type LinhaDeDeslocamento } from "../_componentes/formulario-de-solicitacao";
+import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Registrar solicitação" };
@@ -22,6 +23,7 @@ export const metadata: Metadata = { title: "Registrar solicitação" };
 const decimal = (valor: number | null) => (valor === null ? "" : valor.toLocaleString("pt-BR", { maximumFractionDigits: 2 }));
 
 export default async function PaginaNovaSolicitacao({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  await exigirAtor();
   const busca = await searchParams;
   const protocolo = parametro(busca.protocolo);
   const filtro = {

@@ -1,4 +1,4 @@
-import { bancoParaLeitura, transacao } from "@/fluxos/_base";
+import { bancoParaLeitura, transacao, type AtorDaEscrita } from "@/fluxos/_base";
 import {
   agruparVigencias,
   CATEGORIAS_DA_REGRA,
@@ -47,12 +47,12 @@ export async function listarRegrasDeCusto(agora: Date): Promise<RegrasPorCategor
   }));
 }
 
-export function criarVigenciaDeRegra(entrada: CriarVigenciaDeRegra, usuarioId: string, agora: Date) {
+export function criarVigenciaDeRegra(entrada: CriarVigenciaDeRegra, ator: AtorDaEscrita, agora: Date) {
   return traduzirErros(() =>
-    transacao((tx) => servicoDeRegras.criarVigenciaDeRegra(criarRepositorioRegras(tx), entrada, { usuarioId, instante: agora })),
+    transacao(ator, (tx) => servicoDeRegras.criarVigenciaDeRegra(criarRepositorioRegras(tx), entrada, { usuarioId: ator.usuarioId, instante: agora })),
   );
 }
 
-export function desativarRegra(regraId: string, usuarioId: string, agora: Date) {
-  return traduzirErros(() => transacao((tx) => servicoDeRegras.desativarRegra(criarRepositorioRegras(tx), regraId, { usuarioId, instante: agora })));
+export function desativarRegra(regraId: string, ator: AtorDaEscrita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDeRegras.desativarRegra(criarRepositorioRegras(tx), regraId, { usuarioId: ator.usuarioId, instante: agora })));
 }

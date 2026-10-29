@@ -18,6 +18,7 @@ import { CartaoDeNumero, CartaoDePendencia, type ExemploDePendencia } from "../_
 import { ChipDaEscala } from "../_componentes/ui/situacao";
 import { CartaoDoEvento, diaEMes, rotuloCurto } from "./_componentes/cartao-do-evento";
 import { Filtros } from "./_componentes/filtros";
+import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Calendário" };
@@ -110,6 +111,7 @@ function exemplosDaPendencia(eventos: EventoNoCalendario[]): ExemploDePendencia[
 }
 
 export default async function PaginaCalendario({ searchParams }: { searchParams: Promise<Parametros> }) {
+  await exigirAtor();
   const parametros = await searchParams;
   const calendario = await carregarCalendario(await repositorioCalendario(), {
     ...parametros,

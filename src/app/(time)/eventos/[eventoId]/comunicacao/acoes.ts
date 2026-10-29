@@ -7,8 +7,8 @@ import { registrarEnvioDaCopy } from "@/fluxos/comunicacao";
 import { marcarCopyComoEnviadaSchema } from "@/modules/comunicacao";
 
 export async function marcarCopyComoEnviada(_estado: ResultadoAcao, form: FormData): Promise<ResultadoAcao> {
-  return executarAcao(form, marcarCopyComoEnviadaSchema, async (dados, usuario) => {
-    const envio = await registrarEnvioDaCopy(dados, usuario.id, new Date());
+  return executarAcao(form, marcarCopyComoEnviadaSchema, "comunicacao.enviar", async (dados, ator) => {
+    const envio = await registrarEnvioDaCopy(dados, ator, new Date());
     // O layout do evento mostra a situação da escala, que muda para "comunicada" com a última copy.
     revalidatePath(`/eventos/${envio.eventoId}`, "layout");
     revalidatePath("/comunicacao");

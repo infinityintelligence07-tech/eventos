@@ -1,8 +1,9 @@
-import { bancoParaLeitura, RegraDeNegocioError, situacaoDaEscrita, transacao } from "@/fluxos/_base";
+import { type AtorDaEscrita, bancoParaLeitura, RegraDeNegocioError, situacaoDaEscrita, transacao } from "@/fluxos/_base";
 import {
   criarRepositorioLocal,
   type LocalCadastrado,
   motivoParaNaoArquivar,
+  mudancasDoLocal,
   type SalvarLocal,
   type TipoDeLocal,
 } from "@/modules/eventos";
@@ -25,26 +26,33 @@ export async function listarLocais(filtros: { tipo?: TipoDeLocal; busca?: string
 }
 
 /** Cria ou altera. Recusa outro local do mesmo tipo com o mesmo nome na mesma cidade. */
-export async function salvarLocal({ localId, ...dados }: SalvarLocal, agora: Date): Promise<string> {
-  return transacao(async (tx) => {
+export async function salvarLocal({ localId, ...dados }: SalvarLocal, ator: AtorDaEscrita, agora: Date): Promise<string> {
+  return transacao(ator, async (tx) => {
     const repo = criarRepositorioLocal(tx);
     if (await repo.existeComMesmoNome(dados, localId)) {
       throw new RegraDeNegocioError(`Já existe "${dados.nome}" em ${dados.cidade}/${dados.uf}. Edite o cadastro existente.`);
     }
-    if (!localId) return repo.criar(dados, agora);
-    if (!(await repo.alterar(localId, dados, agora))) throw new RegraDeNegocioError(LOCAL_SUMIU);
+    if (!localId) {
+      const criado = await repo.criar(dados, agora);
+      await repo.registrar(criado, { acao: "LOCAL_CRIADO", usuarioId: ator.usuarioId, dados: { mudancas: mudancasDoLocal(null, dados) } });
+      return criado;
+    }
+    const antes = await repo.local(localId);
+    if (!antes || !(await repo.alterar(localId, dados, agora))) throw new RegraDeNegocioError(LOCAL_SUMIU);
+    await repo.registrar(localId, { acao: "LOCAL_ALTERADO", usuarioId: ator.usuarioId, dados: { mudancas: mudancasDoLocal(antes, dados) } });
     return localId;
   });
 }
 
 /** Tira o local das listas (deleted_at). Local usado por evento ou hospedagem não sai. */
-export async function arquivarLocal(localId: string, agora: Date): Promise<void> {
-  await transacao(async (tx) => {
+export async function arquivarLocal(localId: string, ator: AtorDaEscrita, agora: Date): Promise<void> {
+  await transacao(ator, async (tx) => {
     const repo = criarRepositorioLocal(tx);
     const uso = await repo.travarUso(localId);
     if (!uso) throw new RegraDeNegocioError(LOCAL_SUMIU);
     const motivo = motivoParaNaoArquivar(uso);
     if (motivo) throw new RegraDeNegocioError(motivo);
     await repo.arquivar(localId, agora);
+    await repo.registrar(localId, { acao: "LOCAL_ARQUIVADO", usuarioId: ator.usuarioId, dados: {} });
   });
 }

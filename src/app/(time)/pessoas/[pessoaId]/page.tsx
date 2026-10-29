@@ -20,10 +20,12 @@ import {
 
 import { ChipDoCadastro } from "../_componentes/chip-do-cadastro";
 import { FormularioDeFuncoes, FormularioDeLocalizacao, FormularioDePerfil, FormularioDeVeiculo } from "./_componentes/formularios";
+import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: { params: Promise<{ pessoaId: string }> }): Promise<Metadata> {
+  await exigirAtor();
   const pessoa = await carregarPessoa((await params).pessoaId, new Date());
   return { title: pessoa ? `${pessoa.nome} · Pessoas` : "Pessoa não encontrada" };
 }
@@ -67,6 +69,7 @@ function DadoSomenteLeitura({ rotulo, children }: { rotulo: string; children: Re
 }
 
 export default async function PaginaPessoa({ params }: { params: Promise<{ pessoaId: string }> }) {
+  await exigirAtor();
   const { pessoaId } = await params;
   const [pessoa, escrita] = await Promise.all([carregarPessoa(pessoaId, new Date()), situacaoDaEscrita()]);
   if (!pessoa) notFound();

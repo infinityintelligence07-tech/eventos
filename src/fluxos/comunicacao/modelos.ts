@@ -1,4 +1,4 @@
-import { bancoParaLeitura, RegraDeNegocioError, situacaoDaEscrita, transacao } from "@/fluxos/_base";
+import { bancoParaLeitura, RegraDeNegocioError, situacaoDaEscrita, transacao, type AtorDaEscrita } from "@/fluxos/_base";
 import {
   CHAVE_LINK_CUSTOS,
   criarRepositorioComunicacao,
@@ -91,9 +91,9 @@ export type ModeloSalvo = { id: string; ativo: boolean };
  * Cria (inativo) ou altera. Com `ativar`, passa a ser o modelo do tipo na Comunicação e o anterior é desativado,
  * na mesma transação. Copys já enviadas não mudam (o hash é dos dados, não do texto).
  */
-export async function salvarModelo({ modeloId, ativar, ...texto }: SalvarModelo, usuarioId: string, agora: Date): Promise<ModeloSalvo> {
-  const registro = { usuarioId, instante: agora };
-  return transacao(async (tx) => {
+export async function salvarModelo({ modeloId, ativar, ...texto }: SalvarModelo, ator: AtorDaEscrita, agora: Date): Promise<ModeloSalvo> {
+  const registro = { usuarioId: ator.usuarioId, instante: agora };
+  return transacao(ator, async (tx) => {
     const repo = criarRepositorioComunicacao(tx);
     let id: string;
     let ativo = false;
@@ -118,9 +118,13 @@ export async function salvarModelo({ modeloId, ativar, ...texto }: SalvarModelo,
 }
 
 /** Ativar desativa o outro ativo do mesmo tipo (um ativo por tipo). */
-export async function definirModeloAtivo(modeloId: string, ativo: boolean, usuarioId: string, agora: Date): Promise<void> {
-  const registro = { usuarioId, instante: agora };
-  await transacao(async (tx) => {
+export async function definirModeloAtivo(modeloId: string, ativo: boolean, ator: AtorDaEscrita, agora: Date): Promise<void> {
+  const registro = { usuarioId: ator.usuarioId, instante: agora };
+  // Já no estado pedido: não há o que gravar nem registrar (toda transação de escrita precisa de um registro).
+  const atual = await criarRepositorioComunicacao(await bancoParaLeitura()).modelo(modeloId);
+  if (!atual) throw new RegraDeNegocioError(MODELO_SUMIU);
+  if (atual.ativo === ativo) return;
+  await transacao(ator, async (tx) => {
     const repo = criarRepositorioComunicacao(tx);
     const existe = ativo ? (await repo.ativarModelo(modeloId, registro)) !== null : await repo.desativarModelo(modeloId, registro);
     if (!existe) throw new RegraDeNegocioError(MODELO_SUMIU);
@@ -128,6 +132,6 @@ export async function definirModeloAtivo(modeloId: string, ativo: boolean, usuar
 }
 
 /** Vazio apaga: a copy que usa {{link_custos}} fica bloqueada até alguém preencher (docs/07 §11.1). */
-export async function salvarLinkDeCustos(linkCustos: string | null, usuarioId: string, agora: Date): Promise<void> {
-  await transacao((tx) => criarRepositorioComunicacao(tx).salvarConfiguracao(CHAVE_LINK_CUSTOS, linkCustos, { usuarioId, instante: agora }));
+export async function salvarLinkDeCustos(linkCustos: string | null, ator: AtorDaEscrita, agora: Date): Promise<void> {
+  await transacao(ator, (tx) => criarRepositorioComunicacao(tx).salvarConfiguracao(CHAVE_LINK_CUSTOS, linkCustos, { usuarioId: ator.usuarioId, instante: agora }));
 }

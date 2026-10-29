@@ -7,6 +7,7 @@ import {
   Database,
   House,
   Lock,
+  LogOut,
   type LucideIcon,
   Menu,
   MessageCircle,
@@ -23,7 +24,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 
-import { type ItemDoMenu, itemAtivoDoMenu, ROTAS_DO_MENU } from "./menu";
+import { sair } from "../_servidor/sessao";
+import { type ItemDoMenu, itemAtivoDoMenu, ROTAS_DO_MENU, rotasDoMenu } from "./menu";
 import { ProvedorDeToast } from "./ui/toast";
 
 const ICONES: Record<ItemDoMenu, LucideIcon> = {
@@ -38,10 +40,17 @@ const ICONES: Record<ItemDoMenu, LucideIcon> = {
   Configurações: Settings,
 };
 
-/** Calculado no servidor pelo layout (as três travas da guarda de escrita). */
-export type AmbienteDoPainel = { escritaLiberada: boolean; usuario: string | null };
+export type UsuarioDoPainel = {
+  nome: string;
+  email: string;
+  origem: "SESSAO" | "LOCAL";
+  perfis: ("EVENTOS_TIME" | "EVENTOS_LIDER")[];
+};
 
-function BarraLateral({ aberta, aoFechar }: { aberta: boolean; aoFechar: () => void }) {
+/** Calculado no servidor pelo layout (guarda de escrita e ator da requisição). */
+export type AmbienteDoPainel = { escritaLiberada: boolean; usuario: UsuarioDoPainel | null };
+
+function BarraLateral({ aberta, aoFechar, rotas }: { aberta: boolean; aoFechar: () => void; rotas: typeof ROTAS_DO_MENU }) {
   const ativoNoMenu = itemAtivoDoMenu(usePathname());
   return (
     <aside
@@ -61,7 +70,7 @@ function BarraLateral({ aberta, aoFechar }: { aberta: boolean; aoFechar: () => v
       <nav className="mt-6 flex-1 overflow-y-auto" aria-label="Menu principal">
         <h2 className="mb-3 text-[12px] font-medium tracking-[0.012em] text-white/55">Time de eventos</h2>
         <ul className="flex flex-col gap-1">
-          {ROTAS_DO_MENU.map((item) => {
+          {rotas.map((item) => {
             const Icone = ICONES[item.nome];
             const ativo = item.nome === ativoNoMenu;
             return (
@@ -111,11 +120,12 @@ function AlternarTema() {
 }
 
 function SeloDoAmbiente({ ambiente }: { ambiente: AmbienteDoPainel }) {
+  const local = ambiente.usuario?.origem === "LOCAL";
   if (ambiente.escritaLiberada) {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--ds-green-soft)] px-3 py-1 text-[12px] font-medium text-[var(--ds-green-deep)]">
         <Database size={14} aria-hidden />
-        Banco local{ambiente.usuario ? ` · ${ambiente.usuario}` : ""}
+        {local ? "Versão local" : "Escrita liberada"}
       </span>
     );
   }
@@ -125,8 +135,46 @@ function SeloDoAmbiente({ ambiente }: { ambiente: AmbienteDoPainel }) {
       title="Escrita desligada neste ambiente: dá para consultar, mas nada é gravado."
     >
       <Lock size={14} aria-hidden />
-      Somente leitura · sem login
+      Somente leitura
     </span>
+  );
+}
+
+function rotuloDosPerfis(perfis: UsuarioDoPainel["perfis"]): string {
+  return perfis.includes("EVENTOS_LIDER") ? "Líder do time" : "Time de eventos";
+}
+
+/** Nome, perfil, "trocar" (só no modo local) e "Sair" (docs/09 §3.3). */
+function UsuarioNoCabecalho({ usuario }: { usuario: UsuarioDoPainel }) {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="hidden min-w-0 text-right sm:block">
+        <p className="truncate text-[13px] font-semibold text-[var(--ds-label)]" title={usuario.email}>
+          {usuario.nome}
+        </p>
+        <p className="text-[12px] text-[var(--ds-label-2)]">
+          {rotuloDosPerfis(usuario.perfis)}
+          {usuario.origem === "LOCAL" && (
+            <>
+              {" · "}
+              <Link href="/entrar-local" className="font-medium text-[var(--ds-tint-text)] hover:underline">
+                trocar
+              </Link>
+            </>
+          )}
+        </p>
+      </div>
+      <form action={sair}>
+        <button
+          type="submit"
+          className="inline-flex h-10 items-center gap-1.5 rounded-[10px] border border-[var(--ds-separator)] bg-[var(--ds-surface)] px-3 text-[14px] font-medium text-[var(--ds-label)] hover:bg-[var(--ds-surface-2)]"
+          aria-label={`Sair (${usuario.nome})`}
+        >
+          <LogOut size={18} aria-hidden />
+          <span className="hidden md:inline">Sair</span>
+        </button>
+      </form>
+    </div>
   );
 }
 
@@ -140,7 +188,7 @@ export function Painel({ ambiente, children }: { ambiente: AmbienteDoPainel; chi
       >
         Pular para o conteúdo
       </a>
-      <BarraLateral aberta={menuAberto} aoFechar={() => setMenuAberto(false)} />
+      <BarraLateral aberta={menuAberto} aoFechar={() => setMenuAberto(false)} rotas={ambiente.usuario ? rotasDoMenu(ambiente.usuario) : ROTAS_DO_MENU} />
       {menuAberto && (
         <div className="fixed inset-0 z-40 bg-[var(--ds-scrim)] lg:hidden" onClick={() => setMenuAberto(false)} aria-hidden="true" />
       )}
@@ -155,7 +203,8 @@ export function Painel({ ambiente, children }: { ambiente: AmbienteDoPainel; chi
             <Menu size={20} />
           </button>
           <SeloDoAmbiente ambiente={ambiente} />
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-3">
+            {ambiente.usuario && <UsuarioNoCabecalho usuario={ambiente.usuario} />}
             <AlternarTema />
           </div>
         </header>

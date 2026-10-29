@@ -12,8 +12,8 @@ function revalidar(enqueteId: string) {
 }
 
 export async function encerrarEnqueteAcao(_estado: ResultadoAcao, form: FormData): Promise<ResultadoAcao> {
-  return executarAcao(form, encerrarEnqueteSchema, async (dados) => {
-    await encerrarEnquete(dados, new Date());
+  return executarAcao(form, encerrarEnqueteSchema, "disponibilidade.gerir", async (dados, ator) => {
+    await encerrarEnquete(dados, ator, new Date());
     revalidar(dados.enqueteId);
     return "Enquete encerrada. O time ainda pode registrar respostas.";
   });
@@ -22,16 +22,16 @@ export async function encerrarEnqueteAcao(_estado: ResultadoAcao, form: FormData
 /** "Reabrir" é alterar o "Fecha em" para uma data futura. */
 export async function reabrirEnqueteAcao(_estado: ResultadoAcao, form: FormData): Promise<ResultadoAcao> {
   const agora = new Date();
-  return executarAcao(form, alterarEnqueteSchema(agora), async (dados) => {
-    await alterarEnquete(dados, agora);
+  return executarAcao(form, alterarEnqueteSchema(agora), "disponibilidade.gerir", async (dados, ator) => {
+    await alterarEnquete(dados, ator, agora);
     revalidar(dados.enqueteId);
     return dados.fechaEm ? `Enquete reaberta até ${diaEHora(dados.fechaEm)}.` : "Enquete alterada.";
   });
 }
 
 export async function registrarRespostaAcao(_estado: ResultadoAcao, form: FormData): Promise<ResultadoAcao> {
-  return executarAcao(form, registrarDisponibilidadeSchema, async (dados, usuario) => {
-    const resultado = await registrarDisponibilidade(dados, usuario.id, new Date());
+  return executarAcao(form, registrarDisponibilidadeSchema, "disponibilidade.registrar_resposta", async (dados, ator) => {
+    const resultado = await registrarDisponibilidade(dados, ator, new Date());
     revalidar(dados.enqueteId);
     if (resultado.gravadas + resultado.apagadas === 0) return `Nada mudou nas respostas de ${resultado.nome}.`;
     const respondidos = dados.respostas.filter((item) => item.resposta !== "SEM_RESPOSTA").length;

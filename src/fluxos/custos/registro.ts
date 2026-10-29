@@ -1,4 +1,4 @@
-import { bancoParaLeitura, transacao } from "@/fluxos/_base";
+import { bancoParaLeitura, transacao, type AtorDaEscrita } from "@/fluxos/_base";
 import {
   type AlertaDeCusto,
   type AprovarSolicitacao,
@@ -121,24 +121,32 @@ export async function previaDaSolicitacao(entrada: { eventoId: string; deslocame
   };
 }
 
-const contexto = (usuarioId: string, agora: Date) => ({ usuarioId, instante: agora });
+/** Quem audita: o e-mail entra na SoD-3 (o usuário sem pessoa no cadastro é reconhecido por ele). */
+export type AtorQueAudita = AtorDaEscrita & { email: string | null };
 
-export function registrarSolicitacao(entrada: RegistrarSolicitacao, usuarioId: string, agora: Date) {
-  return traduzirErros(() => transacao((tx) => servicoDeSolicitacoes.registrarSolicitacao(criarRepositorioSolicitacoes(tx), entrada, contexto(usuarioId, agora))));
+const contexto = (ator: AtorDaEscrita & { email?: string | null }, agora: Date) => ({
+  usuarioId: ator.usuarioId,
+  pessoaId: ator.pessoaId,
+  email: ator.email ?? null,
+  instante: agora,
+});
+
+export function registrarSolicitacao(entrada: RegistrarSolicitacao, ator: AtorDaEscrita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDeSolicitacoes.registrarSolicitacao(criarRepositorioSolicitacoes(tx), entrada, contexto(ator, agora))));
 }
 
-export function corrigirSolicitacao(entrada: CorrigirSolicitacao, usuarioId: string, agora: Date) {
-  return traduzirErros(() => transacao((tx) => servicoDeSolicitacoes.corrigirSolicitacao(criarRepositorioSolicitacoes(tx), entrada, contexto(usuarioId, agora))));
+export function corrigirSolicitacao(entrada: CorrigirSolicitacao, ator: AtorDaEscrita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDeSolicitacoes.corrigirSolicitacao(criarRepositorioSolicitacoes(tx), entrada, contexto(ator, agora))));
 }
 
-export function aprovarSolicitacao(entrada: AprovarSolicitacao, usuarioId: string, agora: Date) {
-  return traduzirErros(() => transacao((tx) => servicoDeSolicitacoes.aprovarSolicitacao(criarRepositorioSolicitacoes(tx), entrada, contexto(usuarioId, agora))));
+export function aprovarSolicitacao(entrada: AprovarSolicitacao, ator: AtorQueAudita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDeSolicitacoes.aprovarSolicitacao(criarRepositorioSolicitacoes(tx), entrada, contexto(ator, agora))));
 }
 
-export function reprovarSolicitacao(entrada: ReprovarSolicitacao, usuarioId: string, agora: Date) {
-  return traduzirErros(() => transacao((tx) => servicoDeSolicitacoes.reprovarSolicitacao(criarRepositorioSolicitacoes(tx), entrada, contexto(usuarioId, agora))));
+export function reprovarSolicitacao(entrada: ReprovarSolicitacao, ator: AtorQueAudita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDeSolicitacoes.reprovarSolicitacao(criarRepositorioSolicitacoes(tx), entrada, contexto(ator, agora))));
 }
 
-export function reabrirAuditoria(entrada: ReabrirAuditoria, usuarioId: string, agora: Date) {
-  return traduzirErros(() => transacao((tx) => servicoDeSolicitacoes.reabrirAuditoria(criarRepositorioSolicitacoes(tx), entrada, contexto(usuarioId, agora))));
+export function reabrirAuditoria(entrada: ReabrirAuditoria, ator: AtorQueAudita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDeSolicitacoes.reabrirAuditoria(criarRepositorioSolicitacoes(tx), entrada, contexto(ator, agora))));
 }

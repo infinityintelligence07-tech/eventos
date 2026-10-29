@@ -11,6 +11,7 @@ import { diaEHora, type EventoDaEnquete, periodoCurto, type Resposta, RESPOSTAS,
 import { ChipDaEnquete } from "../_componentes/chip-da-enquete";
 import { AcoesDaEnquete } from "./_componentes/acoes-da-enquete";
 import { PainelDeResposta } from "./_componentes/painel-de-resposta";
+import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Respostas da enquete" };
@@ -63,6 +64,7 @@ function CelulaDaResposta({ resposta }: { resposta: Resposta }) {
 }
 
 export default async function PaginaEnquete({ params, searchParams }: { params: Promise<{ enqueteId: string }>; searchParams: Promise<Parametros> }) {
+  await exigirAtor();
   const [{ enqueteId }, parametros] = await Promise.all([params, searchParams]);
   const agora = new Date();
   const [enquete, escrita] = await Promise.all([

@@ -21,8 +21,9 @@ describe.skipIf(!TEST_DATABASE_URL)("base dos fluxos no banco", () => {
   });
 
   const PORTA = () => Number(new URL(TEST_DATABASE_URL!).port || 5432);
+  const ATOR = { usuarioId: "7e570000-0000-7000-8000-000000000001", pessoaId: null, origem: "LOCAL" as const };
   const guardaDe = (db: Db) =>
-    criarGuardaDeEscrita({ ambiente: () => ({ liberada: true }), banco: async () => db, servidor: marcadorDoBanco, portaEsperada: PORTA });
+    criarGuardaDeEscrita({ ambiente: () => ({ liberada: true, modo: "LOCAL" }), banco: async () => db, servidor: marcadorDoBanco, portaEsperada: PORTA });
   const urlDoBanco = async (parametros = "") => {
     const [{ nome }] = (await banco.sql("select current_database() as nome")) as [{ nome: string }];
     const url = new URL(TEST_DATABASE_URL!);
@@ -32,7 +33,7 @@ describe.skipIf(!TEST_DATABASE_URL)("base dos fluxos no banco", () => {
 
   it("banco sem o marcador: a guarda recusa mesmo com o ambiente liberado", async () => {
     expect(await marcadorDoBanco(banco.db)).toMatchObject({ marcador: null, porta: PORTA() });
-    await expect(guardaDe(banco.db).bancoParaEscrita()).rejects.toBeInstanceOf(EscritaDesligadaError);
+    await expect(guardaDe(banco.db).bancoParaEscrita(ATOR)).rejects.toBeInstanceOf(EscritaDesligadaError);
   });
 
   it("SET eventos.ambiente na sessão não forja o marcador", async () => {
@@ -51,7 +52,7 @@ describe.skipIf(!TEST_DATABASE_URL)("base dos fluxos no banco", () => {
     try {
       const sessao = await forjada.db.execute<{ valor: string }>(sql`select current_setting('eventos.ambiente', true) as valor`);
       expect(sessao.rows[0]?.valor).toBe("local");
-      await expect(guardaDe(forjada.db).bancoParaEscrita()).rejects.toBeInstanceOf(EscritaDesligadaError);
+      await expect(guardaDe(forjada.db).bancoParaEscrita(ATOR)).rejects.toBeInstanceOf(EscritaDesligadaError);
     } finally {
       await forjada.pool.end();
     }
@@ -63,13 +64,27 @@ describe.skipIf(!TEST_DATABASE_URL)("base dos fluxos no banco", () => {
     const nova = criarDb(url, "eventos-teste-marcador");
     try {
       expect(await marcadorDoBanco(nova.db)).toMatchObject({ marcador: "local", porta: PORTA() });
-      await expect(guardaDe(nova.db).bancoParaEscrita()).resolves.toBe(nova.db);
+      await expect(guardaDe(nova.db).bancoParaEscrita(ATOR)).resolves.toBe(nova.db);
       // Porta diferente da configurada (como num túnel) recusa.
-      const tunel = criarGuardaDeEscrita({ ambiente: () => ({ liberada: true }), banco: async () => nova.db, servidor: marcadorDoBanco, portaEsperada: () => PORTA() + 1 });
-      await expect(tunel.bancoParaEscrita()).rejects.toBeInstanceOf(EscritaDesligadaError);
+      const tunel = criarGuardaDeEscrita({ ambiente: () => ({ liberada: true, modo: "LOCAL" }), banco: async () => nova.db, servidor: marcadorDoBanco, portaEsperada: () => PORTA() + 1 });
+      await expect(tunel.bancoParaEscrita(ATOR)).rejects.toBeInstanceOf(EscritaDesligadaError);
     } finally {
       await nova.pool.end();
     }
+  });
+
+  it("modo PRODUCAO numa conexão que não é app_eventos (papel errado): recusa", async () => {
+    const leitura = await marcadorDoBanco(banco.db);
+    expect(leitura.papel).not.toBe("app_eventos");
+    const producao = criarGuardaDeEscrita({
+      ambiente: () => ({ liberada: true, modo: "PRODUCAO" }),
+      banco: async () => banco.db,
+      servidor: marcadorDoBanco,
+      portaEsperada: () => null,
+    });
+    const sessao = { usuarioId: "u", pessoaId: null, origem: "SESSAO" as const };
+    await expect(producao.situacao(sessao)).resolves.toMatchObject({ liberada: false, trava: "PAPEL_DE_ESCRITA" });
+    await expect(producao.bancoParaEscrita(sessao)).rejects.toBeInstanceOf(EscritaDesligadaError);
   });
 
   it("registrarAcao grava dentro da transação e some no rollback", async () => {
