@@ -31,6 +31,25 @@ export const cargo = coreSchema.table("cargo", {
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
 
+// Vínculo da pessoa com a IAM (tipo STAFF, CLT...; status ATIVO...). O polo do staff vem daqui.
+// salario_ou_diaria e unidade_pagamento existem no GH e ficam de fora de propósito: o Eventos não lê remuneração.
+export const vinculo = coreSchema.table("vinculo", {
+  id: uuid("id").primaryKey(),
+  pessoaId: uuid("pessoa_id").notNull(),
+  tipo: text("tipo").notNull(),
+  cargoId: uuid("cargo_id"),
+  nivelId: uuid("nivel_id"),
+  setorId: uuid("setor_id"),
+  poloId: uuid("polo_id"),
+  liderId: uuid("lider_id"),
+  dataInicio: date("data_inicio").notNull(),
+  dataFim: date("data_fim"),
+  status: text("status").notNull(),
+  criadoEm: timestamp("criado_em", { withTimezone: true }).notNull(),
+  atualizadoEm: timestamp("atualizado_em", { withTimezone: true }).notNull(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+});
+
 export const pessoa = coreSchema.table("pessoa", {
   id: uuid("id").primaryKey(),
   usuarioId: uuid("usuario_id"),

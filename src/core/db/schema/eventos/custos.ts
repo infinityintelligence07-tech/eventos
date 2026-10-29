@@ -86,12 +86,15 @@ export const solicitacaoCusto = eventosSchema.table(
     auditadoPor: uuid("auditado_por").references(() => usuario.id, { onDelete: "set null" }),
     auditadoEm: timestamp("auditado_em", { withTimezone: true }),
     pagoEm: date("pago_em"),
+    // Preenchido = solicitação enviada pelo time em nome da pessoa.
+    registradoPor: uuid("registrado_por").references(() => usuario.id, { onDelete: "set null" }),
     criadoEm: timestamp("criado_em", { withTimezone: true }).notNull().defaultNow(),
     atualizadoEm: timestamp("atualizado_em", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     unique("solicitacao_custo_evento_pessoa_unique").on(table.eventoId, table.pessoaId),
     index("solicitacao_custo_pessoa_idx").on(table.pessoaId),
+    index("solicitacao_custo_registrado_por_idx").on(table.registradoPor),
     index("solicitacao_custo_convocacao_idx").on(table.convocacaoId),
     index("solicitacao_custo_auditado_por_idx").on(table.auditadoPor),
     index("solicitacao_custo_status_idx").on(table.statusAuditoria, table.statusFinanceiro),

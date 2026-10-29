@@ -17,6 +17,20 @@ const MIGRATIONS = path.resolve(import.meta.dirname, "../core/db/migrations");
 
 export type BancoDeTeste = { db: Db; sql: (texto: string, params?: unknown[]) => Promise<unknown[]>; encerrar: () => Promise<void> };
 
+/** Carrega a estrutura do GH (fixture) e aplica as migrations do Eventos num banco vazio. Usado também por `npm run banco:local`. */
+export async function aplicarEstrutura(connectionString: string, db: Db): Promise<void> {
+  const carga = new Client({ connectionString });
+  await carga.connect();
+  await carga.query(readFileSync(FIXTURE, "utf8"));
+  await carga.end();
+
+  await migrate(db, {
+    migrationsFolder: MIGRATIONS,
+    migrationsSchema: "drizzle",
+    migrationsTable: "__drizzle_migrations_eventos",
+  });
+}
+
 export async function criarBancoDeTeste(): Promise<BancoDeTeste> {
   if (!TEST_DATABASE_URL) throw new Error("TEST_DATABASE_URL não definida");
 
@@ -29,17 +43,8 @@ export async function criarBancoDeTeste(): Promise<BancoDeTeste> {
   const url = new URL(TEST_DATABASE_URL);
   url.pathname = `/${nome}`;
 
-  const carga = new Client({ connectionString: url.toString() });
-  await carga.connect();
-  await carga.query(readFileSync(FIXTURE, "utf8"));
-  await carga.end();
-
   const { db, pool } = criarDb(url.toString(), "eventos-teste");
-  await migrate(db, {
-    migrationsFolder: MIGRATIONS,
-    migrationsSchema: "drizzle",
-    migrationsTable: "__drizzle_migrations_eventos",
-  });
+  await aplicarEstrutura(url.toString(), db);
 
   return {
     db,

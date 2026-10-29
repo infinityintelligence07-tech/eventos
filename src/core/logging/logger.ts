@@ -1,28 +1,50 @@
 import pino from "pino";
 
-import { config } from "@/core/config";
+import { lerConfig } from "@/core/config/leitura";
 
 import { getCorrelationId } from "./correlation";
 import { redactSensitive } from "./redact";
 
-const pinoLogger = pino({
-  level: config.LOG_LEVEL,
-  base: null,
-  mixin: () => ({ correlationId: getCorrelationId() }),
-});
+// Criado na primeira escrita: as páginas importam o logger e o build do Next não pode exigir o ambiente.
+let pinoLogger: pino.Logger | undefined;
+
+/**
+ * O `err` chega já serializado pela lista fixa (redactSensitive → serializarErro). O serializador padrão do pino
+ * o reprocessaria (junta mensagens das causas e perde code/constraint), então fica desligado.
+ */
+export function criarPino(nivel: pino.LevelWithSilent, destino?: pino.DestinationStream): pino.Logger {
+  const opcoes: pino.LoggerOptions = {
+    level: nivel,
+    base: null,
+    serializers: { err: (valor: unknown) => valor },
+    mixin: () => ({ correlationId: getCorrelationId() }),
+  };
+  return destino ? pino(opcoes, destino) : pino(opcoes);
+}
+
+function instancia(): pino.Logger {
+  pinoLogger ??= criarPino(lerConfig().LOG_LEVEL);
+  return pinoLogger;
+}
+
+/** O que vai para o pino: dados sensíveis tirados e Error reduzido à lista fixa. */
+export function prepararParaLog(data: unknown): unknown {
+  return redactSensitive(data);
+}
 
 type LogLevel = "debug" | "error" | "fatal" | "info" | "silent" | "trace" | "warn";
 type LogMethod = (data: unknown, message?: string) => void;
 
 function write(level: LogLevel, data: unknown, message?: string): void {
-  const method = pinoLogger[level] as LogMethod;
+  const alvo = instancia();
+  const method = alvo[level] as LogMethod;
 
   if (typeof data === "string") {
-    method.call(pinoLogger, data);
+    method.call(alvo, data);
     return;
   }
 
-  method.call(pinoLogger, redactSensitive(data), message);
+  method.call(alvo, prepararParaLog(data), message);
 }
 
 export const logger = {

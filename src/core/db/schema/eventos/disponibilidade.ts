@@ -52,9 +52,12 @@ export const disponibilidade = eventosSchema.table(
       .references(() => pessoa.id, { onDelete: "cascade" }),
     disponivel: boolean("disponivel").notNull(),
     respondidoEm: timestamp("respondido_em", { withTimezone: true }).notNull().defaultNow(),
+    // Preenchido = resposta registrada pelo time em nome da pessoa.
+    registradoPor: uuid("registrado_por").references(() => usuario.id, { onDelete: "set null" }),
   },
   (table) => [
     primaryKey({ columns: [table.eventoId, table.pessoaId] }),
+    index("disponibilidade_registrado_por_idx").on(table.registradoPor),
     foreignKey({
       name: "disponibilidade_enquete_evento_fk",
       columns: [table.enqueteId, table.eventoId],

@@ -1,3 +1,5 @@
+import { serializarErro } from "./erro";
+
 const SENSITIVE_FIELDS = new Set([
   "accessToken",
   "anonKey",
@@ -26,6 +28,11 @@ function isSensitiveField(field: string): boolean {
 }
 
 export function redactSensitive(value: unknown): unknown {
+  // Error em qualquer nível (ex.: { err }) passa pela lista fixa de campos: params e detail ficam de fora.
+  if (value instanceof Error) {
+    return serializarErro(value);
+  }
+
   if (Array.isArray(value)) {
     return value.map((item) => redactSensitive(item));
   }

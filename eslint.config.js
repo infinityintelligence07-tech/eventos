@@ -5,6 +5,7 @@ import tseslint from "typescript-eslint";
  *   - dentro do módulo -> caminho relativo ("./domain/vagas")
  *   - fora do módulo   -> alias pela interface pública ("@/modules/escala")
  * domain/ é puro: sem banco, sem HTTP, sem relógio, sem ambiente.
+ * fluxos/ é a raiz de composição (docs/07 §2): combina módulos numa transação; app/ chama só "@/fluxos/<aba>".
  */
 
 const PROIBIDO_ATRAVESSAR_FRONTEIRA = {
@@ -12,18 +13,28 @@ const PROIBIDO_ATRAVESSAR_FRONTEIRA = {
   message: "Importe módulos apenas pela interface pública: '@/modules/<nome>'.",
 };
 
+const FLUXO_PELA_INTERFACE = {
+  group: ["@/fluxos/*/*"],
+  message: "Importe fluxos apenas pela interface pública: '@/fluxos/<aba>'.",
+};
+
 const MODULO_NAO_IMPORTA_MODULO = {
-  group: ["@/modules/*"],
-  message: "Módulo não importa módulo. Combine os dois num service do app ou num job.",
+  group: ["@/modules/*", "@/fluxos", "@/fluxos/*"],
+  message: "Módulo não importa módulo nem fluxo. Combine os dois num fluxo (src/fluxos) ou num job.",
 };
 
 const CORE_NAO_IMPORTA_MODULO = {
-  group: ["@/modules/*", "@/app/*"],
-  message: "core/ é infraestrutura. Não pode depender de módulo nem de app.",
+  group: ["@/modules/*", "@/fluxos", "@/fluxos/*", "@/app/*"],
+  message: "core/ é infraestrutura. Não pode depender de módulo, fluxo nem app.",
+};
+
+const FLUXO_NAO_CONHECE_A_TELA = {
+  group: ["@/app/*", "next", "next/*", "react", "react/*"],
+  message: "Fluxo não conhece a tela: recebe o usuário e o instante como parâmetro; revalidatePath fica na server action.",
 };
 
 const ACESSO_AO_BANCO = {
-  group: ["@/core/db/client", "@/core/db/database", "@/core/db/schema", "@/core/db/schema/*", "drizzle-orm", "drizzle-orm/*", "pg"],
+  group: ["@/core/db", "@/core/db/*", "@/core/db/schema/*", "drizzle-orm", "drizzle-orm/*", "pg"],
   message: "Acesso ao banco só em repository/ (ou em core/db).",
 };
 
@@ -39,7 +50,7 @@ export default tseslint.config(
     rules: {
       "@typescript-eslint/no-explicit-any": "error",
       "no-console": "error",
-      "no-restricted-imports": ["error", { patterns: [PROIBIDO_ATRAVESSAR_FRONTEIRA, ACESSO_AO_BANCO] }],
+      "no-restricted-imports": ["error", { patterns: [PROIBIDO_ATRAVESSAR_FRONTEIRA, FLUXO_PELA_INTERFACE, ACESSO_AO_BANCO] }],
       "no-restricted-properties": [
         "error",
         { object: "process", property: "env", message: "Leia variáveis de ambiente via '@/core/config'." },
@@ -76,7 +87,7 @@ export default tseslint.config(
         {
           patterns: [
             {
-              group: ["@/core/*", "@/modules/*", "drizzle-orm", "drizzle-orm/*", "pg", "next", "next/*"],
+              group: ["@/core/*", "@/modules/*", "@/fluxos", "@/fluxos/*", "drizzle-orm", "drizzle-orm/*", "pg", "next", "next/*"],
               message: "domain/ é puro: sem banco, sem HTTP, sem framework.",
             },
           ],
@@ -106,7 +117,18 @@ export default tseslint.config(
   {
     files: ["src/jobs/**/*.ts"],
     rules: {
-      "no-restricted-imports": ["error", { patterns: [PROIBIDO_ATRAVESSAR_FRONTEIRA] }],
+      "no-restricted-imports": ["error", { patterns: [PROIBIDO_ATRAVESSAR_FRONTEIRA, FLUXO_PELA_INTERFACE] }],
+    },
+  },
+
+  // fluxos/ tem o mesmo papel de jobs/ para as telas: pode usar o banco e vários módulos, só pela interface pública.
+  {
+    files: ["src/fluxos/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        { patterns: [PROIBIDO_ATRAVESSAR_FRONTEIRA, FLUXO_PELA_INTERFACE, FLUXO_NAO_CONHECE_A_TELA] },
+      ],
     },
   },
 

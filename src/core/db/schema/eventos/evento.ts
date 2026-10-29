@@ -59,7 +59,7 @@ export const evento = eventosSchema.table(
     index("evento_aprovado_por_idx").on(table.aprovadoPor),
     check(
       "evento_status_escala_check",
-      sql`${table.statusEscala} IN ('SEM_ESCALA', 'RASCUNHO', 'APROVADA', 'COMUNICADA')`,
+      sql`${table.statusEscala} IN ('SEM_ESCALA', 'RASCUNHO', 'AGUARDANDO_APROVACAO', 'DEVOLVIDA', 'APROVADA', 'COMUNICADA')`,
     ),
     check(
       "evento_aprovacao_check",
@@ -88,6 +88,9 @@ export const escala = eventosSchema.table(
     funcaoId: uuid("funcao_id").references(() => funcao.id, { onDelete: "set null" }),
     // REGRA: gerada pela regra do tipo de evento; MANUAL: criada ou ajustada pelo time.
     origem: text("origem").notNull().default("MANUAL"),
+    // Número de vagas conferido por quem monta a escala (pré-condição para enviar à aprovação).
+    confirmadaEm: timestamp("confirmada_em", { withTimezone: true }),
+    confirmadaPor: uuid("confirmada_por").references((): AnyPgColumn => usuario.id, { onDelete: "set null" }),
     criadoEm: timestamp("criado_em", { withTimezone: true }).notNull().defaultNow(),
     atualizadoEm: timestamp("atualizado_em", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -98,7 +101,9 @@ export const escala = eventosSchema.table(
     index("escala_status_idx").on(table.status),
     index("escala_funcao_idx").on(table.funcaoId),
     index("escala_cargo_idx").on(table.cargoId),
+    index("escala_confirmada_por_idx").on(table.confirmadaPor),
     check("escala_origem_check", sql`${table.origem} IN ('REGRA', 'MANUAL')`),
+    check("escala_confirmada_check", sql`${table.confirmadaPor} IS NULL OR ${table.confirmadaEm} IS NOT NULL`),
   ],
 );
 
@@ -113,6 +118,7 @@ export const convocacao = eventosSchema.table(
       .notNull()
       .references(() => pessoa.id, { onDelete: "cascade" }),
     // GH usa ACEITA/RECUSADA; o Eventos acrescenta SUGERIDA, CONVIDADA e CANCELADA.
+    // Ativa (ocupa a vaga): SUGERIDA, CONVIDADA, ACEITA.
     status: text("status").notNull(),
     respondidaEm: timestamp("respondida_em", { withTimezone: true }),
     convidadaEm: timestamp("convidada_em", { withTimezone: true }),
@@ -126,6 +132,8 @@ export const convocacao = eventosSchema.table(
     // Por que o sistema sugeriu a pessoa (distância, rodízio, disponibilidade).
     sugestaoScore: numeric("sugestao_score", { precision: 6, scale: 2 }),
     criadoPor: uuid("criado_por").references((): AnyPgColumn => usuario.id, { onDelete: "set null" }),
+    // Preenchido = resposta registrada pelo time em nome da pessoa; nulo = a própria pessoa (portal futuro).
+    registradoPor: uuid("registrado_por").references((): AnyPgColumn => usuario.id, { onDelete: "set null" }),
     criadoEm: timestamp("criado_em", { withTimezone: true }).notNull().defaultNow(),
     atualizadoEm: timestamp("atualizado_em", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -136,9 +144,14 @@ export const convocacao = eventosSchema.table(
     index("convocacao_status_idx").on(table.status),
     index("convocacao_carona_idx").on(table.caronaId),
     index("convocacao_criado_por_idx").on(table.criadoPor),
+    index("convocacao_registrado_por_idx").on(table.registradoPor),
     check(
       "convocacao_deslocamento_check",
       sql`${table.deslocamento} IS NULL OR ${table.deslocamento} IN ('CARRO_PROPRIO', 'CARONA', 'CARRO_IAM', 'UBER', 'ONIBUS', 'VOO', 'NAO_SE_APLICA')`,
+    ),
+    check(
+      "convocacao_status_check",
+      sql`${table.status} IN ('SUGERIDA', 'CONVIDADA', 'ACEITA', 'RECUSADA', 'CANCELADA')`,
     ),
   ],
 );

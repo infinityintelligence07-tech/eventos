@@ -7,7 +7,9 @@
   },
   "type": "module",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -H 127.0.0.1",
+    "dev:local": "node --import tsx scripts/dev-local.ts",
+    "banco:local": "node --env-file-if-exists=.env --import tsx scripts/banco-local/index.ts",
     "build": "next build",
     "start": "next start",
     "worker": "node --env-file-if-exists=.env --import tsx src/worker.ts",
@@ -26,6 +28,7 @@
     "next": "^15.5.28",
     "pg": "^8.23.0",
     "pg-boss": "^12.38.0",
+    "pg-connection-string": "^2.14.1",
     "pino": "^10.4.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

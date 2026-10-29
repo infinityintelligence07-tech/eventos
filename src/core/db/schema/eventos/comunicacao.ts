@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, index, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, index, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 import { usuario } from "../core";
 import { convocacao } from "./evento";
@@ -18,6 +18,8 @@ export const modeloCopy = eventosSchema.table(
     atualizadoEm: timestamp("atualizado_em", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    // Um modelo ativo por tipo: para trocar, desative o atual antes de ativar o outro (mesma transação).
+    uniqueIndex("modelo_copy_ativo_unique").on(table.tipo).where(sql`${table.ativo}`),
     check(
       "modelo_copy_tipo_check",
       sql`${table.tipo} IN ('ESCALACAO', 'HOSPEDAGEM', 'LEMBRETE', 'ALTERACAO')`,
@@ -54,6 +56,10 @@ export const mensagem = eventosSchema.table(
     check(
       "mensagem_status_check",
       sql`${table.status} IN ('GERADA', 'ENVIADA', 'FALHOU', 'DESATUALIZADA')`,
+    ),
+    check(
+      "mensagem_enviada_check",
+      sql`${table.status} <> 'ENVIADA' OR (${table.enviadaEm} IS NOT NULL AND ${table.canal} IS NOT NULL)`,
     ),
   ],
 );

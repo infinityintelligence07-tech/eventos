@@ -21,6 +21,26 @@ npm run lint && npm run typecheck && npm test
 TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres npm test   # inclui integração
 ```
 
+## Desenvolvimento local (banco de teste)
+
+```bash
+npm run banco:local           # recria do zero o banco eventos_local (Postgres 15 em .banco-local/, porta 55432)
+npm run dev:local             # next dev com esse banco (EVENTOS_MODO=local); outra porta: npm run dev:local -- -p 3001
+```
+
+- `banco:local` copia da produção, **só leitura** (transação `READ ONLY` conferida), polos, locais, eventos, escalas,
+  tipos de evento, funções, regras de custo e modelos de copy (com os mesmos ids). Origem: `DATABASE_URL` do `.env`
+  ou `ORIGEM_DATABASE_URL`. Aplica todas as migrations do repositório (inclusive as que ainda não foram à produção),
+  grava o marcador `eventos.ambiente = 'local'` no banco e semeia ~60 pessoas fictícias (`@exemplo.test`, telefones
+  `90000-xxxx`, sem CPF/PIX) nos 8 polos, uma enquete aberta e um cenário por frente nos próximos ASM/Confronto com vagas:
+  escala `APROVADA` (convocações em todos os status, copys enviadas e desatualizada, pedidos à SDC, hotel com quartos,
+  solicitações de custo com e sem alerta), `AGUARDANDO_APROVACAO`, `DEVOLVIDA` (com comentário) e `RASCUNHO` com fila.
+  `link_custos` fica em `https://exemplo.test/custos`.
+- Usuário de teste: `core.usuario.id = 7e570000-0000-7000-8000-000000000001`,
+  `core.pessoa.id = 7e570000-0000-7000-8000-000000000002` (`teste@exemplo.test`).
+- `dev:local` sobe o Postgres local se estiver parado e sobrescreve `DATABASE_URL` sem tocar no `.env`.
+  Postgres em outro caminho: `PG_BIN=/caminho/bin npm run banco:local`.
+
 ## Estrutura
 
 ```
@@ -84,6 +104,13 @@ npm run db:migrate            # aplica as migrations do schema eventos
 npm run db:generate           # gera migration a partir de src/core/db/schema/eventos
 ```
 
+- **Trava:** `db:migrate` (e `drizzle-kit push/drop/up/studio`) recusa rodar quando o host da `DATABASE_URL` não é
+  `localhost`/`127.0.0.1`/`[::1]`, antes de conectar. Para migrar um banco remoto de propósito:
+  `EVENTOS_CONFIRMO_MIGRAR_REMOTO=sim npm run db:migrate`. A `0004_abas-do-time` ainda **não** vai para o `iam-pessoas`.
+- Ordem para levar a 0004 à produção: (1) aplicar a 0004 (só acrescenta; também corrige a copy de escalação para
+  `{{genero:ESCALADO|ESCALADA}}` e deixa um modelo ativo por tipo); (2) publicar o código; (3) só então incluir
+  `{"funcao": "STAFF", "digitado": true}` na regra do Confronto (migration de dados à parte ou pela tela
+  Configurações › Vagas). Com a regra antes do código, a sincronização antiga recusa a regra do Confronto.
 - Localmente, aplique antes as migrations do GH-System (criam `core`, `sensivel` e as tabelas de evento adotadas).
 - O histórico de migrations deste repo fica em `drizzle.__drizzle_migrations_eventos`.
 - Toda migration manual tem `.down.sql`. Valores de dinheiro sempre em centavos.
