@@ -36,10 +36,17 @@ describe("gerar vagas do evento", () => {
     expect(resultado.plano.inserir[0]).toEqual({ funcao: "LIDER", quantidade: 12 });
   });
 
+  it("escala devolvida volta a receber vagas", async () => {
+    const { repo, aplicar } = repositorio({ ...confronto, statusEscala: "DEVOLVIDA" });
+    expect((await gerarVagasDoEvento(repo, "e1")).situacao).toBe("GERADA");
+    expect(aplicar).toHaveBeenCalledOnce();
+  });
+
   it("não toca em escala aprovada nem em evento encerrado", async () => {
     for (const [mudanca, situacao] of [
       [{ statusEscala: "APROVADA" }, "ESCALA_APROVADA"],
       [{ statusEscala: "COMUNICADA" }, "ESCALA_APROVADA"],
+      [{ statusEscala: "AGUARDANDO_APROVACAO" }, "ESCALA_APROVADA"],
       [{ status: "CANCELADO" }, "EVENTO_ENCERRADO"],
       [{ status: "CONCLUIDO" }, "EVENTO_ENCERRADO"],
     ] as const) {

@@ -1,25 +1,8 @@
+import Link from "next/link";
+
 import { type EventoNoCalendario, type SituacaoNoCalendario, situacaoNoCalendario } from "@/modules/eventos";
 
-export function rotuloDaSituacao(situacao: SituacaoNoCalendario): string {
-  switch (situacao) {
-    case "SEM_ESCALA":
-      return "Sem escala";
-    case "RASCUNHO":
-      return "Escala em rascunho";
-    case "APROVADA":
-      return "Escala aprovada";
-    case "COMUNICADA":
-      return "Escala comunicada";
-    case "CANCELADO":
-      return "Cancelado";
-    case "CONCLUIDO":
-      return "Concluído";
-    default: {
-      const desconhecida: never = situacao;
-      return desconhecida;
-    }
-  }
-}
+import { rotuloDaSituacao } from "../../_componentes/ui/situacao";
 
 export function diaEMes(data: string): string {
   return `${data.slice(8, 10)}/${data.slice(5, 7)}`;
@@ -59,11 +42,24 @@ export function CartaoDoEvento({ evento, dia }: { evento: EventoNoCalendario; di
     primeiroDia && evento.expectativaPublico !== null ? `${evento.expectativaPublico} pessoas` : null,
     primeiroDia && evento.vagas > 0 ? `${evento.vagas} vagas` : null,
   ].filter(Boolean);
+  const texto = detalhes(evento, situacao);
+  // O mesmo evento aparece em vários dias: o id da descrição leva o dia.
+  const idDosDetalhes = `evento-${evento.id}-${dia}`;
 
   return (
-    <div className={`situacao-${situacao} rounded-[7px] border border-l-[3px] px-2 py-1 text-[12px] leading-[1.35]`} title={detalhes(evento, situacao)}>
-      <p className="font-semibold">{rotuloCurto(evento)}</p>
-      {informacoes.length > 0 && <p className="opacity-80">{informacoes.join(" · ")}</p>}
-    </div>
+    <>
+      <Link
+        href={`/eventos/${evento.id}`}
+        title={texto}
+        aria-describedby={idDosDetalhes}
+        className={`situacao-${situacao} block rounded-[7px] border border-l-[3px] px-2 py-1 text-[12px] leading-[1.35]`}
+      >
+        <span className="block font-semibold">{rotuloCurto(evento)}</span>
+        {informacoes.length > 0 && <span className="block opacity-80">{informacoes.join(" · ")}</span>}
+      </Link>
+      <span id={idDosDetalhes} className="sr-only">
+        {texto.replace(/\n/g, ". ")}
+      </span>
+    </>
   );
 }

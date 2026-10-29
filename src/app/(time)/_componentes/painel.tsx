@@ -4,7 +4,10 @@ import {
   CalendarCheck,
   CalendarDays,
   Contact,
+  Database,
   House,
+  Lock,
+  type LucideIcon,
   Menu,
   MessageCircle,
   Moon,
@@ -20,24 +23,26 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 
-type ItemDoMenu = { nome: string; icone: ReactNode; href?: string };
+import { type ItemDoMenu, itemAtivoDoMenu, ROTAS_DO_MENU } from "./menu";
+import { ProvedorDeToast } from "./ui/toast";
 
-const ICONE = { size: 20, className: "shrink-0" };
+const ICONES: Record<ItemDoMenu, LucideIcon> = {
+  Início: House,
+  Calendário: CalendarDays,
+  Escalas: Users,
+  Comunicação: MessageCircle,
+  Disponibilidade: CalendarCheck,
+  Pessoas: Contact,
+  "Logística e SDC": Plane,
+  Custos: Receipt,
+  Configurações: Settings,
+};
 
-const MENU: ItemDoMenu[] = [
-  { nome: "Início", icone: <House {...ICONE} /> },
-  { nome: "Calendário", icone: <CalendarDays {...ICONE} />, href: "/calendario" },
-  { nome: "Escalas", icone: <Users {...ICONE} /> },
-  { nome: "Comunicação", icone: <MessageCircle {...ICONE} /> },
-  { nome: "Disponibilidade", icone: <CalendarCheck {...ICONE} /> },
-  { nome: "Pessoas", icone: <Contact {...ICONE} /> },
-  { nome: "Logística e SDC", icone: <Plane {...ICONE} /> },
-  { nome: "Custos", icone: <Receipt {...ICONE} /> },
-  { nome: "Configurações", icone: <Settings {...ICONE} /> },
-];
+/** Calculado no servidor pelo layout (as três travas da guarda de escrita). */
+export type AmbienteDoPainel = { escritaLiberada: boolean; usuario: string | null };
 
 function BarraLateral({ aberta, aoFechar }: { aberta: boolean; aoFechar: () => void }) {
-  const caminho = usePathname();
+  const ativoNoMenu = itemAtivoDoMenu(usePathname());
   return (
     <aside
       className={`app-sidebar fixed inset-y-0 left-0 z-50 flex w-[260px] flex-col px-4 transition-transform duration-200 lg:translate-x-0 ${
@@ -45,7 +50,7 @@ function BarraLateral({ aberta, aoFechar }: { aberta: boolean; aoFechar: () => v
       }`}
     >
       <div className="flex items-center justify-between pt-6 pb-2">
-        <Link href="/calendario" className="flex items-center gap-3" onClick={aoFechar}>
+        <Link href="/inicio" className="flex items-center gap-3" onClick={aoFechar}>
           <Image src="/images/logo/logo-branco.svg" alt="IAM" width={74} height={30} className="h-7 w-auto" priority />
           <span className="text-[17px] font-semibold tracking-[-0.01em]">Eventos</span>
         </Link>
@@ -56,27 +61,23 @@ function BarraLateral({ aberta, aoFechar }: { aberta: boolean; aoFechar: () => v
       <nav className="mt-6 flex-1 overflow-y-auto" aria-label="Menu principal">
         <h2 className="mb-3 text-[12px] font-medium tracking-[0.012em] text-white/55">Time de eventos</h2>
         <ul className="flex flex-col gap-1">
-          {MENU.map((item) => (
-            <li key={item.nome}>
-              {item.href ? (
+          {ROTAS_DO_MENU.map((item) => {
+            const Icone = ICONES[item.nome];
+            const ativo = item.nome === ativoNoMenu;
+            return (
+              <li key={item.nome}>
                 <Link
                   href={item.href}
                   onClick={aoFechar}
-                  aria-current={caminho.startsWith(item.href) ? "page" : undefined}
-                  className={`menu-item ${caminho.startsWith(item.href) ? "menu-item-active" : "menu-item-inactive"}`}
+                  aria-current={ativo ? "page" : undefined}
+                  className={`menu-item ${ativo ? "menu-item-active" : "menu-item-inactive"}`}
                 >
-                  {item.icone}
+                  <Icone size={20} className="shrink-0" aria-hidden />
                   {item.nome}
                 </Link>
-              ) : (
-                <span className="menu-item menu-item-disabled" aria-disabled="true">
-                  {item.icone}
-                  {item.nome}
-                  <span className="ml-auto whitespace-nowrap rounded-full bg-white/12 px-2 py-0.5 text-[12px] font-medium text-white/70">em breve</span>
-                </span>
-              )}
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       </nav>
     </aside>
@@ -109,10 +110,36 @@ function AlternarTema() {
   );
 }
 
-export function Painel({ children }: { children: ReactNode }) {
+function SeloDoAmbiente({ ambiente }: { ambiente: AmbienteDoPainel }) {
+  if (ambiente.escritaLiberada) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--ds-green-soft)] px-3 py-1 text-[12px] font-medium text-[var(--ds-green-deep)]">
+        <Database size={14} aria-hidden />
+        Banco local{ambiente.usuario ? ` · ${ambiente.usuario}` : ""}
+      </span>
+    );
+  }
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full bg-[var(--ds-orange-soft)] px-3 py-1 text-[12px] font-medium text-[var(--ds-orange-deep)]"
+      title="Escrita desligada neste ambiente: dá para consultar, mas nada é gravado."
+    >
+      <Lock size={14} aria-hidden />
+      Somente leitura · sem login
+    </span>
+  );
+}
+
+export function Painel({ ambiente, children }: { ambiente: AmbienteDoPainel; children: ReactNode }) {
   const [menuAberto, setMenuAberto] = useState(false);
   return (
     <div data-ds="" className="min-h-screen">
+      <a
+        href="#conteudo"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[70] focus:rounded-[10px] focus:bg-[var(--ds-surface)] focus:px-4 focus:py-2 focus:text-[14px] focus:font-semibold focus:text-[var(--ds-tint-text)] focus:shadow-[var(--ds-shadow-3)]"
+      >
+        Pular para o conteúdo
+      </a>
       <BarraLateral aberta={menuAberto} aoFechar={() => setMenuAberto(false)} />
       {menuAberto && (
         <div className="fixed inset-0 z-40 bg-[var(--ds-scrim)] lg:hidden" onClick={() => setMenuAberto(false)} aria-hidden="true" />
@@ -127,14 +154,16 @@ export function Painel({ children }: { children: ReactNode }) {
           >
             <Menu size={20} />
           </button>
-          <span className="rounded-full bg-[var(--ds-orange-soft)] px-3 py-1 text-[12px] font-medium text-[var(--ds-orange-deep)]">
-            Versão local, sem login
-          </span>
+          <SeloDoAmbiente ambiente={ambiente} />
           <div className="ml-auto">
             <AlternarTema />
           </div>
         </header>
-        <main className="mx-auto max-w-[1536px] px-4 py-5 md:px-6 md:py-6">{children}</main>
+        <ProvedorDeToast>
+          <main id="conteudo" tabIndex={-1} className="mx-auto max-w-[1536px] px-4 py-5 outline-none md:px-6 md:py-6">
+            {children}
+          </main>
+        </ProvedorDeToast>
       </div>
     </div>
   );

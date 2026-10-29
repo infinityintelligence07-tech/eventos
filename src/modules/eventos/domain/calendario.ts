@@ -3,7 +3,8 @@ import type { StatusEvento } from "./turma";
 // Calendário do time de eventos: o mês em semanas (domingo a sábado), a situação de cada evento
 // para a cor e o que precisa de ação. Datas são texto AAAA-MM-DD no fuso de São Paulo.
 
-export type StatusEscala = "SEM_ESCALA" | "RASCUNHO" | "APROVADA" | "COMUNICADA";
+/** Valores do CHECK evento_status_escala_check. AGUARDANDO_APROVACAO e DEVOLVIDA só existem com a migration 0004. */
+export type StatusEscala = "SEM_ESCALA" | "RASCUNHO" | "AGUARDANDO_APROVACAO" | "DEVOLVIDA" | "APROVADA" | "COMUNICADA";
 
 export type EventoNoCalendario = {
   id: string;
@@ -22,7 +23,7 @@ export type EventoNoCalendario = {
   vagas: number;
 };
 
-export type SituacaoNoCalendario = "CANCELADO" | "CONCLUIDO" | "SEM_ESCALA" | "RASCUNHO" | "APROVADA" | "COMUNICADA";
+export type SituacaoNoCalendario = "CANCELADO" | "CONCLUIDO" | StatusEscala;
 
 export type Mes = { ano: number; mes: number };
 
@@ -109,9 +110,29 @@ export function situacaoNoCalendario(evento: Pick<EventoNoCalendario, "status" |
       return evento.statusEscala;
     case "SEM_ESCALA":
     case "RASCUNHO":
+    case "AGUARDANDO_APROVACAO":
+    case "DEVOLVIDA":
       return evento.status === "CONCLUIDO" ? "CONCLUIDO" : evento.statusEscala;
     default: {
       const desconhecido: never = evento.statusEscala;
+      throw new Error(`status de escala desconhecido: ${String(desconhecido)}`);
+    }
+  }
+}
+
+/** Escala que o time ainda monta (não está com a líder nem aprovada). */
+export function escalaEmMontagem(status: StatusEscala): boolean {
+  switch (status) {
+    case "SEM_ESCALA":
+    case "RASCUNHO":
+    case "DEVOLVIDA":
+      return true;
+    case "AGUARDANDO_APROVACAO":
+    case "APROVADA":
+    case "COMUNICADA":
+      return false;
+    default: {
+      const desconhecido: never = status;
       throw new Error(`status de escala desconhecido: ${String(desconhecido)}`);
     }
   }
@@ -132,8 +153,7 @@ export const DIAS_PARA_MONTAR_ESCALA = 30;
 export function pendenciasDosEventos(eventos: EventoNoCalendario[], hoje: string): Pendencias {
   const limiteEscala = somarDias(hoje, DIAS_PARA_MONTAR_ESCALA);
   const ativos = eventos.filter((evento) => evento.status !== "CANCELADO" && evento.dataFim >= hoje && !ehMasterclass(evento));
-  const escalaAberta = (evento: EventoNoCalendario) =>
-    evento.statusEscala === "SEM_ESCALA" || evento.statusEscala === "RASCUNHO";
+  const escalaAberta = (evento: EventoNoCalendario) => escalaEmMontagem(evento.statusEscala);
 
   return {
     confrontoSemFila: ativos.filter((evento) => evento.tipoSigla === "CONF" && evento.pessoasNaFila === null && escalaAberta(evento)),

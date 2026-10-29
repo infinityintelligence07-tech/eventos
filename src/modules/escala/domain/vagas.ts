@@ -23,6 +23,8 @@ const codigoFuncao = z.string().regex(/^[A-Z0-9_]{2,30}$/, "código de função 
 const regraFuncaoSchema = z.union([
   z.object({ funcao: codigoFuncao, fixo: z.number().int().min(0) }).strict(),
   z.object({ funcao: codigoFuncao, formula: z.string().min(1) }).strict(),
+  // Sem número na regra: quem monta a escala digita em cada evento (ex.: Staff do Confronto).
+  z.object({ funcao: codigoFuncao, digitado: z.literal(true) }).strict(),
 ]);
 
 const regraVagasSchema = z
@@ -31,10 +33,14 @@ const regraVagasSchema = z
 
 export type RegraVagas = z.infer<typeof regraVagasSchema>;
 
-type FuncaoCompilada = { funcao: string; fixo: number } | { funcao: string; expressao: Expressao };
+export type FuncaoCompilada =
+  | { funcao: string; fixo: number }
+  | { funcao: string; expressao: Expressao }
+  | { funcao: string; digitado: true };
 
 export type Vaga = { funcao: string; quantidade: number };
-export type Pendencia = { funcao: string; variavel: string };
+/** Falta um dado do evento (`variavel`) ou a função é digitada em cada evento (`digitar`). */
+export type Pendencia = { funcao: string; variavel: string } | { funcao: string; digitar: true };
 export type ResultadoVagas = { vagas: Vaga[]; pendencias: Pendencia[] };
 
 export class RegraVagasInvalidaError extends Error {
@@ -65,6 +71,8 @@ export function compilarRegraVagas(json: unknown): FuncaoCompilada[] {
 
     if ("fixo" in regra) {
       compiladas.push({ funcao: regra.funcao, fixo: regra.fixo });
+    } else if ("digitado" in regra) {
+      compiladas.push({ funcao: regra.funcao, digitado: true });
     } else {
       try {
         const expressao = compilarFormula(regra.formula);
@@ -106,6 +114,11 @@ export function calcularVagas(regra: unknown, dados: DadosDoEvento): ResultadoVa
       vagas.push({ funcao: funcao.funcao, quantidade: funcao.fixo });
       continue;
     }
+    if ("digitado" in funcao) {
+      valores[funcao.funcao] = undefined;
+      pendencias.push({ funcao: funcao.funcao, digitar: true });
+      continue;
+    }
 
     try {
       const bruto = avaliarFormula(funcao.expressao, valores);
@@ -119,7 +132,8 @@ export function calcularVagas(regra: unknown, dados: DadosDoEvento): ResultadoVa
       }
       valores[funcao.funcao] = undefined;
       const origem = pendencias.find((pendencia) => pendencia.funcao === cause.variavel);
-      pendencias.push({ funcao: funcao.funcao, variavel: origem?.variavel ?? cause.variavel });
+      const variavel = origem && "variavel" in origem ? origem.variavel : cause.variavel;
+      pendencias.push({ funcao: funcao.funcao, variavel });
     }
   }
 

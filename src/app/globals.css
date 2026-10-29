@@ -116,5 +116,73 @@ html.dark .app-header {
 .situacao-CONCLUIDO {
   background: #f3f4f6;
   border-color: #d1d5db;
-  color: #6b7280;
+  color: #4b5563;
+}
+.situacao-AGUARDANDO_APROVACAO {
+  background: #e0f2fe;
+  border-color: #0284c7;
+  color: #075985;
+}
+.situacao-DEVOLVIDA {
+  background: #ffe4e6;
+  border-color: #e11d48;
+  color: #9f1239;
+}
+
+/* Tema escuro: mesmo matiz, fundo translúcido e texto claro (≥ 4,5:1 sobre a superfície escura). */
+[data-ds-scheme="dark"] .situacao-SEM_ESCALA {
+  background: rgba(156, 163, 175, 0.16);
+  border-color: #9ca3af;
+  color: #e5e7eb;
+}
+[data-ds-scheme="dark"] .situacao-RASCUNHO {
+  background: rgba(217, 119, 6, 0.2);
+  border-color: #f59e0b;
+  color: #fcd34d;
+}
+[data-ds-scheme="dark"] .situacao-AGUARDANDO_APROVACAO {
+  background: rgba(14, 165, 233, 0.2);
+  border-color: #38bdf8;
+  color: #bae6fd;
+}
+[data-ds-scheme="dark"] .situacao-DEVOLVIDA {
+  background: rgba(244, 63, 94, 0.2);
+  border-color: #fb7185;
+  color: #fecdd3;
+}
+[data-ds-scheme="dark"] .situacao-APROVADA {
+  background: rgba(59, 130, 246, 0.22);
+  border-color: #7ea2ff;
+  color: #c7d7fe;
+}
+[data-ds-scheme="dark"] .situacao-COMUNICADA {
+  background: rgba(22, 163, 74, 0.2);
+  border-color: #4ade80;
+  color: #bbf7d0;
+}
+[data-ds-scheme="dark"] .situacao-CANCELADO {
+  background: rgba(147, 51, 234, 0.22);
+  border-color: #c084fc;
+  color: #e9d5ff;
+}
+[data-ds-scheme="dark"] .situacao-CONCLUIDO {
+  background: rgba(107, 114, 128, 0.18);
+  border-color: #6b7280;
+  color: #d1d5db;
+}
+
+/* Cartão do evento no Calendário é link: o destaque no hover não muda a cor da situação. */
+a[class*="situacao-"]:hover {
+  box-shadow: var(--ds-shadow-2);
+}
+
+/* Painel lateral (<dialog>): entra da direita em 200 ms; o design-system zera com prefers-reduced-motion. */
+.painel-lateral[open] {
+  animation: painel-entra var(--ds-dur-2) var(--ds-ease-out);
+}
+@keyframes painel-entra {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
 }

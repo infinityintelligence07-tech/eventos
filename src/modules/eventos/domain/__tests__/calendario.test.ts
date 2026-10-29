@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   dataEmSaoPaulo,
   deslocarMes,
+  escalaEmMontagem,
   type EventoNoCalendario,
   mesDoTexto,
   nomeDoMes,
@@ -10,6 +11,7 @@ import {
   pendenciasDosEventos,
   semanasDoMes,
   situacaoNoCalendario,
+  type StatusEscala,
   ultimoDia,
 } from "../calendario";
 
@@ -76,6 +78,28 @@ describe("situação do evento no calendário", () => {
     expect(situacaoNoCalendario({ status: "PLANEJADO", statusEscala: "SEM_ESCALA" })).toBe("SEM_ESCALA");
     expect(situacaoNoCalendario({ status: "EM_ANDAMENTO", statusEscala: "RASCUNHO" })).toBe("RASCUNHO");
   });
+
+  it("aguardando aprovação e devolvida aparecem como tal; concluído ou cancelado vencem", () => {
+    expect(situacaoNoCalendario({ status: "PLANEJADO", statusEscala: "AGUARDANDO_APROVACAO" })).toBe("AGUARDANDO_APROVACAO");
+    expect(situacaoNoCalendario({ status: "EM_ANDAMENTO", statusEscala: "DEVOLVIDA" })).toBe("DEVOLVIDA");
+    expect(situacaoNoCalendario({ status: "CONCLUIDO", statusEscala: "AGUARDANDO_APROVACAO" })).toBe("CONCLUIDO");
+    expect(situacaoNoCalendario({ status: "CONCLUIDO", statusEscala: "DEVOLVIDA" })).toBe("CONCLUIDO");
+    expect(situacaoNoCalendario({ status: "CANCELADO", statusEscala: "DEVOLVIDA" })).toBe("CANCELADO");
+  });
+
+  it("valor fora do CHECK é erro, não cor errada", () => {
+    expect(() => situacaoNoCalendario({ status: "PLANEJADO", statusEscala: "ESCALADA" as StatusEscala })).toThrow(/desconhecido/);
+    expect(() => escalaEmMontagem("ESCALADA" as StatusEscala)).toThrow(/desconhecido/);
+  });
+
+  it("em montagem: sem escala, rascunho e devolvida; com a líder ou aprovada, não", () => {
+    expect(escalaEmMontagem("SEM_ESCALA")).toBe(true);
+    expect(escalaEmMontagem("RASCUNHO")).toBe(true);
+    expect(escalaEmMontagem("DEVOLVIDA")).toBe(true);
+    expect(escalaEmMontagem("AGUARDANDO_APROVACAO")).toBe(false);
+    expect(escalaEmMontagem("APROVADA")).toBe(false);
+    expect(escalaEmMontagem("COMUNICADA")).toBe(false);
+  });
 });
 
 describe("precisa de ação", () => {
@@ -98,5 +122,18 @@ describe("precisa de ação", () => {
     expect(ids(pendencias.confrontoSemFila)).toEqual(["conf"]);
     expect(ids(pendencias.escalasAMontar)).toEqual(["conf", "conf-com-fila"]);
     expect(ids(pendencias.semCodigo)).toEqual(["longe"]);
+  });
+
+  it("devolvida volta para a montagem; aguardando aprovação está com a líder", () => {
+    const pendencias = pendenciasDosEventos(
+      [
+        evento({ id: "devolvida", statusEscala: "DEVOLVIDA" }),
+        evento({ id: "com-a-lider", statusEscala: "AGUARDANDO_APROVACAO" }),
+      ],
+      hoje,
+    );
+    const ids = (lista: EventoNoCalendario[]) => lista.map((item) => item.id);
+    expect(ids(pendencias.escalasAMontar)).toEqual(["devolvida"]);
+    expect(ids(pendencias.confrontoSemFila)).toEqual(["devolvida"]);
   });
 });

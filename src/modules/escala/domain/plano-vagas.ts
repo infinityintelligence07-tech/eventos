@@ -2,8 +2,9 @@ import type { ResultadoVagas } from "./vagas";
 
 // Compara as vagas calculadas pela regra com as linhas de escala que a regra já gerou
 // e diz o que mudar. Linhas MANUAIS nunca entram aqui: o ajuste do time não é desfeito.
+// Linha com número confirmado por quem monta também não muda: só ganha um aviso quando a sugestão muda.
 
-export type LinhaDaRegra = { id: string; funcao: string; quantidade: number; convocacoes: number };
+export type LinhaDaRegra = { id: string; funcao: string; quantidade: number; convocacoes: number; confirmada?: boolean };
 
 export type PlanoVagas = {
   inserir: { funcao: string; quantidade: number }[];
@@ -14,7 +15,7 @@ export type PlanoVagas = {
 
 export function planejarVagas(atuais: readonly LinhaDaRegra[], resultado: ResultadoVagas): PlanoVagas {
   const plano: PlanoVagas = { inserir: [], atualizar: [], remover: [], avisos: [] };
-  // Função sem dado para calcular (ex.: fila não informada): mantém o que existe.
+  // Função sem dado para calcular (ex.: fila não informada) ou digitada em cada evento: mantém o que existe.
   const pendentes = new Set(resultado.pendencias.map((pendencia) => pendencia.funcao));
   const calculadas = new Map(resultado.vagas.map((vaga) => [vaga.funcao, vaga.quantidade]));
   const vistas = new Set<string>();
@@ -22,6 +23,10 @@ export function planejarVagas(atuais: readonly LinhaDaRegra[], resultado: Result
   const removerOuAvisar = (linha: LinhaDaRegra, motivo: string): void => {
     if (linha.convocacoes > 0) {
       plano.avisos.push(`${linha.funcao}: ${motivo}, mas tem ${linha.convocacoes} convocação(ões); mantida`);
+      return;
+    }
+    if (linha.confirmada) {
+      plano.avisos.push(`${linha.funcao}: ${motivo}, mas o número foi confirmado; mantida`);
       return;
     }
     plano.remover.push({ id: linha.id, funcao: linha.funcao });
@@ -42,6 +47,10 @@ export function planejarVagas(atuais: readonly LinhaDaRegra[], resultado: Result
       continue;
     }
     if (quantidade !== linha.quantidade) {
+      if (linha.confirmada) {
+        plano.avisos.push(`${linha.funcao}: a sugestão agora é ${quantidade} (confirmado ${linha.quantidade}); mantida`);
+        continue;
+      }
       plano.atualizar.push({ id: linha.id, funcao: linha.funcao, quantidade });
       if (quantidade < linha.convocacoes) {
         plano.avisos.push(

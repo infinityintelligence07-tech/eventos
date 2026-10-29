@@ -1,0 +1,77 @@
+export {
+  type AcaoDeAuditoria,
+  CATEGORIAS_DO_ITEM,
+  type CategoriaDoItem,
+  exigeMotivo,
+  ordenarParaAuditoria,
+  rotuloDaAuditoria,
+  rotuloDaCategoriaDoItem,
+  type SituacaoDaSolicitacao,
+  type StatusAuditoria,
+  type StatusFinanceiro,
+  textoDoFinanceiro,
+  transicaoDaAuditoria,
+} from "./domain/auditoria";
+export {
+  type AlertaDeCusto,
+  alertasDoConsumo,
+  calcularDeslocamento,
+  calcularSolicitacao,
+  type DeslocamentoCalculado,
+  type NivelDeExcecao,
+  piorNivel,
+  rotuloDoNivel,
+  type SolicitacaoCalculada,
+  totalDoItem,
+} from "./domain/calculo";
+export {
+  agruparVigencias,
+  CATEGORIAS_DA_REGRA,
+  type CategoriaDaRegra,
+  descricaoDosParametros,
+  precoDoLitro,
+  type RegraDeCusto,
+  type RegrasDoCalculo,
+  regrasAplicaveis,
+  regrasDoCalculo,
+  rotuloDaCategoriaDaRegra,
+  rotuloDaUnidade,
+  type UnidadeDaRegra,
+  vigenciaNaData,
+} from "./domain/regras";
+export { CustosMudouError, ErroDosCustos, SolicitacaoJaExisteError } from "./domain/erros";
+export {
+  type AprovarSolicitacao,
+  aprovarSolicitacaoSchema,
+  centavosDoTexto,
+  type CorrigirSolicitacao,
+  corrigirSolicitacaoSchema,
+  type CriarVigenciaDeRegra,
+  criarVigenciaDeRegraSchema,
+  deslocamentoSchema,
+  desativarRegraSchema,
+  type EntradaDeDeslocamento,
+  type EntradaDeItem,
+  itemSchema,
+  type ReabrirAuditoria,
+  reabrirAuditoriaSchema,
+  type RegistrarSolicitacao,
+  registrarSolicitacaoSchema,
+  type ReprovarSolicitacao,
+  reprovarSolicitacaoSchema,
+} from "./domain/schemas";
+export * as servicoDeSolicitacoes from "./service/solicitacoes";
+export * as servicoDeRegras from "./service/regras";
+export {
+  criarRepositorioSolicitacoes,
+  type DeslocamentoGravado,
+  type DetalheDaSolicitacao,
+  type EventoParaRegistro,
+  type FiltroDaFila,
+  type HistoricoDaSolicitacao,
+  type ItemGravado,
+  type NumerosDaFila,
+  type PessoaParaRegistro,
+  type SolicitacaoDaFila,
+} from "./repository/solicitacoes-repository";
+export { criarRepositorioRegras, type RegraComTipo } from "./repository/regras-repository";

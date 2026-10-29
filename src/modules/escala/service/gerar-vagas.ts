@@ -35,7 +35,8 @@ export type ResultadoGerarVagas =
       funcoesNaoCadastradas: string[];
     };
 
-const ESCALA_FECHADA = new Set(["APROVADA", "COMUNICADA"]);
+// Com a líder (AGUARDANDO_APROVACAO) a escala fica travada até aprovar ou devolver (docs/07 §4.1).
+const ESCALA_FECHADA = new Set(["AGUARDANDO_APROVACAO", "APROVADA", "COMUNICADA"]);
 const EVENTO_ENCERRADO = new Set(["CANCELADO", "CONCLUIDO"]);
 
 export async function gerarVagasDoEvento(repositorio: RepositorioVagas, eventoId: string): Promise<ResultadoGerarVagas> {

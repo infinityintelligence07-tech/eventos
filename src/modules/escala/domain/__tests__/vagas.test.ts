@@ -94,3 +94,32 @@ describe("validação da regra (tela de configurações)", () => {
     ).toEqual([{ funcao: "AB", quantidade: 3 }]);
   });
 });
+
+describe("função digitada em cada evento (Staff do Confronto)", () => {
+  const confrontoComStaff = {
+    funcoes: [
+      { funcao: "LIDER", formula: "ceil(expectativa_publico / 25)" },
+      { funcao: "STAFF", digitado: true },
+      { funcao: "APOIO", formula: "2 * STAFF" },
+      { funcao: "DJ", fixo: 1 },
+    ],
+  };
+
+  it("não gera número: entra como pendência de digitar, e quem depende dela também fica pendente", () => {
+    expect(calcularVagas(confrontoComStaff, { expectativa_publico: 180 })).toEqual({
+      vagas: [
+        { funcao: "LIDER", quantidade: 8 },
+        { funcao: "DJ", quantidade: 1 },
+      ],
+      pendencias: [
+        { funcao: "STAFF", digitar: true },
+        { funcao: "APOIO", variavel: "STAFF" },
+      ],
+    });
+  });
+
+  it("aceita só digitado: true, sem número junto", () => {
+    expect(() => compilarRegraVagas({ funcoes: [{ funcao: "STAFF", digitado: false }] })).toThrow(RegraVagasInvalidaError);
+    expect(() => compilarRegraVagas({ funcoes: [{ funcao: "STAFF", digitado: true, fixo: 3 }] })).toThrow(RegraVagasInvalidaError);
+  });
+});

@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
-export default function Inicio() {
-  redirect("/calendario");
+export default function Raiz() {
+  redirect("/inicio");
 }

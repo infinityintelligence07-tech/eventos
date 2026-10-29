@@ -1,0 +1,7 @@
+"use client";
+
+import { ErroDaPagina } from "./_componentes/ui/erro-da-pagina";
+
+export default function ErroNaTela({ reset }: { error: Error; reset: () => void }) {
+  return <ErroDaPagina tela="esta tela" aoTentarDeNovo={reset} />;
+}

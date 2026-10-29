@@ -2,7 +2,17 @@ import { describe, expect, it } from "vitest";
 
 import { modelosCopyDaMigration } from "@/test/seeds";
 
-import { formatarPeriodo, gerarCopy, primeiroNome, saudacao, validarModelo } from "../copy";
+import {
+  formatarDataEHora,
+  formatarHorario,
+  formatarPeriodo,
+  gerarCopy,
+  ondePreencher,
+  primeiroNome,
+  rotuloDaVariavel,
+  saudacao,
+  validarModelo,
+} from "../copy";
 
 const modelos = modelosCopyDaMigration();
 
@@ -71,9 +81,47 @@ describe("gerarCopy", () => {
 
 describe("validarModelo", () => {
   it("acusa variável inexistente, marcador quebrado e chave sem par", () => {
-    expect(validarModelo("{{evento.cidad}}")).toEqual(["{{evento.cidad}} não existe"]);
+    expect(validarModelo("{{evento.cidad}}")).toEqual(["O campo {{evento.cidad}} não existe. Use os botões de Inserir campo."]);
     expect(validarModelo("{{genero:só}}")).toHaveLength(1);
-    expect(validarModelo("Olá {{pessoa.nome}")).toEqual(["há {{ ou }} sem par"]);
+    expect(validarModelo("Olá {{pessoa.nome}")).toEqual(["Há {{ ou }} sem par."]);
+  });
+
+  it("aceita os campos de voo", () => {
+    expect(validarModelo("Ida: {{voo.ida}} | Volta: {{voo.volta}}")).toEqual([]);
+  });
+});
+
+describe("partes da copy e catálogo de campos", () => {
+  it("marca o lugar de cada dado que falta, para a tela destacar", () => {
+    const copy = gerarCopy("Oi {{pessoa.primeiro_nome}}, voo: {{voo.ida}}.", { pessoa: { primeiro_nome: "Ana" } });
+    expect(copy.partes).toEqual([
+      { tipo: "texto", texto: "Oi Ana, voo: " },
+      { tipo: "falta", variavel: "voo.ida", original: "{{voo.ida}}" },
+      { tipo: "texto", texto: "." },
+    ]);
+    expect(copy.texto).toBe("Oi Ana, voo: {{voo.ida}}.");
+  });
+
+  it("o gênero sem sexo aponta o sexo da pessoa", () => {
+    const copy = gerarCopy("Você está {{genero:ESCALADO|ESCALADA}}", { pessoa: { sexo: null } });
+    expect(copy.partes.at(-1)).toEqual({ tipo: "falta", variavel: "pessoa.sexo", original: "{{genero:ESCALADO|ESCALADA}}" });
+  });
+
+  it("rótulo e lugar de preenchimento de cada campo", () => {
+    expect(rotuloDaVariavel("voo.ida")).toBe("voo de ida");
+    expect(rotuloDaVariavel("pessoa.sexo")).toBe("sexo da pessoa");
+    expect(rotuloDaVariavel("inventado")).toBe("inventado");
+    expect(ondePreencher("voo.ida")).toBe("LOGISTICA");
+    expect(ondePreencher("link_custos")).toBe("CONFIGURACOES");
+    expect(ondePreencher("inventado")).toBeNull();
+  });
+
+  it("a saudação não entra no hash (muda com a hora, não com os dados)", () => {
+    const modelo = "{{saudacao}}, {{pessoa.nome}}";
+    const manha = gerarCopy(modelo, { ...dados, saudacao: "Bom dia" });
+    const noite = gerarCopy(modelo, { ...dados, saudacao: "Boa noite" });
+    expect(manha.texto).not.toBe(noite.texto);
+    expect(manha.dadosHash).toBe(noite.dadosHash);
   });
 });
 
@@ -96,5 +144,15 @@ describe("formatação", () => {
   it("primeiro nome", () => {
     expect(primeiroNome("MARIA DA SILVA")).toBe("Maria");
     expect(primeiroNome("  joão pedro ")).toBe("João");
+  });
+
+  it("horário de chegada", () => {
+    expect(formatarHorario("08:00")).toBe("8h");
+    expect(formatarHorario("07:30:00")).toBe("7h30");
+    expect(() => formatarHorario("oito")).toThrow();
+  });
+
+  it("data e hora no horário de Brasília", () => {
+    expect(formatarDataEHora(new Date("2026-12-11T11:10:00Z"))).toBe("11/12 às 08:10");
   });
 });

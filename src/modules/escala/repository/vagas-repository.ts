@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 
-import type { Db } from "@/core/db/database";
+import type { Executor } from "@/core/db/database";
 import { convocacao, escala, evento, funcao, tipoEvento } from "@/core/db/schema/eventos";
 
 import type { RepositorioVagas, TransacaoVagas } from "../service/gerar-vagas";
@@ -8,7 +8,8 @@ import type { RepositorioVagas, TransacaoVagas } from "../service/gerar-vagas";
 /** Horário das vagas geradas pela regra até o time ajustar a escala. */
 export const HORARIO_PADRAO = { inicio: "08:00", fim: "18:00" } as const;
 
-export function criarRepositorioVagas(db: Db): RepositorioVagas {
+/** Com um Executor de transação, `db.transaction` vira savepoint dentro da transação do fluxo. */
+export function criarRepositorioVagas(db: Executor): RepositorioVagas {
   return {
     comEventoTravado(eventoId, trabalho) {
       return db.transaction(async (tx) => {
@@ -43,6 +44,7 @@ export function criarRepositorioVagas(db: Db): RepositorioVagas {
             funcao: funcao.codigo,
             quantidade: escala.quantidadeVagas,
             convocacoes: sql<number>`(select count(*)::int from ${convocacao} where ${convocacao.escalaId} = ${escala.id})`,
+            confirmada: sql<boolean>`${escala.confirmadaEm} is not null`,
           })
           .from(escala)
           .innerJoin(funcao, eq(funcao.id, escala.funcaoId))

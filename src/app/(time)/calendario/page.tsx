@@ -1,7 +1,6 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import type { ReactNode } from "react";
 
 import {
   type Calendario,
@@ -13,7 +12,11 @@ import {
   type SituacaoNoCalendario,
 } from "@/modules/eventos";
 
-import { CartaoDoEvento, diaEMes, rotuloCurto, rotuloDaSituacao } from "./_componentes/cartao-do-evento";
+import { CabecalhoDaPagina } from "../_componentes/ui/cabecalho";
+import { CARTAO, classesDoBotao } from "../_componentes/ui/classes";
+import { CartaoDeNumero, CartaoDePendencia, type ExemploDePendencia } from "../_componentes/ui/cartao";
+import { ChipDaEscala } from "../_componentes/ui/situacao";
+import { CartaoDoEvento, diaEMes, rotuloCurto } from "./_componentes/cartao-do-evento";
 import { Filtros } from "./_componentes/filtros";
 
 export const dynamic = "force-dynamic";
@@ -22,10 +25,16 @@ export const metadata: Metadata = { title: "Calendário" };
 type Parametros = { mes?: string; polo?: string; tipo?: string };
 
 const DIAS_DA_SEMANA = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-const LEGENDA: SituacaoNoCalendario[] = ["SEM_ESCALA", "RASCUNHO", "APROVADA", "COMUNICADA", "CANCELADO"];
-const CARTAO = "rounded-[var(--ds-radius-lg)] bg-[var(--ds-surface)] shadow-[var(--ds-shadow-1)]";
-const BOTAO =
-  "inline-flex h-10 items-center justify-center rounded-[10px] border border-[var(--ds-separator)] bg-[var(--ds-surface)] px-3 text-[14px] font-medium text-[var(--ds-label)] hover:bg-[var(--ds-surface-2)]";
+const LEGENDA: SituacaoNoCalendario[] = [
+  "SEM_ESCALA",
+  "RASCUNHO",
+  "AGUARDANDO_APROVACAO",
+  "DEVOLVIDA",
+  "APROVADA",
+  "COMUNICADA",
+  "CANCELADO",
+];
+const BOTAO = classesDoBotao();
 
 function enderecoDoMes(mes: string, { polo, tipo }: Calendario["filtros"]): string {
   const parametros = new URLSearchParams({ mes });
@@ -46,18 +55,6 @@ function quandoSincronizou(instante: Date | null): string {
   return `Turmas do IAM Control sincronizadas em ${quando.replace(", ", " às ")}.`;
 }
 
-function Numero({ valor, rotulo, de }: { valor: number; rotulo: string; de?: number }) {
-  return (
-    <div className={`${CARTAO} px-5 py-4`}>
-      <p className="text-[12px] font-medium tracking-[0.012em] text-[var(--ds-label-2)]">{rotulo}</p>
-      <p className="mt-1 text-[28px] font-semibold leading-[1.2] tracking-[-0.02em] tabular-nums">
-        {valor.toLocaleString("pt-BR")}
-        {de !== undefined && <span className="text-[17px] font-medium text-[var(--ds-label-2)]"> de {de.toLocaleString("pt-BR")}</span>}
-      </p>
-    </div>
-  );
-}
-
 function resumoDasMasterclasses(ativas: number, canceladas: number): string {
   const plural = (quantidade: number, singular: string, varias: string) => `${quantidade} ${quantidade === 1 ? singular : varias}`;
   if (ativas === 0) return plural(canceladas, "Masterclass cancelada", "Masterclasses canceladas");
@@ -72,7 +69,7 @@ function Dia({ dia }: { dia: DiaDoCalendario }) {
     <td className={`h-[132px] border border-[var(--ds-separator)] p-1.5 align-top ${dia.doMes ? "" : "bg-[var(--ds-surface-2)]"}`}>
       <p
         className={`mb-1 inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1.5 text-[12px] font-semibold tabular-nums ${
-          dia.hoje ? "bg-[var(--ds-brand)] text-white" : dia.doMes ? "text-[var(--ds-label)]" : "text-[var(--ds-label-3)]"
+          dia.hoje ? "bg-[var(--ds-brand)] text-white" : dia.doMes ? "text-[var(--ds-label)]" : "text-[var(--ds-label-2)]"
         }`}
       >
         {Number(dia.data.slice(8, 10))}
@@ -98,46 +95,18 @@ function Dia({ dia }: { dia: DiaDoCalendario }) {
   );
 }
 
-function Pendencia({ titulo, explicacao, eventos }: { titulo: string; explicacao: string; eventos: EventoNoCalendario[] }) {
-  const LIMITE = 6;
-  return (
-    <section className={`${CARTAO} p-5`}>
-      <h3 className="flex items-center justify-between gap-2 text-[15px] font-semibold">
-        {titulo}
-        <span
-          className={`rounded-full px-2 py-0.5 text-[12px] font-semibold tabular-nums ${
-            eventos.length > 0 ? "bg-[var(--ds-orange-soft)] text-[var(--ds-orange-deep)]" : "bg-[var(--ds-green-soft)] text-[var(--ds-green-deep)]"
-          }`}
-        >
-          {eventos.length}
-        </span>
-      </h3>
-      <p className="mt-0.5 text-[12px] text-[var(--ds-label-2)]">{explicacao}</p>
-      {eventos.length > 0 && (
-        <ul className="mt-2 flex flex-col gap-1 text-[13px]">
-          {eventos.slice(0, LIMITE).map((evento) => (
-            <li key={evento.id} className="flex justify-between gap-2">
-              <span>
-                {rotuloCurto(evento)}
-                {evento.poloCodigo && <span className="text-[var(--ds-label-2)]"> · {evento.poloCodigo}</span>}
-              </span>
-              <span className="shrink-0 tabular-nums text-[var(--ds-label-2)]">{diaEMes(evento.dataInicio)}</span>
-            </li>
-          ))}
-          {eventos.length > LIMITE && <li className="text-[12px] text-[var(--ds-label-2)]">e mais {eventos.length - LIMITE}</li>}
-        </ul>
-      )}
-    </section>
-  );
-}
-
-function Cabecalho({ children, subtitulo }: { children: ReactNode; subtitulo: string }) {
-  return (
-    <div className="mb-5">
-      <h1 className="text-[28px] font-bold leading-[1.2] tracking-[-0.02em]">{children}</h1>
-      <p className="mt-1 text-[14px] text-[var(--ds-label-2)]">{subtitulo}</p>
-    </div>
-  );
+function exemplosDaPendencia(eventos: EventoNoCalendario[]): ExemploDePendencia[] {
+  return eventos.map((evento) => ({
+    chave: evento.id,
+    href: `/eventos/${evento.id}`,
+    rotulo: (
+      <>
+        {rotuloCurto(evento)}
+        {evento.poloCodigo && <span className="text-[var(--ds-label-2)]"> · {evento.poloCodigo}</span>}
+      </>
+    ),
+    detalhe: diaEMes(evento.dataInicio),
+  }));
 }
 
 export default async function PaginaCalendario({ searchParams }: { searchParams: Promise<Parametros> }) {
@@ -150,13 +119,13 @@ export default async function PaginaCalendario({ searchParams }: { searchParams:
 
   return (
     <>
-      <Cabecalho subtitulo={quandoSincronizou(calendario.ultimaSincronizacao)}>Calendário</Cabecalho>
+      <CabecalhoDaPagina titulo="Calendário" subtitulo={quandoSincronizou(calendario.ultimaSincronizacao)} />
 
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Numero rotulo="Eventos no mês" valor={resumo.eventos} />
-        <Numero rotulo="Masterclasses no mês" valor={resumo.masterclasses} />
-        <Numero rotulo="Vagas sugeridas" valor={resumo.vagas} />
-        <Numero rotulo="Escalas aprovadas" valor={resumo.escalasAprovadas} de={resumo.eventos} />
+        <CartaoDeNumero rotulo="Eventos no mês" valor={resumo.eventos} />
+        <CartaoDeNumero rotulo="Masterclasses no mês" valor={resumo.masterclasses} />
+        <CartaoDeNumero rotulo="Vagas sugeridas" valor={resumo.vagas} />
+        <CartaoDeNumero rotulo="Escalas aprovadas" valor={resumo.escalasAprovadas} de={resumo.eventos} />
       </div>
 
       <section className="mb-5" aria-labelledby="precisa-de-acao">
@@ -164,20 +133,20 @@ export default async function PaginaCalendario({ searchParams }: { searchParams:
           Precisa de ação
         </h2>
         <div className="grid gap-3 md:grid-cols-3">
-          <Pendencia
+          <CartaoDePendencia
             titulo="Escalas a montar"
             explicacao={`Eventos nos próximos ${DIAS_PARA_MONTAR_ESCALA} dias com a escala ainda não aprovada.`}
-            eventos={pendencias.escalasAMontar}
+            exemplos={exemplosDaPendencia(pendencias.escalasAMontar)}
           />
-          <Pendencia
+          <CartaoDePendencia
             titulo="Confronto sem fila"
             explicacao="Sem o número de pessoas na fila, as vagas de pai e mãe não são calculadas."
-            eventos={pendencias.confrontoSemFila}
+            exemplos={exemplosDaPendencia(pendencias.confrontoSemFila)}
           />
-          <Pendencia
+          <CartaoDePendencia
             titulo="Eventos sem código"
             explicacao="Falta a edição ou o polo no IAM Control, ou outro evento ativo usa o mesmo código."
-            eventos={pendencias.semCodigo}
+            exemplos={exemplosDaPendencia(pendencias.semCodigo)}
           />
         </div>
       </section>
@@ -208,8 +177,8 @@ export default async function PaginaCalendario({ searchParams }: { searchParams:
 
         <ul className="mb-3 flex flex-wrap gap-2 text-[12px]" aria-label="Legenda">
           {LEGENDA.map((situacao) => (
-            <li key={situacao} className={`situacao-${situacao} rounded-[7px] border border-l-[3px] px-2 py-0.5 font-medium`}>
-              {rotuloDaSituacao(situacao)}
+            <li key={situacao}>
+              <ChipDaEscala situacao={situacao} />
             </li>
           ))}
         </ul>
@@ -236,7 +205,7 @@ export default async function PaginaCalendario({ searchParams }: { searchParams:
             </tbody>
           </table>
         </div>
-        <p className="mt-3 text-[12px] text-[var(--ds-label-2)]">Passe o mouse sobre um evento para ver código, período, público e vagas.</p>
+        <p className="mt-3 text-[12px] text-[var(--ds-label-2)]">Clique num evento para abrir. Passe o mouse ou o foco do teclado para ver código, período, público e vagas.</p>
       </section>
     </>
   );

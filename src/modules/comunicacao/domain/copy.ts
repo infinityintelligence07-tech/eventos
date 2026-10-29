@@ -8,33 +8,63 @@ import { createHash } from "node:crypto";
 export type ValorCopy = string | number | null | undefined;
 export type DadosCopy = { [chave: string]: ValorCopy | DadosCopy };
 
+/** Trecho do texto pronto ou o lugar de um dado que falta (a tela destaca como `[falta: voo de ida]`). */
+export type ParteDaCopy = { tipo: "texto"; texto: string } | { tipo: "falta"; variavel: string; original: string };
+
 export type CopyGerada = {
   texto: string;
+  partes: ParteDaCopy[];
   faltando: string[];
   pronta: boolean;
   /** Hash só dos dados que o modelo usa: muda quando a copy enviada fica desatualizada. */
   dadosHash: string;
 };
 
-/** Variáveis disponíveis para quem edita os modelos. */
+/** Onde o time preenche o dado que falta (para o alerta "Preencher em …"). */
+export type OndePreencher = "AUTOMATICO" | "IAM_CONTROL" | "EVENTO" | "ESCALA" | "PESSOAS" | "LOGISTICA" | "CONFIGURACOES";
+
+type Variavel = { rotulo: string; descricao: string; onde: OndePreencher };
+
+/** Variáveis disponíveis para quem edita os modelos. `rotulo` completa "falta …" e os botões "Inserir campo". */
 export const VARIAVEIS_COPY = {
-  saudacao: "Bom dia / Boa tarde / Boa noite, pela hora da geração",
-  link_custos: "Link da solicitação de custo da pessoa neste evento",
-  "evento.tipo": "Nome do tipo de evento (Confronto, ASM...)",
-  "evento.codigo": "Código do evento (ASM_POA_234)",
-  "evento.cidade": "Cidade do evento",
-  "evento.data": "Período do evento (12 a 14 de dezembro)",
-  "evento.horario": "Horário de chegada da equipe",
-  "local.nome": "Nome do local do evento",
-  "pessoa.nome": "Nome completo",
-  "pessoa.primeiro_nome": "Primeiro nome",
-  "pessoa.funcao": "Função na escala",
-  "pessoa.deslocamento": "Como a pessoa vai (carro próprio, carona, ônibus, voo)",
-  "pessoa.sexo": "M ou F (usado por {{genero:...}})",
-  "hospedagem.hotel": "Hotel",
-  "hospedagem.endereco": "Endereço do hotel",
-  "hospedagem.colega": "Colega de quarto",
-} as const;
+  saudacao: { rotulo: "saudação", descricao: "Bom dia / Boa tarde / Boa noite, pela hora da geração", onde: "AUTOMATICO" },
+  link_custos: { rotulo: "link do formulário de custos", descricao: "Link do formulário de custos (Configurações › Modelos de copy)", onde: "CONFIGURACOES" },
+  "evento.tipo": { rotulo: "tipo do evento", descricao: "Nome do tipo de evento (Confronto, ASM...)", onde: "IAM_CONTROL" },
+  "evento.codigo": { rotulo: "código do evento", descricao: "Código do evento (ASM_POA_234)", onde: "IAM_CONTROL" },
+  "evento.cidade": { rotulo: "cidade do evento", descricao: "Cidade do local do evento", onde: "EVENTO" },
+  "evento.data": { rotulo: "datas do evento", descricao: "Período do evento (12 a 14 de dezembro)", onde: "IAM_CONTROL" },
+  "evento.horario": { rotulo: "horário de chegada", descricao: "Horário de chegada da pessoa (início da vaga na escala)", onde: "ESCALA" },
+  "local.nome": { rotulo: "local do evento", descricao: "Nome do local do evento", onde: "EVENTO" },
+  "pessoa.nome": { rotulo: "nome", descricao: "Nome completo", onde: "PESSOAS" },
+  "pessoa.primeiro_nome": { rotulo: "primeiro nome", descricao: "Primeiro nome", onde: "PESSOAS" },
+  "pessoa.funcao": { rotulo: "função", descricao: "Função na escala", onde: "ESCALA" },
+  "pessoa.deslocamento": { rotulo: "deslocamento", descricao: "Como a pessoa vai (carro próprio, carona, ônibus, voo)", onde: "ESCALA" },
+  "pessoa.sexo": { rotulo: "sexo da pessoa", descricao: "M ou F (usado por {{genero:...}})", onde: "PESSOAS" },
+  "hospedagem.hotel": { rotulo: "hotel", descricao: "Hotel ou apartamento onde a pessoa dorme", onde: "LOGISTICA" },
+  "hospedagem.endereco": { rotulo: "endereço do hotel", descricao: "Endereço do hotel", onde: "LOGISTICA" },
+  "hospedagem.colega": { rotulo: "colega de quarto", descricao: "Colega(s) de quarto", onde: "LOGISTICA" },
+  "voo.ida": { rotulo: "voo de ida", descricao: "Voo de ida emitido (número, data e hora, trecho e localizador)", onde: "LOGISTICA" },
+  "voo.volta": { rotulo: "voo de volta", descricao: "Voo de volta emitido (número, data e hora, trecho e localizador)", onde: "LOGISTICA" },
+} as const satisfies Record<string, Variavel>;
+
+export type VariavelDaCopy = keyof typeof VARIAVEIS_COPY;
+
+function variavelConhecida(caminho: string): caminho is VariavelDaCopy {
+  return Object.hasOwn(VARIAVEIS_COPY, caminho);
+}
+
+/** "voo de ida"; variável fora do catálogo volta como está. */
+export function rotuloDaVariavel(caminho: string): string {
+  return variavelConhecida(caminho) ? VARIAVEIS_COPY[caminho].rotulo : caminho;
+}
+
+/** Onde preencher; variável fora do catálogo só se corrige no modelo. */
+export function ondePreencher(caminho: string): OndePreencher | null {
+  return variavelConhecida(caminho) ? VARIAVEIS_COPY[caminho].onde : null;
+}
+
+/** Variáveis que mudam sem o dado mudar (a saudação depende da hora): ficam fora do hash. */
+const FORA_DO_HASH = new Set<string>(["saudacao"]);
 
 const MARCADOR = /\{\{\s*([^{}]+?)\s*\}\}/g;
 const CAMINHO = /^[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)*$/;
@@ -76,54 +106,77 @@ export function validarModelo(corpo: string): string[] {
   for (const [, conteudo] of corpo.matchAll(MARCADOR)) {
     const marcador = lerMarcador(conteudo!);
     if (!marcador) {
-      erros.push(`{{${conteudo}}} não é uma variável válida`);
-    } else if (marcador.tipo === "variavel" && !Object.hasOwn(VARIAVEIS_COPY, marcador.caminho)) {
-      erros.push(`{{${marcador.caminho}}} não existe`);
+      erros.push(`{{${conteudo}}} não é um campo válido. Use os botões de Inserir campo.`);
+    } else if (marcador.tipo === "variavel" && !variavelConhecida(marcador.caminho)) {
+      erros.push(`O campo {{${marcador.caminho}}} não existe. Use os botões de Inserir campo.`);
     }
   }
   const abertos = corpo.split("{{").length - 1;
   const fechados = corpo.split("}}").length - 1;
   if (abertos !== fechados) {
-    erros.push("há {{ ou }} sem par");
+    erros.push("Há {{ ou }} sem par.");
   }
   return erros;
+}
+
+type Resolvido = { valor: string } | { falta: string };
+
+function resolver(marcador: Marcador, dados: DadosCopy, usados: Record<string, ValorCopy>): Resolvido {
+  if (marcador.tipo === "genero") {
+    const sexo = buscar(dados, "pessoa.sexo");
+    usados["pessoa.sexo"] = sexo ?? null;
+    if (sexo === "M") return { valor: marcador.masculino };
+    if (sexo === "F") return { valor: marcador.feminino };
+    if (marcador.semSexo !== undefined) return { valor: marcador.semSexo };
+    return { falta: "pessoa.sexo" };
+  }
+
+  const valor = buscar(dados, marcador.caminho);
+  usados[marcador.caminho] = valor ?? null;
+  return temValor(valor) ? { valor: String(valor).trim() } : { falta: marcador.caminho };
 }
 
 export function gerarCopy(corpo: string, dados: DadosCopy): CopyGerada {
   const faltando = new Set<string>();
   const usados: Record<string, ValorCopy> = {};
+  const partes: ParteDaCopy[] = [];
 
-  const texto = corpo.replace(MARCADOR, (original, conteudo: string) => {
-    const marcador = lerMarcador(conteudo);
+  const acrescentarTexto = (texto: string) => {
+    if (!texto) return;
+    const ultima = partes.at(-1);
+    if (ultima?.tipo === "texto") ultima.texto += texto;
+    else partes.push({ tipo: "texto", texto });
+  };
+
+  let cursor = 0;
+  for (const encontrado of corpo.matchAll(MARCADOR)) {
+    const original = encontrado[0];
+    acrescentarTexto(corpo.slice(cursor, encontrado.index));
+    cursor = encontrado.index + original.length;
+
+    const marcador = lerMarcador(encontrado[1] ?? "");
     if (!marcador) {
-      return original;
+      acrescentarTexto(original);
+      continue;
     }
-
-    if (marcador.tipo === "genero") {
-      const sexo = buscar(dados, "pessoa.sexo");
-      usados["pessoa.sexo"] = sexo ?? null;
-      if (sexo === "M") return marcador.masculino;
-      if (sexo === "F") return marcador.feminino;
-      if (marcador.semSexo !== undefined) return marcador.semSexo;
-      faltando.add("pessoa.sexo");
-      return original;
+    const resolvido = resolver(marcador, dados, usados);
+    if ("valor" in resolvido) {
+      acrescentarTexto(resolvido.valor);
+    } else {
+      faltando.add(resolvido.falta);
+      partes.push({ tipo: "falta", variavel: resolvido.falta, original });
     }
+  }
+  acrescentarTexto(corpo.slice(cursor));
 
-    const valor = buscar(dados, marcador.caminho);
-    usados[marcador.caminho] = valor ?? null;
-    if (!temValor(valor)) {
-      faltando.add(marcador.caminho);
-      return original;
-    }
-    return String(valor).trim();
-  });
-
+  const texto = partes.map((parte) => (parte.tipo === "texto" ? parte.texto : parte.original)).join("");
   const lista = [...faltando].sort();
-  return { texto, faltando: lista, pronta: lista.length === 0, dadosHash: hashDosDados(usados) };
+  return { texto, partes, faltando: lista, pronta: lista.length === 0, dadosHash: hashDosDados(usados) };
 }
 
 function hashDosDados(usados: Record<string, ValorCopy>): string {
   const ordenado = Object.keys(usados)
+    .filter((chave) => !FORA_DO_HASH.has(chave))
     .sort()
     .map((chave) => [chave, usados[chave] ?? null]);
   return createHash("sha256").update(JSON.stringify(ordenado)).digest("hex");
@@ -183,4 +236,28 @@ export function formatarPeriodo(inicio: string, fim?: string | null): string {
 export function primeiroNome(nome: string): string {
   const primeiro = nome.trim().split(/\s+/)[0] ?? "";
   return primeiro.charAt(0).toLocaleUpperCase("pt-BR") + primeiro.slice(1).toLocaleLowerCase("pt-BR");
+}
+
+/** "08:00" -> "8h"; "07:30" -> "7h30". */
+export function formatarHorario(hora: string): string {
+  const encontrado = /^(\d{1,2}):(\d{2})/.exec(hora.trim());
+  if (!encontrado) {
+    throw new Error(`Horário fora do formato HH:MM: ${hora}`);
+  }
+  const minutos = encontrado[2] === "00" ? "" : encontrado[2];
+  return `${Number(encontrado[1])}h${minutos}`;
+}
+
+/** "12/12 às 08:10" no horário de Brasília. */
+export function formatarDataEHora(instante: Date): string {
+  const partes = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: FUSO,
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(instante);
+  const parte = (tipo: Intl.DateTimeFormatPartTypes) => partes.find((item) => item.type === tipo)?.value ?? "";
+  return `${parte("day")}/${parte("month")} às ${parte("hour")}:${parte("minute")}`;
 }

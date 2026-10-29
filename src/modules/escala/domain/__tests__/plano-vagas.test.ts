@@ -59,4 +59,24 @@ describe("plano de vagas", () => {
     });
     expect(plano.remover).toEqual([{ id: "b", funcao: "DJ" }]);
   });
+
+  it("linha com número confirmado não muda nem some: só avisa", () => {
+    const plano = planejarVagas(
+      [
+        { ...linha("a", "LIDER", 7), confirmada: true },
+        { ...linha("b", "DJ", 1), confirmada: true },
+      ],
+      { vagas: [{ funcao: "LIDER", quantidade: 8 }], pendencias: [] },
+    );
+    expect(planoVazio(plano)).toBe(true);
+    expect(plano.avisos).toEqual([
+      "LIDER: a sugestão agora é 8 (confirmado 7); mantida",
+      "DJ: a regra não pede mais esta função, mas o número foi confirmado; mantida",
+    ]);
+  });
+
+  it("função digitada não é inserida nem mexida pela regra", () => {
+    const plano = planejarVagas([linha("a", "STAFF", 12)], { vagas: [], pendencias: [{ funcao: "STAFF", digitar: true }] });
+    expect(planoVazio(plano)).toBe(true);
+  });
 });
