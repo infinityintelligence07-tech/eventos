@@ -109,10 +109,12 @@ as tabelas de evento. `TEST_DATABASE_URL=local` usa o Postgres do `banco:local`;
 
 ## Deploy (EasyPanel)
 
+Demo somente leitura em `eventos.iamcontrol.com.br` (Easypanel + Cloudflare Access): [docs/10-publicar-demo.md](docs/10-publicar-demo.md).
+
 Um `Dockerfile`, duas imagens:
 
 ```bash
-docker build --target web    -t eventos-web .     # Next standalone, porta 3000, healthcheck /api/health
+docker build --target web    -t eventos-web .     # (padrão sem --target) Next standalone, porta 3000, healthcheck /api/health
 docker build --target worker -t eventos-worker .  # pg-boss
 ```
 
