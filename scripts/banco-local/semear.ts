@@ -1,10 +1,10 @@
 import { semearCenarios } from "./cenarios";
-import { type Banco, CIDADES, type Executor, gerador, type Pessoa, PESSOA_TESTE_ID, USUARIO_TESTE_ID } from "./comum";
+import { type Banco, CIDADES, type Executor, gerador, type Pessoa, USUARIO_TESTE_ID, USUARIOS_LOCAIS } from "./comum";
 
 // Dados fictícios e claramente falsos: nomes inventados, e-mails @exemplo.test, telefones 90000-xxxx,
 // sem CPF nem PIX. Gerador com semente fixa: cada execução produz as mesmas pessoas com os mesmos ids.
 
-export { PESSOA_TESTE_ID, USUARIO_TESTE_ID } from "./comum";
+export { PESSOA_TESTE_ID, USUARIO_TESTE_ID, USUARIOS_LOCAIS } from "./comum";
 
 const TOTAL_PESSOAS = 60;
 // Cadastros incompletos de propósito (telas de "falta dado").
@@ -76,15 +76,25 @@ export async function semear({ sql: db, drizzle }: Banco): Promise<void> {
     if (!funcoes.has(codigo)) throw new Error(`Função ${codigo} não existe em eventos.funcao.`);
   }
 
-  // Usuário de teste.
-  await db.query(
-    `INSERT INTO core.usuario (id, email, nome_usuario, telefone) VALUES ($1, 'teste@exemplo.test', 'usuario.teste', '(11) 90000-0000')`,
-    [USUARIO_TESTE_ID],
-  );
-  await db.query(
-    `INSERT INTO core.pessoa (id, usuario_id, nome_completo, email, telefone) VALUES ($1, $2, 'Usuário de teste', 'teste@exemplo.test', '(11) 90000-0000')`,
-    [PESSOA_TESTE_ID, USUARIO_TESTE_ID],
-  );
+  // Usuários do seletor "Entrar como" e seus perfis (os perfis vêm da proposta do GH, aplicada com a estrutura).
+  for (const [i, u] of USUARIOS_LOCAIS.entries()) {
+    const telefone = `(11) 90000-000${i}`;
+    await db.query(`INSERT INTO core.usuario (id, email, nome_usuario, telefone) VALUES ($1, $2, $3, $4)`, [
+      u.usuarioId, u.email, u.email.split("@")[0], telefone,
+    ]);
+    if (u.pessoaId) {
+      await db.query(`INSERT INTO core.pessoa (id, usuario_id, nome_completo, email, telefone) VALUES ($1, $2, $3, $4, $5)`, [
+        u.pessoaId, u.usuarioId, u.nome, u.email, telefone,
+      ]);
+    }
+    if (u.perfil) {
+      const r = await db.query(
+        `INSERT INTO core.usuario_perfil (usuario_id, perfil_id, escopo) SELECT $1, id, 'GLOBAL' FROM core.perfil WHERE codigo = $2`,
+        [u.usuarioId, u.perfil],
+      );
+      if (r.rowCount !== 1) throw new Error(`Perfil ${u.perfil} não existe em core.perfil (proposta do GH não aplicada?).`);
+    }
+  }
 
   // Link do formulário de custos usado na copy de escalação (doc 07 §11.1). Só no banco local.
   await db.query(
@@ -193,4 +203,16 @@ export async function semear({ sql: db, drizzle }: Banco): Promise<void> {
   }
 
   await semearCenarios({ sql: db, drizzle }, pessoas, aleatorio);
+
+  // Time B é também staff: a pessoa da primeira solicitação de custo (registrada pelo Time A). Serve para testar
+  // "ninguém audita o próprio custo" (SoD-3) e "quem registrou não audita" (SoD-2).
+  const timeB = USUARIOS_LOCAIS.find((u) => u.pessoaId === null);
+  if (timeB) {
+    const r = await db.query(
+      `UPDATE core.pessoa SET usuario_id = $1, nome_social = $2
+        WHERE id = (SELECT pessoa_id FROM eventos.solicitacao_custo ORDER BY protocolo LIMIT 1)`,
+      [timeB.usuarioId, timeB.nome],
+    );
+    if (r.rowCount !== 1) console.warn("  aviso: sem solicitação de custo para ligar o Time B a um staff");
+  }
 }

@@ -1,4 +1,4 @@
-import { boolean, date, pgSchema, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, date, pgSchema, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 // Definições SOMENTE LEITURA de tabelas do schema core, que pertence ao GH-System.
 // Este arquivo não entra no drizzle.config: nenhuma migration é gerada a partir dele.
@@ -13,6 +13,25 @@ export const usuario = coreSchema.table("usuario", {
   ativo: boolean("ativo").notNull(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
+
+// Perfis de acesso. O Eventos só considera EVENTOS_TIME e EVENTOS_LIDER (doc 09 §3).
+export const perfil = coreSchema.table("perfil", {
+  id: uuid("id").primaryKey(),
+  codigo: text("codigo").notNull(),
+  nome: text("nome").notNull(),
+});
+
+// PK (usuario_id, perfil_id). Escopo GLOBAL nesta rodada; POLO (com escopo_ref) é ignorado pelo Eventos.
+export const usuarioPerfil = coreSchema.table(
+  "usuario_perfil",
+  {
+    usuarioId: uuid("usuario_id").notNull(),
+    perfilId: uuid("perfil_id").notNull(),
+    escopo: text("escopo").notNull(),
+    escopoRef: uuid("escopo_ref"),
+  },
+  (table) => [primaryKey({ columns: [table.usuarioId, table.perfilId] })],
+);
 
 export const polo = coreSchema.table("polo", {
   id: uuid("id").primaryKey(),

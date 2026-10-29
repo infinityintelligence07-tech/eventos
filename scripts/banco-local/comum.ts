@@ -2,9 +2,26 @@ import type { ClientBase } from "pg";
 
 import type { Db } from "@/core/db/database";
 
-/** "Quem está usando o sistema" no modo local. Ids fixos, documentados no README e no doc 07 §3.2. */
+/** "Quem está usando o sistema" no modo local (Time A). Ids fixos, documentados no README e no doc 07 §3.2. */
 export const USUARIO_TESTE_ID = "7e570000-0000-7000-8000-000000000001";
 export const PESSOA_TESTE_ID = "7e570000-0000-7000-8000-000000000002";
+
+export type UsuarioLocal = {
+  usuarioId: string;
+  /** Nulo = a pessoa é ligada pela semente a um staff fictício (tem convocação e custo). */
+  pessoaId: string | null;
+  nome: string;
+  email: string;
+  perfil: "EVENTOS_TIME" | "EVENTOS_LIDER" | null;
+};
+
+/** Seletor "Entrar como" do modo local (doc 09 §3.3). Ids fixos. */
+export const USUARIOS_LOCAIS: readonly UsuarioLocal[] = [
+  { usuarioId: USUARIO_TESTE_ID, pessoaId: PESSOA_TESTE_ID, nome: "Time A (teste)", email: "time-a@exemplo.test", perfil: "EVENTOS_TIME" },
+  { usuarioId: "7e570000-0000-7000-8000-000000000003", pessoaId: null, nome: "Time B (teste)", email: "time-b@exemplo.test", perfil: "EVENTOS_TIME" },
+  { usuarioId: "7e570000-0000-7000-8000-000000000005", pessoaId: "7e570000-0000-7000-8000-000000000006", nome: "Líder (teste)", email: "lider@exemplo.test", perfil: "EVENTOS_LIDER" },
+  { usuarioId: "7e570000-0000-7000-8000-000000000007", pessoaId: "7e570000-0000-7000-8000-000000000008", nome: "Sem perfil (teste)", email: "sem-perfil@exemplo.test", perfil: null },
+];
 
 // Centro aproximado da cidade de cada polo, DDD (telefones fictícios) e aeroporto mais usado.
 export const CIDADES: Record<string, { lat: number; lng: number; ddd: string; iata: string }> = {

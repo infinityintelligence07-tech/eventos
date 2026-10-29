@@ -113,12 +113,15 @@ CREATE TABLE "eventos"."registro_acao" (
 	"status_para" text,
 	"comentario" text,
 	"em_nome_de_pessoa_id" uuid,
+	"origem" text DEFAULT 'USUARIO' NOT NULL,
 	"usuario_id" uuid,
 	"dados" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"criado_em" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "registro_acao_entidade_check" CHECK ("eventos"."registro_acao"."entidade" IN ('ESCALA_DO_EVENTO', 'CONVOCACAO', 'MENSAGEM', 'DISPONIBILIDADE', 'SOLICITACAO_CUSTO', 'PEDIDO_SDC', 'HOSPEDAGEM', 'CARONA', 'REGRA_CUSTO', 'MODELO_COPY', 'TIPO_EVENTO', 'CONFIGURACAO')),
+	CONSTRAINT "registro_acao_entidade_check" CHECK ("eventos"."registro_acao"."entidade" IN ('ESCALA_DO_EVENTO', 'CONVOCACAO', 'MENSAGEM', 'DISPONIBILIDADE', 'SOLICITACAO_CUSTO', 'PEDIDO_SDC', 'HOSPEDAGEM', 'CARONA', 'REGRA_CUSTO', 'MODELO_COPY', 'TIPO_EVENTO', 'CONFIGURACAO', 'PESSOA', 'LOCAL', 'ENQUETE', 'EVENTO', 'VAGA')),
 	CONSTRAINT "registro_acao_acao_check" CHECK ("eventos"."registro_acao"."acao" ~ '^[A-Z_]{3,40}$'),
-	CONSTRAINT "registro_acao_comentario_check" CHECK ("eventos"."registro_acao"."comentario" IS NULL OR length("eventos"."registro_acao"."comentario") <= 2000)
+	CONSTRAINT "registro_acao_comentario_check" CHECK ("eventos"."registro_acao"."comentario" IS NULL OR length("eventos"."registro_acao"."comentario") <= 2000),
+	CONSTRAINT "registro_acao_origem_check" CHECK ("eventos"."registro_acao"."origem" IN ('USUARIO', 'SISTEMA')),
+	CONSTRAINT "registro_acao_autoria_check" CHECK (("eventos"."registro_acao"."origem" = 'USUARIO') = ("eventos"."registro_acao"."usuario_id" IS NOT NULL))
 );
 --> statement-breakpoint
 ALTER TABLE "eventos"."evento" DROP CONSTRAINT "evento_status_escala_check";--> statement-breakpoint
@@ -142,9 +145,9 @@ ALTER TABLE "eventos"."quarto" ADD CONSTRAINT "quarto_hospedagem_id_hospedagem_i
 ALTER TABLE "eventos"."quarto_ocupante" ADD CONSTRAINT "quarto_ocupante_quarto_id_quarto_id_fk" FOREIGN KEY ("quarto_id") REFERENCES "eventos"."quarto"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "eventos"."quarto_ocupante" ADD CONSTRAINT "quarto_ocupante_convocacao_id_convocacao_id_fk" FOREIGN KEY ("convocacao_id") REFERENCES "eventos"."convocacao"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "eventos"."trecho_voo" ADD CONSTRAINT "trecho_voo_pedido_id_pedido_sdc_id_fk" FOREIGN KEY ("pedido_id") REFERENCES "eventos"."pedido_sdc"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "eventos"."registro_acao" ADD CONSTRAINT "registro_acao_evento_id_evento_id_fk" FOREIGN KEY ("evento_id") REFERENCES "eventos"."evento"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "eventos"."registro_acao" ADD CONSTRAINT "registro_acao_em_nome_de_pessoa_id_pessoa_id_fk" FOREIGN KEY ("em_nome_de_pessoa_id") REFERENCES "core"."pessoa"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "eventos"."registro_acao" ADD CONSTRAINT "registro_acao_usuario_id_usuario_id_fk" FOREIGN KEY ("usuario_id") REFERENCES "core"."usuario"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "eventos"."registro_acao" ADD CONSTRAINT "registro_acao_evento_id_evento_id_fk" FOREIGN KEY ("evento_id") REFERENCES "eventos"."evento"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "eventos"."registro_acao" ADD CONSTRAINT "registro_acao_em_nome_de_pessoa_id_pessoa_id_fk" FOREIGN KEY ("em_nome_de_pessoa_id") REFERENCES "core"."pessoa"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "eventos"."registro_acao" ADD CONSTRAINT "registro_acao_usuario_id_usuario_id_fk" FOREIGN KEY ("usuario_id") REFERENCES "core"."usuario"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "configuracao_atualizado_por_idx" ON "eventos"."configuracao" USING btree ("atualizado_por");--> statement-breakpoint
 CREATE INDEX "hospedagem_evento_idx" ON "eventos"."hospedagem" USING btree ("evento_id");--> statement-breakpoint
 CREATE INDEX "hospedagem_local_idx" ON "eventos"."hospedagem" USING btree ("local_id");--> statement-breakpoint

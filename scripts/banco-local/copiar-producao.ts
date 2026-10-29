@@ -17,6 +17,8 @@ export const TABELAS_COPIADAS: Tabela[] = [
   { schema: "eventos", nome: "modelo_copy" },
 ];
 
+export const PAPEL_DA_COPIA = "app_eventos_copia";
+
 const SINCRONIZADAS = ["tipo_evento", "funcao", "regra_custo", "modelo_copy"];
 
 export type Copia = { tabela: Tabela; colunas: string[]; linhas: Record<string, unknown>[] }[];
@@ -70,6 +72,16 @@ export async function lerProducao(urlOrigem: string, colunasLocais: Map<string, 
     await origem.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
     const somenteLeitura = (await ler("SHOW transaction_read_only")).rows[0]?.transaction_read_only;
     if (somenteLeitura !== "on") throw new Error("A conexão de origem não ficou somente leitura. Abortado.");
+
+    // O certo é ler com o papel app_eventos_copia (só SELECT nas tabelas copiadas, doc 09 §6). Outro papel ainda
+    // funciona (compatibilidade), mas com mais privilégio do que a cópia precisa.
+    const papel = (await ler("SELECT current_user AS papel")).rows[0]?.papel as string | undefined;
+    if (papel !== PAPEL_DA_COPIA) {
+      console.warn(
+        `  AVISO: a origem não usa o papel ${PAPEL_DA_COPIA} (usa ${papel === "postgres" ? "postgres, dono do banco" : "outro papel"}). ` +
+          `Defina ORIGEM_DATABASE_URL com o ${PAPEL_DA_COPIA}; a leitura segue em transação somente leitura.`,
+      );
+    }
 
     const copia: Copia = [];
     for (const tabela of TABELAS_COPIADAS) {

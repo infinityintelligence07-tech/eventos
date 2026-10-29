@@ -5,6 +5,8 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
+    // Os testes de integração criam e apagam bancos no mesmo Postgres; sob concorrência o DROP DATABASE demora.
+    hookTimeout: 30_000,
     env: {
       NODE_ENV: "test",
       DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/iam",

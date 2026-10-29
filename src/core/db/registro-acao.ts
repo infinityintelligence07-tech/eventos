@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 import type { Executor } from "./database";
 import { registroAcao } from "./schema/eventos";
 
@@ -16,9 +18,20 @@ export type EntidadeRegistrada =
   | "REGRA_CUSTO"
   | "MODELO_COPY"
   | "TIPO_EVENTO"
-  | "CONFIGURACAO";
+  | "CONFIGURACAO"
+  | "PESSOA"
+  | "LOCAL"
+  | "ENQUETE"
+  | "EVENTO"
+  | "VAGA";
 
-export type EntradaDoRegistro = {
+/** Valores do CHECK registro_acao_origem_check. USUARIO exige usuario_id; SISTEMA (sincronização) exige que seja nulo. */
+export type OrigemDoRegistro = "USUARIO" | "SISTEMA";
+
+/** Quem fez: alguém do time (usuarioId obrigatório) ou o sistema (sincronização, sem usuário). */
+export type AutoriaDoRegistro = { origem?: "USUARIO"; usuarioId: string } | { origem: "SISTEMA"; usuarioId?: null };
+
+export type EntradaDoRegistro = AutoriaDoRegistro & {
   entidade: EntidadeRegistrada;
   entidadeId: string;
   eventoId?: string | null;
@@ -30,9 +43,23 @@ export type EntradaDoRegistro = {
   comentario?: string | null;
   /** Preenchido = registrado pelo time em nome desta pessoa (selo "Registrado pelo time"). */
   emNomeDePessoaId?: string | null;
-  usuarioId: string;
+  /**
+   * Detalhes. Dado pessoal não entra aqui (docs/09 §9.1): o registro é imutável. Para dado pessoal, guarde só o nome
+   * do campo que mudou.
+   */
   dados?: Record<string, unknown>;
 };
+
+// Quantos registros a transação do caso de uso gravou (docs/09 §7.2). Por contexto assíncrono e não pelo `tx`:
+// um repositório pode abrir savepoint (tx.transaction) e o registro feito lá dentro também conta.
+const contagemDaTransacao = new AsyncLocalStorage<{ quantidade: number }>();
+
+/** Roda o trabalho contando os registrarAcao feitos dentro dele (inclusive em savepoints). */
+export async function contandoRegistros<T>(trabalho: () => Promise<T>): Promise<{ resultado: T; registros: number }> {
+  const contagem = { quantidade: 0 };
+  const resultado = await contagemDaTransacao.run(contagem, trabalho);
+  return { resultado, registros: contagem.quantidade };
+}
 
 export async function registrarAcao(executor: Executor, entrada: EntradaDoRegistro): Promise<void> {
   await executor.insert(registroAcao).values({
@@ -44,7 +71,10 @@ export async function registrarAcao(executor: Executor, entrada: EntradaDoRegist
     statusPara: entrada.statusPara ?? null,
     comentario: entrada.comentario ?? null,
     emNomeDePessoaId: entrada.emNomeDePessoaId ?? null,
-    usuarioId: entrada.usuarioId,
+    origem: entrada.origem ?? "USUARIO",
+    usuarioId: entrada.origem === "SISTEMA" ? null : entrada.usuarioId,
     dados: entrada.dados ?? {},
   });
+  const contagem = contagemDaTransacao.getStore();
+  if (contagem) contagem.quantidade += 1;
 }

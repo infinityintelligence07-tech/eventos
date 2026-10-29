@@ -4262,6 +4262,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "origem": {
+          "name": "origem",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'USUARIO'"
+        },
         "usuario_id": {
           "name": "usuario_id",
           "type": "uuid",
@@ -4369,7 +4376,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
+          "onDelete": "restrict",
           "onUpdate": "no action"
         },
         "registro_acao_em_nome_de_pessoa_id_pessoa_id_fk": {
@@ -4383,7 +4390,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
+          "onDelete": "restrict",
           "onUpdate": "no action"
         },
         "registro_acao_usuario_id_usuario_id_fk": {
@@ -4397,7 +4404,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
+          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },
@@ -4407,7 +4414,7 @@
       "checkConstraints": {
         "registro_acao_entidade_check": {
           "name": "registro_acao_entidade_check",
-          "value": "\"eventos\".\"registro_acao\".\"entidade\" IN ('ESCALA_DO_EVENTO', 'CONVOCACAO', 'MENSAGEM', 'DISPONIBILIDADE', 'SOLICITACAO_CUSTO', 'PEDIDO_SDC', 'HOSPEDAGEM', 'CARONA', 'REGRA_CUSTO', 'MODELO_COPY', 'TIPO_EVENTO', 'CONFIGURACAO')"
+          "value": "\"eventos\".\"registro_acao\".\"entidade\" IN ('ESCALA_DO_EVENTO', 'CONVOCACAO', 'MENSAGEM', 'DISPONIBILIDADE', 'SOLICITACAO_CUSTO', 'PEDIDO_SDC', 'HOSPEDAGEM', 'CARONA', 'REGRA_CUSTO', 'MODELO_COPY', 'TIPO_EVENTO', 'CONFIGURACAO', 'PESSOA', 'LOCAL', 'ENQUETE', 'EVENTO', 'VAGA')"
         },
         "registro_acao_acao_check": {
           "name": "registro_acao_acao_check",
@@ -4416,6 +4423,14 @@
         "registro_acao_comentario_check": {
           "name": "registro_acao_comentario_check",
           "value": "\"eventos\".\"registro_acao\".\"comentario\" IS NULL OR length(\"eventos\".\"registro_acao\".\"comentario\") <= 2000"
+        },
+        "registro_acao_origem_check": {
+          "name": "registro_acao_origem_check",
+          "value": "\"eventos\".\"registro_acao\".\"origem\" IN ('USUARIO', 'SISTEMA')"
+        },
+        "registro_acao_autoria_check": {
+          "name": "registro_acao_autoria_check",
+          "value": "(\"eventos\".\"registro_acao\".\"origem\" = 'USUARIO') = (\"eventos\".\"registro_acao\".\"usuario_id\" IS NOT NULL)"
         }
       },
       "isRLSEnabled": false

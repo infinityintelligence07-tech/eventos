@@ -26,8 +26,8 @@ describe.skipIf(!TEST_DATABASE_URL)("migration 0004: registro de ações, convoc
 
   it("registro_acao aceita inclusão e recusa alteração, exclusão e truncate", async () => {
     await banco.sql(
-      `insert into eventos.registro_acao (entidade, entidade_id, evento_id, acao, status_de, status_para)
-       values ('ESCALA_DO_EVENTO', $1, $1, 'DEVOLVIDA', 'AGUARDANDO_APROVACAO', 'DEVOLVIDA')`,
+      `insert into eventos.registro_acao (entidade, entidade_id, evento_id, acao, status_de, status_para, origem)
+       values ('ESCALA_DO_EVENTO', $1, $1, 'DEVOLVIDA', 'AGUARDANDO_APROVACAO', 'DEVOLVIDA', 'SISTEMA')`,
       [eventoId],
     );
     await expect(banco.sql(`update eventos.registro_acao set comentario = 'x'`)).rejects.toThrow(/só de inclusão/);
@@ -35,13 +35,25 @@ describe.skipIf(!TEST_DATABASE_URL)("migration 0004: registro de ações, convoc
     await expect(banco.sql(`truncate eventos.registro_acao`)).rejects.toThrow(/só de inclusão/);
   });
 
-  it("registro_acao aceita CARONA, REGRA_CUSTO e MODELO_COPY e recusa entidade desconhecida", async () => {
-    for (const entidade of ["CARONA", "REGRA_CUSTO", "MODELO_COPY"]) {
-      await banco.sql(`insert into eventos.registro_acao (entidade, entidade_id, acao) values ($1, $2, 'ALTERADA')`, [entidade, eventoId]);
+  it("registro_acao aceita as entidades do doc 09 §7 e recusa entidade desconhecida", async () => {
+    const entidades = ["CARONA", "REGRA_CUSTO", "MODELO_COPY", "TIPO_EVENTO", "CONFIGURACAO", "PESSOA", "LOCAL", "ENQUETE", "EVENTO", "VAGA"];
+    for (const entidade of entidades) {
+      await banco.sql(`insert into eventos.registro_acao (entidade, entidade_id, acao, origem) values ($1, $2, 'ALTERADA', 'SISTEMA')`, [entidade, eventoId]);
     }
     await expect(
-      banco.sql(`insert into eventos.registro_acao (entidade, entidade_id, acao) values ('LOCAL', $1, 'ALTERADA')`, [eventoId]),
+      banco.sql(`insert into eventos.registro_acao (entidade, entidade_id, acao, origem) values ('DESCONHECIDA', $1, 'ALTERADA', 'SISTEMA')`, [eventoId]),
     ).rejects.toThrow(/registro_acao_entidade_check/);
+  });
+
+  it("origem USUARIO exige usuário e SISTEMA exige que não haja usuário", async () => {
+    const usuarioId = (await primeiro(`insert into core.usuario (email) values ('autoria@exemplo.test') returning id`)).id!;
+    await banco.sql(`insert into eventos.registro_acao (entidade, entidade_id, acao, usuario_id) values ('EVENTO', $1, 'ALTERADA', $2)`, [eventoId, usuarioId]);
+    await expect(
+      banco.sql(`insert into eventos.registro_acao (entidade, entidade_id, acao) values ('EVENTO', $1, 'ALTERADA')`, [eventoId]),
+    ).rejects.toThrow(/registro_acao_autoria_check/);
+    await expect(
+      banco.sql(`insert into eventos.registro_acao (entidade, entidade_id, acao, origem, usuario_id) values ('EVENTO', $1, 'ALTERADA', 'SISTEMA', $2)`, [eventoId, usuarioId]),
+    ).rejects.toThrow(/registro_acao_autoria_check/);
   });
 
   it("copy de escalação passa a usar o gênero da pessoa, com um modelo ativo por tipo", async () => {

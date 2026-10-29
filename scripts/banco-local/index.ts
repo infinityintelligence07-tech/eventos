@@ -7,10 +7,11 @@ import { Client } from "pg";
 
 import { criarDb, schema } from "@/core/db/database";
 import { aplicarEstrutura } from "@/test/banco";
+import { type CredenciaisLocais, lerCredenciaisLocais, urlLocalParaExibir } from "@/test/credenciais-locais";
 
 import { colunasLocais, gravarCopia, lerProducao, semSegredo } from "./copiar-producao";
-import { garantirPostgres, NOME_BANCO, URL_ADMIN, URL_LOCAL } from "./postgres";
-import { PESSOA_TESTE_ID, semear, USUARIO_TESTE_ID } from "./semear";
+import { garantirPostgres, NOME_BANCO, urlAdmin } from "./postgres";
+import { semear, USUARIOS_LOCAIS } from "./semear";
 
 const TABELAS_RESUMO = [
   "core.polo", "core.usuario", "core.pessoa", "core.vinculo",
@@ -45,8 +46,8 @@ const RESUMOS: { titulo: string; sql: string }[] = [
   { titulo: "Marcador eventos.ambiente", sql: "SELECT coalesce(current_setting('eventos.ambiente', true), '(ausente)') AS item" },
 ];
 
-async function admin(sql: string): Promise<void> {
-  const cliente = new Client({ connectionString: URL_ADMIN });
+async function admin(credenciais: CredenciaisLocais, sql: string): Promise<void> {
+  const cliente = new Client({ connectionString: urlAdmin(credenciais) });
   await cliente.connect();
   try {
     await cliente.query(sql);
@@ -56,22 +57,27 @@ async function admin(sql: string): Promise<void> {
 }
 
 async function principal(urlOrigem: string): Promise<void> {
-  garantirPostgres();
+  const credenciais = garantirPostgres();
+  const urlDoBanco = urlAdmin(credenciais, NOME_BANCO);
 
   console.log(`Recriando o banco ${NOME_BANCO} do zero (os dados locais anteriores serão apagados) ...`);
-  await admin(`DROP DATABASE IF EXISTS ${NOME_BANCO} WITH (FORCE)`);
-  await admin(`CREATE DATABASE ${NOME_BANCO}`);
+  await admin(credenciais, `DROP DATABASE IF EXISTS ${NOME_BANCO} WITH (FORCE)`);
+  await admin(credenciais, `CREATE DATABASE ${NOME_BANCO}`);
   // Trava 3 da escrita (doc 07 §3.1): o app só escreve num banco com este marcador. A produção nunca o tem.
-  await admin(`ALTER DATABASE ${NOME_BANCO} SET eventos.ambiente = 'local'`);
+  await admin(credenciais, `ALTER DATABASE ${NOME_BANCO} SET eventos.ambiente = 'local'`);
 
-  const { db, pool } = criarDb(URL_LOCAL, "eventos-banco-local");
+  const { db, pool } = criarDb(urlDoBanco, "eventos-banco-local");
   try {
     console.log("Carregando estrutura do GH (fixture) e migrations do Eventos ...");
-    await aplicarEstrutura(URL_LOCAL, db);
+    await aplicarEstrutura(urlDoBanco, db);
+    // O app local conecta como app_eventos (doc 09 §6.3): os grants e as políticas são exercitados de verdade.
+    await admin(credenciais, `ALTER ROLE app_eventos WITH LOGIN PASSWORD '${credenciais.app_eventos}'`);
 
     const local = await pool.connect();
     try {
-      console.log("Lendo a produção (transação somente leitura) ...");
+      console.log(
+        `Lendo a produção (transação somente leitura) com ${process.env.ORIGEM_DATABASE_URL ? "ORIGEM_DATABASE_URL" : "a DATABASE_URL do .env (ORIGEM_DATABASE_URL vazia)"} ...`,
+      );
       const copia = await lerProducao(urlOrigem, await colunasLocais(local));
 
       await local.query("BEGIN");
@@ -106,8 +112,9 @@ async function principal(urlOrigem: string): Promise<void> {
     await pool.end();
   }
 
-  console.log(`\nPronto: ${URL_LOCAL}`);
-  console.log(`Usuário de teste: core.usuario.id = ${USUARIO_TESTE_ID} | core.pessoa.id = ${PESSOA_TESTE_ID} (teste@exemplo.test)`);
+  console.log(`\nPronto: ${urlLocalParaExibir("app_eventos", NOME_BANCO)} (senhas em .banco-local/credenciais.json)`);
+  console.log("Usuários locais (Entrar como):");
+  for (const u of USUARIOS_LOCAIS) console.log(`  ${u.nome.padEnd(20)} ${(u.perfil ?? "sem perfil").padEnd(14)} core.usuario.id = ${u.usuarioId}`);
   console.log("Suba o app com: npm run dev:local");
 }
 
@@ -120,6 +127,8 @@ if (!urlOrigem) {
 try {
   await principal(urlOrigem);
 } catch (erro: unknown) {
-  console.error(`\nFalhou: ${semSegredo(erro instanceof Error ? erro.message : String(erro), urlOrigem)}`);
+  let mensagem = semSegredo(erro instanceof Error ? erro.message : String(erro), urlOrigem);
+  for (const senha of Object.values(lerCredenciaisLocais() ?? {})) mensagem = mensagem.split(senha).join("***");
+  console.error(`\nFalhou: ${mensagem}`);
   process.exitCode = 1;
 }
