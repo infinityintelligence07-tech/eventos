@@ -1,0 +1,1 @@
+CREATE INDEX "escala_cargo_idx" ON "eventos"."escala" USING btree ("cargo_id");

@@ -1,0 +1,48 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1792696646776,
+      "tag": "0000_adocao-tabelas-gh",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792696792210,
+      "tag": "0001_fase-1",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792696808900,
+      "tag": "0002_seguranca-protocolo-e-referencias",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792697060725,
+      "tag": "0003_indice-escala-cargo",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793231957236,
+      "tag": "0004_abas-do-time",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793302390446,
+      "tag": "0005_papeis-do-app",
+      "breakpoints": true
+    }
+  ]
+}
