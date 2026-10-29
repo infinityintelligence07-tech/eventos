@@ -11,23 +11,19 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    services:
-      # Testes de integração: estrutura do GH (src/test/fixtures) + migrations do Eventos.
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
     env:
-      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
     steps:
       - uses: actions/checkout@v4
+
+      # Testes de integração: estrutura do GH (src/test/fixtures) + migrations do Eventos.
+      # Postgres do próprio runner, e não um service container: a guarda de escrita exige que o
+      # servidor responda no loopback, e um contêiner aparece com o IP da rede do Docker.
+      - name: Postgres local
+        run: |
+          sudo systemctl start postgresql.service
+          until pg_isready -h 127.0.0.1 -p 5432; do sleep 1; done
+          sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
 
       - uses: actions/setup-node@v4
         with:
