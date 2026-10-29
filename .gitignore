@@ -10,3 +10,4 @@ coverage/
 .banco-local/
 design/
 .claude/settings.local.json
+.importacao/
