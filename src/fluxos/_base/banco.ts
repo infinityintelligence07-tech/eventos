@@ -39,8 +39,11 @@ async function bancoDeEscrita(modo: ModoDeEscrita): Promise<Db> {
 /**
  * Trava 3: o que o servidor diz da conexão. Marcadores vêm do catálogo (pg_db_role_setting), não de current_setting,
  * que a sessão define com SET ou com `options=-c` na URL: o do banco atual (setrole = 0, modo LOCAL) e o do papel do
- * login (ALTER ROLE … SET, modo PRODUCAO). Papel = session_user: current_user muda com SET ROLE e `options=-c role=…`.
- * Nomes com pg_catalog (session_user é palavra-chave) para o search_path não desviar.
+ * login (ALTER ROLE … SET, modo PRODUCAO). No Supabase o `postgres` não é superusuário e não grava parâmetro próprio
+ * num papel: lá o marcador do papel vai no comentário (`COMMENT ON ROLE app_eventos IS 'eventos.ambiente=producao'`),
+ * que o próprio app_eventos (NOCREATEROLE) não consegue mudar. O ALTER ROLE … SET, se existir, vence o comentário.
+ * Papel = session_user: current_user muda com SET ROLE e `options=-c role=…`.
+ * Nomes com pg_catalog (session_user é palavra-chave) para o search_path não desviar; coalesce é sintaxe, não função.
  */
 export async function marcadorDoBanco(executor: Executor): Promise<LeituraDoServidor> {
   const resultado = await executor.execute<{
@@ -57,13 +60,18 @@ export async function marcadorDoBanco(executor: Executor): Promise<LeituraDoServ
           and configuracao.setdatabase = (select oid from pg_catalog.pg_database where datname = pg_catalog.current_database())
           and pg_catalog.starts_with(item, 'eventos.ambiente=')
         limit 1) as marcador,
-      (select pg_catalog.substr(item, pg_catalog.length('eventos.ambiente=') + 1)
-         from pg_catalog.pg_db_role_setting configuracao, pg_catalog.unnest(configuracao.setconfig) item
-        where configuracao.setrole = (select oid from pg_catalog.pg_roles where rolname = session_user)
-          and configuracao.setdatabase in (0, (select oid from pg_catalog.pg_database where datname = pg_catalog.current_database()))
-          and pg_catalog.starts_with(item, 'eventos.ambiente=')
-        order by configuracao.setdatabase desc
-        limit 1) as marcador_do_papel,
+      coalesce(
+        (select pg_catalog.substr(item, pg_catalog.length('eventos.ambiente=') + 1)
+           from pg_catalog.pg_db_role_setting configuracao, pg_catalog.unnest(configuracao.setconfig) item
+          where configuracao.setrole = (select oid from pg_catalog.pg_roles where rolname = session_user)
+            and configuracao.setdatabase in (0, (select oid from pg_catalog.pg_database where datname = pg_catalog.current_database()))
+            and pg_catalog.starts_with(item, 'eventos.ambiente=')
+          order by configuracao.setdatabase desc
+          limit 1),
+        pg_catalog.substring(
+          pg_catalog.shobj_description((select oid from pg_catalog.pg_roles where rolname = session_user), 'pg_authid'),
+          '^eventos[.]ambiente=([a-z_]+)$')
+      ) as marcador_do_papel,
       session_user::text as papel,
       pg_catalog.host(pg_catalog.inet_server_addr()) as endereco,
       pg_catalog.inet_server_port() as porta`);
