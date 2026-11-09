@@ -11,13 +11,16 @@ import type {
   RegistrarSolicitacao,
   ReprovarSolicitacao,
 } from "../domain/schemas";
-import { type AcaoSegregada, exigirSegregacao } from "../domain/segregacao";
+import { type AcaoSegregada, SegregacaoDeFuncoesError, type ViolacaoDeSegregacao, violacaoDeSegregacao } from "../domain/segregacao";
 
 // Solicitação de custo registrada pelo time em nome da pessoa e auditoria (docs/07 §4.4 e §6.7).
 // O servidor recalcula combustível, depreciação, alerta e total: não confia no que veio do navegador.
 
-/** `pessoaId` e `email`: quem é o usuário no cadastro (SoD-3: ninguém audita o próprio custo). Sem e-mail, só a pessoa conta. */
-export type ContextoDaAcao = { usuarioId: string; pessoaId: string | null; email?: string | null; instante: Date };
+/**
+ * `pessoaId` e `email`: quem é o usuário no cadastro (SoD-3: ninguém audita o próprio custo). Sem e-mail, só a pessoa conta.
+ * `dispensaSegregacao`: só o dono do sistema (docs/10); a regra dispensada vai para o registro_acao.
+ */
+export type ContextoDaAcao = { usuarioId: string; pessoaId: string | null; email?: string | null; dispensaSegregacao?: boolean; instante: Date };
 
 export type EventoDoCusto = { id: string; codigo: string | null; tipoEventoId: string | null; uf: string | null; data: string };
 
@@ -187,21 +190,31 @@ export async function corrigirSolicitacao(
   return { ...solicitacao, situacao: para, nivel: calculada.nivel };
 }
 
-async function conferirSegregacao(repo: RepositorioSolicitacoes, acao: AcaoSegregada, solicitacao: SolicitacaoTravada, { usuarioId, pessoaId, email }: ContextoDaAcao) {
+/** Recusa a violação; para o dono do sistema, devolve a regra dispensada (para o registro_acao). */
+async function conferirSegregacao(
+  repo: RepositorioSolicitacoes,
+  acao: AcaoSegregada,
+  solicitacao: SolicitacaoTravada,
+  { usuarioId, pessoaId, email, dispensaSegregacao }: ContextoDaAcao,
+): Promise<ViolacaoDeSegregacao | null> {
   const cadastro = await repo.cadastroDaPessoa(solicitacao.pessoaId);
-  exigirSegregacao(acao, { usuarioId, pessoaId, email: email ?? null }, {
+  const violacao = violacaoDeSegregacao(acao, { usuarioId, pessoaId, email: email ?? null }, {
     pessoaId: solicitacao.pessoaId,
     usuarioDaPessoa: cadastro.usuarioId,
     emailDaPessoa: cadastro.email,
     registradoPor: solicitacao.registradoPor,
     autoresDoRegistro: await repo.autoresDoRegistro(solicitacao.id),
   });
+  if (violacao && !dispensaSegregacao) throw new SegregacaoDeFuncoesError(violacao);
+  return violacao;
 }
+
+const dispensa = (violacao: ViolacaoDeSegregacao | null) => (violacao ? { segregacaoDispensada: violacao } : {});
 
 export async function aprovarSolicitacao(repo: RepositorioSolicitacoes, entrada: AprovarSolicitacao, contexto: ContextoDaAcao): Promise<SolicitacaoTravada> {
   const { usuarioId, instante } = contexto;
   const solicitacao = await travada(repo, entrada.solicitacaoId);
-  await conferirSegregacao(repo, "APROVAR", solicitacao, contexto);
+  const dispensada = await conferirSegregacao(repo, "APROVAR", solicitacao, contexto);
   const para = destino(solicitacao, "APROVAR");
   const parecer = entrada.parecer?.trim() || null;
   if (exigeMotivo("APROVAR", solicitacao.nivel) && (!parecer || parecer.length < 3)) {
@@ -221,7 +234,7 @@ export async function aprovarSolicitacao(repo: RepositorioSolicitacoes, entrada:
     statusPara: para.auditoria,
     comentario: parecer,
     usuarioId,
-    dados: { nivel: solicitacao.nivel, financeiro: para.financeiro },
+    dados: { nivel: solicitacao.nivel, financeiro: para.financeiro, ...dispensa(dispensada) },
   });
   return { ...solicitacao, situacao: para };
 }
@@ -229,7 +242,7 @@ export async function aprovarSolicitacao(repo: RepositorioSolicitacoes, entrada:
 export async function reprovarSolicitacao(repo: RepositorioSolicitacoes, entrada: ReprovarSolicitacao, contexto: ContextoDaAcao): Promise<SolicitacaoTravada> {
   const { usuarioId, instante } = contexto;
   const solicitacao = await travada(repo, entrada.solicitacaoId);
-  await conferirSegregacao(repo, "REPROVAR", solicitacao, contexto);
+  const dispensada = await conferirSegregacao(repo, "REPROVAR", solicitacao, contexto);
   const para = destino(solicitacao, "REPROVAR");
   const mudou = await repo.mudarSolicitacao(
     solicitacao.id,
@@ -245,7 +258,7 @@ export async function reprovarSolicitacao(repo: RepositorioSolicitacoes, entrada
     statusPara: para.auditoria,
     comentario: entrada.motivo,
     usuarioId,
-    dados: { nivel: solicitacao.nivel },
+    dados: { nivel: solicitacao.nivel, ...dispensa(dispensada) },
   });
   return { ...solicitacao, situacao: para };
 }
@@ -253,7 +266,7 @@ export async function reprovarSolicitacao(repo: RepositorioSolicitacoes, entrada
 export async function reabrirAuditoria(repo: RepositorioSolicitacoes, entrada: ReabrirAuditoria, contexto: ContextoDaAcao): Promise<SolicitacaoTravada> {
   const { usuarioId, instante } = contexto;
   const solicitacao = await travada(repo, entrada.solicitacaoId);
-  await conferirSegregacao(repo, "REABRIR", solicitacao, contexto);
+  const dispensada = await conferirSegregacao(repo, "REABRIR", solicitacao, contexto);
   const para = destino(solicitacao, "REABRIR");
   const mudou = await repo.mudarSolicitacao(solicitacao.id, { de: solicitacao.situacao.auditoria, atualizadoEm: entrada.atualizadoEm }, { para, instante, auditoria: "LIMPAR" });
   if (!mudou) throw new CustosMudouError(`a solicitação ${solicitacao.protocolo} mudou`);
@@ -264,6 +277,7 @@ export async function reabrirAuditoria(repo: RepositorioSolicitacoes, entrada: R
     statusDe: solicitacao.situacao.auditoria,
     statusPara: para.auditoria,
     usuarioId,
+    ...(dispensada && { dados: dispensa(dispensada) }),
   });
   return { ...solicitacao, situacao: para };
 }

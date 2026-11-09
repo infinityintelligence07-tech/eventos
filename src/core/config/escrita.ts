@@ -16,6 +16,13 @@ const esquemaDeEscrita = z.object({
     .string()
     .optional()
     .transform((valor) => (valor === "" ? undefined : valor)),
+  // Dono do sistema (docs/10): só este e-mail passa pela segregação de funções dos custos (SoD-2 e SoD-3), para testar
+  // o fluxo sozinho. Cada dispensa fica no registro_acao. Ausente = ninguém dispensa.
+  EVENTOS_DONO_EMAIL: z
+    .string()
+    .optional()
+    .transform((valor) => (valor?.trim() ? valor.trim().toLowerCase() : undefined))
+    .pipe(z.string().email().optional()),
 });
 
 export type ConfigDeEscrita = z.infer<typeof esquemaDeEscrita>;

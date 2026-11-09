@@ -21,6 +21,13 @@ import {
 } from "..";
 
 const banco = vi.hoisted(() => ({ db: null as Db | null }));
+// Dono do sistema (EVENTOS_DONO_EMAIL): controlado por teste, sem depender da configuração em cache.
+const dono = vi.hoisted(() => ({ email: null as string | null }));
+
+vi.mock("@/core/autorizacao", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/core/autorizacao")>();
+  return { ...original, ehDonoDoSistema: (email: string | null | undefined) => original.mesmoDono(email, dono.email ?? undefined) };
+});
 
 vi.mock("@/fluxos/_base", async (importOriginal) => {
   const original = await importOriginal<Record<string, unknown>>();
@@ -226,6 +233,40 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos de custos no banco", () => {
     // Reabrir não tem a SoD-2: quem registrou pode reabrir (a permissão é só da líder, conferida na action).
     await reabrirAuditoria({ solicitacaoId: id, atualizadoEm: await versao() }, ator(), agora);
     expect((await auditorias())[0].n).toBe(2);
+  });
+
+  it("dono do sistema: audita o que registrou e o próprio custo, e a dispensa fica no registro_acao", async () => {
+    const donoUsuario = (await um(`insert into core.usuario (email) values ('dono@exemplo.test') returning id`)).id!;
+    const pessoaId = await pessoaNaEscala("Dono Staff");
+    await teste.sql(`update core.pessoa set usuario_id = $1 where id = $2`, [donoUsuario, pessoaId]);
+    const oDono = { usuarioId: donoUsuario, pessoaId, email: "dono@exemplo.test", origem: "LOCAL" as const };
+    const { id, protocolo } = await registrarSolicitacao({ eventoId, pessoaId, deslocamentos: [deslocamento(12)], itens: [] }, oDono, agora);
+    const versao = async () => (await carregarSolicitacao(protocolo))!.atualizadoEm;
+
+    // Sem EVENTOS_DONO_EMAIL, a segregação vale para ele também.
+    dono.email = null;
+    await expect(aprovarSolicitacao({ solicitacaoId: id, atualizadoEm: await versao() }, oDono, agora)).rejects.toThrow(/próprio custo/);
+    // Outro e-mail configurado como dono não libera este usuário.
+    dono.email = "outro@exemplo.test";
+    await expect(aprovarSolicitacao({ solicitacaoId: id, atualizadoEm: await versao() }, oDono, agora)).rejects.toThrow(/próprio custo/);
+
+    dono.email = "dono@exemplo.test";
+    try {
+      await aprovarSolicitacao({ solicitacaoId: id, atualizadoEm: await versao() }, oDono, agora);
+      await reabrirAuditoria({ solicitacaoId: id, atualizadoEm: await versao() }, oDono, agora);
+      await reprovarSolicitacao({ solicitacaoId: id, atualizadoEm: await versao(), motivo: "Sem comprovante" }, oDono, agora);
+    } finally {
+      dono.email = null;
+    }
+    const registros = (await teste.sql(
+      `select acao, dados->>'segregacaoDispensada' as dispensada from eventos.registro_acao where entidade_id = $1 and acao like 'AUDITORIA_%' order by criado_em, acao`,
+      [id],
+    )) as { acao: string; dispensada: string | null }[];
+    expect(registros).toEqual([
+      { acao: "AUDITORIA_APROVADA", dispensada: "AUDITA_O_PROPRIO_CUSTO" },
+      { acao: "AUDITORIA_REABERTA", dispensada: "AUDITA_O_PROPRIO_CUSTO" },
+      { acao: "AUDITORIA_REPROVADA", dispensada: "AUDITA_O_PROPRIO_CUSTO" },
+    ]);
   });
 
   it("SoD-3 de quem não tem pessoa no cadastro: confere pelo e-mail e, sem e-mail para comparar, recusa", async () => {

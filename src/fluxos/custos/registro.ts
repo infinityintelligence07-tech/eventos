@@ -1,3 +1,4 @@
+import { ehDonoDoSistema } from "@/core/autorizacao";
 import { bancoParaLeitura, transacao, type AtorDaEscrita } from "@/fluxos/_base";
 import {
   type AlertaDeCusto,
@@ -128,6 +129,7 @@ const contexto = (ator: AtorDaEscrita & { email?: string | null }, agora: Date) 
   usuarioId: ator.usuarioId,
   pessoaId: ator.pessoaId,
   email: ator.email ?? null,
+  dispensaSegregacao: ehDonoDoSistema(ator.email),
   instante: agora,
 });
 

@@ -40,6 +40,14 @@ COMMENT ON ROLE app_eventos IS 'eventos.ambiente=producao';
 O próprio `app_eventos` (NOCREATEROLE) não consegue mudar o comentário. Não vai em migration: o comentário vale para o
 cluster inteiro, e no banco local ele fecharia o modo LOCAL.
 
+## Dono do sistema (EVENTOS_DONO_EMAIL)
+
+Para o dono testar o fluxo inteiro sozinho, `EVENTOS_DONO_EMAIL` (só no Easypanel) dispensa para esse e-mail a
+segregação de funções dos custos: auditar o que ele mesmo registrou (SoD-2) e o próprio custo (SoD-3). Vale só para o
+e-mail configurado, comparado sem maiúsculas com o do login (confirmado pelo Google). Cada dispensa fica no
+`registro_acao`, em `dados.segregacaoDispensada`. As permissões por perfil (só a líder aprova escala, reabre auditoria e
+muda regras) continuam valendo; o dono tem os dois perfis.
+
 ## Falta (Vitor)
 
 ### 1. Senha do papel de leitura (Supabase › SQL Editor)
