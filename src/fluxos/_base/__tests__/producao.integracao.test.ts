@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { sql, TransactionRollbackError } from "drizzle-orm";
 import type { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -99,6 +99,28 @@ describe.skipIf(!TEST_DATABASE_URL || !credenciais)("guarda do modo PRODUCAO no 
   it("com o marcador local também no banco: recusa (não é a produção)", async () => {
     await banco.sql(`alter database ${nome} set eventos.ambiente = 'local'`);
     await expect(guarda(ler(conexoes.app)).situacao(sessao)).resolves.toMatchObject({ liberada: false, trava: "MARCADOR_NO_PAPEL" });
+  });
+
+  it("marcador no comentário do papel (Supabase), só se for exatamente eventos.ambiente=<valor>", async () => {
+    // Comentário de papel vale para o cluster todo: grava no papel do login desta conexão (postgres), dentro de uma
+    // transação desfeita no fim, para não tocar no app_eventos do banco local nem em outros testes.
+    const lerComentario = async (comentario: string) => {
+      let lida: Awaited<ReturnType<typeof marcadorDoBanco>> | undefined;
+      await banco.db
+        .transaction(async (tx) => {
+          await tx.execute(sql.raw(`comment on role postgres is '${comentario}'`));
+          lida = await marcadorDoBanco(tx);
+          tx.rollback();
+        })
+        .catch((erro: unknown) => {
+          if (!(erro instanceof TransactionRollbackError)) throw erro;
+        });
+      return lida!;
+    };
+    expect((await lerComentario("eventos.ambiente=producao")).marcadorDoPapel).toBe("producao");
+    expect((await lerComentario("papel do app; eventos.ambiente=producao")).marcadorDoPapel).toBeNull();
+    expect((await lerComentario("eventos.ambiente=producao; outro")).marcadorDoPapel).toBeNull();
+    expect((await ler(banco.db)()).marcadorDoPapel).toBeNull();
   });
 
   it("SET de sessão não cria o marcador do papel", async () => {

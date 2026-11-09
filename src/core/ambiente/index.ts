@@ -16,7 +16,7 @@ export const USUARIO_TESTE = { id: "7e570000-0000-7000-8000-000000000001", nome:
 
 /** Valor de eventos.ambiente no banco local (ALTER DATABASE … SET pelo banco:local). */
 export const MARCADOR_DO_BANCO_LOCAL = "local";
-/** Valor de eventos.ambiente no papel de escrita da produção (ALTER ROLE app_eventos SET, manual). */
+/** Valor de eventos.ambiente no papel de escrita da produção (manual; no Supabase, COMMENT ON ROLE app_eventos). */
 export const MARCADOR_DO_PAPEL_DE_PRODUCAO = "producao";
 export const PAPEL_DE_ESCRITA = "app_eventos";
 
@@ -106,7 +106,7 @@ export function verificarMarcador(valor: string | null | undefined): SituacaoDaE
 export type LeituraDoServidor = {
   /** eventos.ambiente gravado para o banco atual (pg_db_role_setting, setrole = 0). */
   marcador: string | null;
-  /** eventos.ambiente gravado para o papel do login (pg_db_role_setting, setrole = oid do session_user). */
+  /** eventos.ambiente do papel do login: pg_db_role_setting (setrole = oid do session_user) ou o comentário do papel. */
   marcadorDoPapel?: string | null;
   /** session_user: o papel do login. current_user muda com SET ROLE ou `options=-c role=…` e não serve. */
   papel?: string | null;

@@ -27,13 +27,26 @@ no `iam-pessoas`, então Pessoas, Escalas com nomes, Comunicação e Custos apar
 - Conferido com `has_table_privilege`: os dois papéis do app leem `eventos` e `core` como previsto; nenhum tem `INSERT`
   em `eventos.evento`.
 
-## Bloqueio para liberar escrita (P4), não para a demo
+## Marcador de produção no Supabase (resolvido em 09/11)
 
-O passo 8 da doc 09 (`ALTER ROLE app_eventos SET eventos.ambiente = 'producao'`) **não roda no Supabase**: o `postgres`
-de lá não é superusuário e não pode gravar um parâmetro próprio (`eventos.*`) num papel (`permission denied to set
-parameter`). A trava 3 do modo PRODUCAO (`src/core/ambiente`) depende desse marcador. Antes da P4, trocar o marcador
-por algo que o `postgres` consiga gravar (por exemplo, `COMMENT ON ROLE app_eventos IS 'eventos.ambiente=producao'`,
-lido de `pg_shdescription`) ou pedir ao suporte do Supabase o parâmetro em `supautils`.
+O passo 8 da doc 09 (`ALTER ROLE app_eventos SET eventos.ambiente = 'producao'`) não roda no Supabase: o `postgres`
+de lá não é superusuário e não grava parâmetro próprio num papel. A trava 3 (`marcadorDoBanco`, em
+`src/fluxos/_base/banco.ts`) passou a aceitar também o comentário do papel, exatamente `eventos.ambiente=producao`:
+
+```sql
+COMMENT ON ROLE app_eventos IS 'eventos.ambiente=producao';
+```
+
+O próprio `app_eventos` (NOCREATEROLE) não consegue mudar o comentário. Não vai em migration: o comentário vale para o
+cluster inteiro, e no banco local ele fecharia o modo LOCAL.
+
+## Dono do sistema (EVENTOS_DONO_EMAIL)
+
+Para o dono testar o fluxo inteiro sozinho, `EVENTOS_DONO_EMAIL` (só no Easypanel) dispensa para esse e-mail a
+segregação de funções dos custos: auditar o que ele mesmo registrou (SoD-2) e o próprio custo (SoD-3). Vale só para o
+e-mail configurado, comparado sem maiúsculas com o do login (confirmado pelo Google). Cada dispensa fica no
+`registro_acao`, em `dados.segregacaoDispensada`. As permissões por perfil (só a líder aprova escala, reabre auditoria e
+muda regras) continuam valendo; o dono tem os dois perfis.
 
 ## Falta (Vitor)
 
