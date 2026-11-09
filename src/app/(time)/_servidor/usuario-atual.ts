@@ -7,9 +7,12 @@ import {
   type Ator,
   ATOR_DA_DEMO,
   COOKIE_ATOR_LOCAL,
+  COOKIE_SESSAO,
   criarSupabaseDoServidor,
+  lerSessao,
   resolverAtorPorEmail,
   resolverAtorPorId,
+  segredoDaSessao,
   usuarioDoCookieLocal,
 } from "@/core/auth";
 import { type Permissao, pode } from "@/core/autorizacao";
@@ -17,7 +20,8 @@ import { bancoParaLeitura, situacaoDaEscrita } from "@/fluxos/_base";
 
 export type { Ator, PerfilDoEventos } from "@/core/auth";
 
-// Quem está usando o app (docs/09 §3). Login real pelo Supabase; no modo local, "Entrar como" (cookie eventos_ator_local),
+// Quem está usando o app (docs/09 §3). Login real pelo Supabase (Google) ou com e-mail e senha do IAM Control (cookie
+// assinado, docs/10); no modo local, "Entrar como" (cookie eventos_ator_local),
 // que só vale com as três travas do banco local abertas. Resolvido do banco a cada requisição (cache só dentro dela).
 
 export type SituacaoDoAtor =
@@ -42,7 +46,18 @@ async function situacaoLocal(): Promise<SituacaoDoAtor> {
   return resolucao.situacao === "SEM_CADASTRO" ? { situacao: "SEM_SESSAO", destino: "/entrar-local" } : resolucao;
 }
 
+/** Login com e-mail e senha do IAM Control: nulo = sem essa sessão (ou desligada), segue para a do Google. */
+async function situacaoDaSessaoPropria(): Promise<SituacaoDoAtor | null> {
+  const segredo = segredoDaSessao();
+  if (!segredo) return null;
+  const email = lerSessao((await cookies()).get(COOKIE_SESSAO)?.value, segredo, new Date());
+  if (!email) return null;
+  return resolverAtorPorEmail(email, await bancoParaLeitura());
+}
+
 async function situacaoDaSessao(): Promise<SituacaoDoAtor> {
+  const propria = await situacaoDaSessaoPropria();
+  if (propria) return propria;
   const supabase = await criarSupabaseDoServidor();
   if (!supabase) return { situacao: "SEM_SESSAO", destino: "/login" };
   const {

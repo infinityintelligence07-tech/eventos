@@ -1,6 +1,7 @@
 import { createJobQueue, errorMessage, isTransientDbError } from "@/core/jobs";
 import { logger, withCorrelationId } from "@/core/logging";
 
+import { registrarSincronizacaoDeColaboradores } from "./jobs/sincronizar-colaboradores-job";
 import { registrarSincronizacaoDeTurmas } from "./jobs/sincronizar-turmas-job";
 
 function sleep(ms: number): Promise<void> {
@@ -31,6 +32,7 @@ async function runWorkerOnce(): Promise<void> {
 
   await boss.start();
   await registrarSincronizacaoDeTurmas(boss);
+  await registrarSincronizacaoDeColaboradores(boss);
   // Próximos jobs: rotas do Google Maps, envio de mensagens.
 
   withCorrelationId("worker-startup", () => {

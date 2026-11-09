@@ -23,6 +23,13 @@ export {
   type TamanhoDeCamiseta,
   type VeiculoDaPessoa,
 } from "./domain/cadastro";
+export {
+  type ColaboradorDoIamControl,
+  type ColaboradorIgnorado,
+  FUNCOES_ESCALAVEIS,
+  type PlanoDoColaborador,
+  planoDoColaborador,
+} from "./domain/colaborador";
 export { type ItemDoHistorico, rotuloDaSituacaoNaEscala, type SituacaoNaEscala } from "./domain/historico";
 export {
   type AtalhoDaLista,
@@ -49,4 +56,10 @@ export {
 } from "./domain/schemas";
 export { definirFuncoes, type RepositorioPerfil, salvarCoordenadas, salvarPerfilDoStaff, salvarVeiculo } from "./service/perfil";
 export { criarRepositorioPerfil } from "./repository/perfil-repository";
+export {
+  type AcaoDoColaborador,
+  type ColaboradorSalvo,
+  criarRepositorioColaboradores,
+  type RepositorioColaboradores,
+} from "./repository/colaboradores-repository";
 export { type ConsultaPessoas, criarConsultaPessoas, type FichaDaPessoa, type OpcoesDePessoas } from "./repository/consulta-repository";

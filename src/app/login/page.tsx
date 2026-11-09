@@ -3,10 +3,11 @@ import { redirect } from "next/navigation";
 
 import { entradaLocalLiberada, situacaoDoAtor } from "@/app/(time)/_servidor/usuario-atual";
 import { modoDemo, modoLocal } from "@/core/ambiente";
-import { configuracaoDoLogin, destinoSeguro } from "@/core/auth";
+import { configuracaoDoLogin, destinoSeguro, segredoDaSessao } from "@/core/auth";
+import { lerConfig } from "@/core/config/leitura";
 
 import { MolduraDeEntrada } from "./_componentes/moldura";
-import { entrarComGoogle } from "./acoes";
+import { entrarComGoogle, entrarComSenha } from "./acoes";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Entrar" };
@@ -17,7 +18,19 @@ const MENSAGENS: Record<string, string> = {
   "link-expirado": "O link de entrada expirou ou já foi usado. Tente de novo.",
   falhou: "Não foi possível entrar. Tente de novo.",
   "nao-configurado": "O login não está configurado neste ambiente.",
+  credenciais: "E-mail ou senha incorretos, ou conta ainda não aprovada no IAM Control.",
+  "muitas-tentativas": "Muitas tentativas. Espere 15 minutos e tente de novo.",
+  "iam-control-fora": "Não foi possível falar com o IAM Control agora. Tente de novo em instantes ou entre com o Google.",
 };
+
+/** Login com a mesma conta do IAM Control (docs/10): precisa do endereço dele e do segredo da sessão. */
+function loginComSenhaConfigurado(): boolean {
+  try {
+    return Boolean(segredoDaSessao() && lerConfig().IAM_CONTROL_URL);
+  } catch {
+    return false;
+  }
+}
 
 function IconeDoGoogle() {
   return (
@@ -49,26 +62,53 @@ export default async function PaginaLogin({ searchParams }: { searchParams: Prom
 
   if ((await situacaoDoAtor()).situacao === "OK") redirect(destinoSeguro(proximo));
 
-  const configurado = Boolean(configuracaoDoLogin()?.urlPublica);
-  const mensagem = (erro && MENSAGENS[erro]) || (!configurado ? MENSAGENS["nao-configurado"] : null);
+  const googleConfigurado = Boolean(configuracaoDoLogin()?.urlPublica);
+  const senhaConfigurada = loginComSenhaConfigurado();
+  const mensagem = (erro && MENSAGENS[erro]) || (!googleConfigurado && !senhaConfigurada ? MENSAGENS["nao-configurado"] : null);
+  const destino = destinoSeguro(proximo);
+  const urlDoIamControl = lerConfig().IAM_CONTROL_URL;
 
   return (
     <MolduraDeEntrada>
       <h1>Entrar</h1>
-      <p className="login-lead">Use a sua conta Google. O acesso é liberado pela líder do time.</p>
+      <p className="login-lead">Use a mesma conta do IAM Control: e-mail e senha, ou o Google.</p>
       {mensagem && (
         <p className="login-error" role="alert">
           {mensagem}
         </p>
       )}
-      <form action={entrarComGoogle}>
-        <input type="hidden" name="proximo" value={destinoSeguro(proximo)} />
-        <button type="submit" className="google-login-button" disabled={!configurado}>
-          <IconeDoGoogle />
-          Continuar com Google
-        </button>
-      </form>
-      <p className="login-terms">Só entra quem tem cadastro ativo na IAM e perfil do Eventos.</p>
+      {senhaConfigurada && (
+        <form action={entrarComSenha} className="login-senha">
+          <input type="hidden" name="proximo" value={destino} />
+          <label className="login-campo">
+            <span>E-mail</span>
+            <input type="email" name="email" autoComplete="username" required maxLength={254} />
+          </label>
+          <label className="login-campo">
+            <span>Senha</span>
+            <input type="password" name="senha" autoComplete="current-password" required maxLength={256} />
+          </label>
+          <button type="submit" className="login-submit">
+            Entrar
+          </button>
+          {urlDoIamControl && (
+            <a className="login-esqueci" href={new URL("/signin", urlDoIamControl).toString()} target="_blank" rel="noopener noreferrer">
+              Esqueci minha senha (recuperar no IAM Control)
+            </a>
+          )}
+        </form>
+      )}
+      {senhaConfigurada && googleConfigurado && <p className="login-ou">ou</p>}
+      {(googleConfigurado || !senhaConfigurada) && (
+        <form action={entrarComGoogle}>
+          <input type="hidden" name="proximo" value={destino} />
+          <button type="submit" className="google-login-button" disabled={!googleConfigurado}>
+            <IconeDoGoogle />
+            Continuar com Google
+          </button>
+        </form>
+      )}
+      <p className="login-terms">Só entra quem tem conta ativa no IAM Control e perfil do Eventos.</p>
     </MolduraDeEntrada>
   );
 }

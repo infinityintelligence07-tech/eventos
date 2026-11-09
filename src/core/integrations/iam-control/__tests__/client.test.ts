@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { turmaDeExemplo } from "@/test/turmas";
 
-import { createIamControlClient, IamControlError } from "../client";
+import { conferirSenhaNoIamControl, createIamControlClient, IamControlError } from "../client";
 
 function fetchQueResponde(status: number, corpo: unknown) {
   return vi.fn(async () => new Response(JSON.stringify(corpo), { status, headers: { "content-type": "application/json" } }));
@@ -33,5 +33,49 @@ describe("cliente do IAM Control", () => {
       throw new TypeError("fetch failed");
     });
     await expect(com(caiu).listarTurmas()).rejects.toBeInstanceOf(IamControlError);
+  });
+
+  it("lê os colaboradores com o mesmo token e valida a resposta", async () => {
+    const colaborador = {
+      id: 2,
+      nome: "Ana",
+      email: "ana@exemplo.test",
+      telefone: null,
+      cidade: null,
+      estado: null,
+      setores: ["EVENTOS"],
+      funcoes: ["STAFF"],
+      ativo: true,
+      atualizado_em: "2026-11-09T12:00:00Z",
+      excluido_em: null,
+    };
+    const fetch = fetchQueResponde(200, { total: 1, colaboradores: [colaborador] });
+    const cliente = createIamControlClient({ baseUrl: "https://iam.test", token: "tok", fetch });
+
+    await expect(cliente.listarColaboradores()).resolves.toEqual({ total: 1, colaboradores: [colaborador] });
+    const [url, init] = fetch.mock.calls[0] as unknown as [URL, RequestInit];
+    expect(String(url)).toBe("https://iam.test/api/webhooks/eventos/colaboradores");
+    expect((init.headers as Record<string, string>)["x-webhook-token"]).toBe("tok");
+
+    const semCampo = createIamControlClient({ baseUrl: "https://iam.test", token: "t", fetch: fetchQueResponde(200, { total: 1, colaboradores: [{ id: 2 }] }) });
+    await expect(semCampo.listarColaboradores()).rejects.toThrow(/fora do formato/);
+  });
+
+  it("confere a senha no login do IAM Control, sem token, e só aceita resposta com o usuário", async () => {
+    const fetch = fetchQueResponde(201, { success: true, token: "jwt-do-iam", user: { id: 1, email: "Ana@Exemplo.test" } });
+    await expect(conferirSenhaNoIamControl({ baseUrl: "https://iam.test/", fetch }, "ana@exemplo.test", "segredo")).resolves.toEqual({
+      ok: true,
+      email: "ana@exemplo.test",
+    });
+    const [url, init] = fetch.mock.calls[0] as unknown as [URL, RequestInit];
+    expect(String(url)).toBe("https://iam.test/api/auth/login");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(String(init.body))).toEqual({ email: "ana@exemplo.test", senha: "segredo", provider: "credentials" });
+    expect(init.headers).not.toHaveProperty("x-webhook-token");
+
+    const com = (status: number, corpo: unknown = {}) => conferirSenhaNoIamControl({ baseUrl: "https://iam.test", fetch: fetchQueResponde(status, corpo) }, "a@b.c", "x");
+    for (const status of [400, 401, 403]) await expect(com(status)).resolves.toEqual({ ok: false });
+    await expect(com(500)).rejects.toBeInstanceOf(IamControlError);
+    await expect(com(200, { success: true })).rejects.toThrow(/fora do formato/);
   });
 });

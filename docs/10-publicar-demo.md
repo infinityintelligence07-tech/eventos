@@ -48,6 +48,50 @@ e-mail configurado, comparado sem maiúsculas com o do login (confirmado pelo Go
 `registro_acao`, em `dados.segregacaoDispensada`. As permissões por perfil (só a líder aprova escala, reabre auditoria e
 muda regras) continuam valendo; o dono tem os dois perfis.
 
+## Contas do IAM Control (09/11)
+
+Quem tem conta ativa no IAM Control entra no Eventos com o mesmo e-mail e senha, ou com o Google. As decisões:
+
+- **Time de eventos** (`EVENTOS_TIME`): conta ativa com o setor `EVENTOS` no IAM Control. Líder (`EVENTOS_LIDER`) nunca
+  vem do IAM Control: só à mão (passo 3 abaixo).
+- **Staff escalável** (`eventos.pessoa_evento`): conta ativa com alguma função de evento (STAFF, DJ, FOTOGRAFO,
+  SOCIAL_MEDIA, LIDER_DE_EVENTOS, LIDER_DE_CONFRONTO, LIDER_DE_MASTERCLASS, PALESTRANTE, LOGISTICA).
+- **Quem saiu** (não aprovado, excluído ou com demissão): fica inativo e perde o login. Nada é apagado.
+
+Peças:
+
+1. **IAM Control** (`IAM-Control-Backend`): `GET /api/webhooks/eventos/colaboradores`, com o mesmo token das turmas
+   (`EVENTOS_WEBHOOK_TOKENS`). Sem CPF, CNPJ, RG, PIS, CTPS, PIX, nascimento, endereço completo, foto nem senha.
+2. **Sincronização** (`src/jobs/sincronizar-colaboradores.ts`): no worker a cada 30 minutos (`15,45 6-23 * * *`) ou à
+   mão com `npm run sync:colaboradores`. Grava `core.usuario` (por e-mail), `core.pessoa`, o perfil `EVENTOS_TIME`,
+   `eventos.pessoa_evento` e as funções. Só acrescenta: perfil e função dados à mão não são retirados.
+3. **Login com senha** (`src/app/login/acoes.ts`): o Eventos manda e-mail e senha para `POST /api/auth/login` do IAM
+   Control (servidor a servidor), descarta o token dele e guarda só o e-mail num cookie httpOnly assinado
+   (`EVENTOS_SESSAO_SEGREDO`, 8 h). Limite: 5 falhas por e-mail e 20 por IP a cada 15 minutos. A senha nunca vai para
+   o log. "Esqueci minha senha" leva ao IAM Control. Sem `EVENTOS_SESSAO_SEGREDO`, fica só o Google.
+
+### Variáveis da produção com escrita e login
+
+Web (Easypanel, serviço `eventos`):
+
+```
+PORT=3000
+DATABASE_URL=postgresql://app_eventos_leitura.rpnyvqinqdvqwripqlxj:<senha>@aws-1-sa-east-1.pooler.supabase.com:6543/postgres
+DATABASE_URL_ESCRITA=postgresql://app_eventos.rpnyvqinqdvqwripqlxj:<senha>@aws-1-sa-east-1.pooler.supabase.com:6543/postgres
+EVENTOS_ESCRITA=producao
+EVENTOS_URL_PUBLICA=https://eventos.iamcontrol.com.br
+EVENTOS_SESSAO_SEGREDO=<64 caracteres aleatórios: openssl rand -hex 32>
+EVENTOS_DONO_EMAIL=infinityintelligence07@gmail.com
+IAM_CONTROL_URL=https://iamcontrol.com.br
+NEXT_PUBLIC_SUPABASE_URL=https://rpnyvqinqdvqwripqlxj.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_6xd4FjpJcUNtKcpUYoRsKg_sctjPGE4
+LOG_LEVEL=info
+```
+
+Sem `EVENTOS_MODO`. Worker (serviço novo no Easypanel, mesmo repositório, Construção › Dockerfile › Arquivo `Dockerfile.worker`): `DATABASE_URL` (conexão
+direta ou session pooler, papel `postgres` até existir o `app_eventos_worker`), `IAM_CONTROL_URL`,
+`IAM_CONTROL_EVENTOS_TOKEN` e `LOG_LEVEL`. Trocar o `EVENTOS_SESSAO_SEGREDO` desloga todo mundo que entrou com senha.
+
 ## Falta (Vitor)
 
 ### 1. Senha do papel de leitura (Supabase › SQL Editor)

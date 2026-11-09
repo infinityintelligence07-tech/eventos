@@ -64,3 +64,10 @@ jobs:
           target: worker
           push: false
           cache-from: type=gha
+      - name: Build worker (Dockerfile.worker, o do EasyPanel)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.worker
+          push: false
+          cache-from: type=gha

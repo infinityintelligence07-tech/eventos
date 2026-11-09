@@ -17,6 +17,7 @@ cp .env.example .env          # DATABASE_URL (o usuário cola; nunca commitar)
 npm run dev                   # web em http://localhost:3000 (GET /api/health, /api/health?db=1)
 npm run worker                # fila pg-boss no schema pgboss_eventos
 npm run sync:turmas           # sincroniza as turmas do IAM Control uma vez (-- --a-partir-de=AAAA-MM-DD)
+npm run sync:colaboradores    # sincroniza as contas do IAM Control uma vez (login, time e staff; docs/10)
 npm run lint && npm run typecheck && npm test
 TEST_DATABASE_URL=local npm test   # inclui integração, no Postgres do banco:local (senha lida de .banco-local/)
 ```
