@@ -12,7 +12,7 @@
     "banco:local": "node --env-file-if-exists=.env --import tsx scripts/banco-local/index.ts",
     "build": "next build",
     "start": "next start",
-    "worker": "node --env-file-if-exists=.env --import tsx src/worker.ts",
+    "worker": "EVENTOS_PROCESSO=worker node --env-file-if-exists=.env --import tsx src/worker.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

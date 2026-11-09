@@ -28,6 +28,7 @@ RUN npm ci --omit=dev
 FROM node:22-alpine AS worker
 WORKDIR /app
 ENV NODE_ENV=production
+ENV EVENTOS_PROCESSO=worker
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 worker
 COPY --from=worker-deps /app/node_modules ./node_modules
 COPY package.json tsconfig.json ./
