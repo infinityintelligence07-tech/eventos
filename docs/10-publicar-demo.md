@@ -90,7 +90,8 @@ LOG_LEVEL=info
 
 Sem `EVENTOS_MODO`. Worker (serviço novo no Easypanel, mesmo repositório, Construção › Dockerfile › Arquivo `Dockerfile.worker`): `DATABASE_URL` (conexão
 direta ou session pooler, papel `postgres` até existir o `app_eventos_worker`), `IAM_CONTROL_URL`,
-`IAM_CONTROL_EVENTOS_TOKEN` e `LOG_LEVEL`. Trocar o `EVENTOS_SESSAO_SEGREDO` desloga todo mundo que entrou com senha.
+`IAM_CONTROL_EVENTOS_TOKEN` e `LOG_LEVEL`. A imagem do worker define `EVENTOS_PROCESSO=worker`, que dispensa as variáveis do
+login (o worker não tem tela); antes disso (até 09/11) ele morria ao subir pedindo `NEXT_PUBLIC_SUPABASE_*`. Trocar o `EVENTOS_SESSAO_SEGREDO` desloga todo mundo que entrou com senha.
 
 ## Falta (Vitor)
 

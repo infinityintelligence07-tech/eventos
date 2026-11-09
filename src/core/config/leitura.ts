@@ -27,6 +27,13 @@ const environmentSchema = z.object({
     .optional()
     .transform((value) => (value === "" ? undefined : value))
     .pipe(z.enum(["local", "demo"]).optional()),
+  // Qual processo é este: "worker" (pg-boss) não tem tela de login e não precisa das variáveis dele. Ausente = web.
+  // Definida pela imagem do worker (Dockerfile.worker e target worker) e pelo npm run worker, nunca no Easypanel da web.
+  EVENTOS_PROCESSO: z
+    .string()
+    .optional()
+    .transform((value) => (value === "" ? undefined : value))
+    .pipe(z.enum(["web", "worker"]).optional()),
   // Login (Supabase Auth do iam-pessoas, só a chave pública). Opcionais fora de produção: o modo local usa "Entrar como".
   NEXT_PUBLIC_SUPABASE_URL: z
     .string()
@@ -55,7 +62,7 @@ const environmentSchema = z.object({
     { path: ["DATABASE_URL"], message: "com EVENTOS_MODO=local, DATABASE_URL precisa apontar para localhost" },
   )
   .superRefine((env, contexto) => {
-    if (env.NODE_ENV !== "production" || env.EVENTOS_MODO === "demo") return;
+    if (env.NODE_ENV !== "production" || env.EVENTOS_MODO === "demo" || env.EVENTOS_PROCESSO === "worker") return;
     for (const nome of ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "EVENTOS_URL_PUBLICA"] as const) {
       if (!env[nome]) contexto.addIssue({ code: "custom", path: [nome], message: "obrigatória em produção (login)" });
     }

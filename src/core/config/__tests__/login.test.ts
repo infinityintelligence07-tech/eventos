@@ -29,6 +29,12 @@ describe("variáveis do login", () => {
     expect(() => parseEnvironment({ ...BASE, NODE_ENV: "production", EVENTOS_MODO: "outro" })).toThrow(/EVENTOS_MODO/);
   });
 
+  it("o worker não tem login: em produção não precisa delas", () => {
+    expect(parseEnvironment({ ...BASE, NODE_ENV: "production", EVENTOS_PROCESSO: "worker" }).EVENTOS_PROCESSO).toBe("worker");
+    expect(() => parseEnvironment({ ...BASE, NODE_ENV: "production", EVENTOS_PROCESSO: "web" })).toThrow(/NEXT_PUBLIC_SUPABASE_URL/);
+    expect(() => parseEnvironment({ ...BASE, NODE_ENV: "production", EVENTOS_PROCESSO: "outro" })).toThrow(/EVENTOS_PROCESSO/);
+  });
+
   it("URLs precisam ser válidas", () => {
     expect(() => parseEnvironment({ ...BASE, NODE_ENV: "development", EVENTOS_URL_PUBLICA: "eventos" })).toThrow(/EVENTOS_URL_PUBLICA/);
   });
