@@ -4,11 +4,13 @@ import { createIamControlClient, IamControlError } from "./client";
 
 export {
   type ColaboradorRecebido,
+  conferirSenhaNoIamControl,
   createIamControlClient,
   type IamControlClient,
   IamControlError,
   type RespostaColaboradores,
   type RespostaTurmas,
+  type ResultadoDaSenha,
   type TurmaRecebida,
 } from "./client";
 

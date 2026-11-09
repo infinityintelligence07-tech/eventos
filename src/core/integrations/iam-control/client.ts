@@ -137,3 +137,36 @@ export function createIamControlClient(options: IamControlClientOptions) {
 }
 
 export type IamControlClient = ReturnType<typeof createIamControlClient>;
+
+const loginSchema = z.object({ user: z.object({ email: z.string() }) });
+
+export type ResultadoDaSenha = { ok: true; email: string } | { ok: false };
+
+/**
+ * Confere e-mail e senha no IAM Control (POST /api/auth/login, a mesma rota do site dele): só contas aprovadas e não
+ * excluídas passam. A senha vai só para o IAM Control, por HTTPS; o Eventos não a guarda nem a registra no log.
+ * O token que o IAM Control devolve é descartado. 401/403 = credenciais recusadas (ou conta pendente), sem distinguir.
+ */
+export async function conferirSenhaNoIamControl(
+  options: Pick<IamControlClientOptions, "baseUrl" | "fetch" | "timeoutMs">,
+  email: string,
+  senha: string,
+): Promise<ResultadoDaSenha> {
+  const fetchFn = options.fetch ?? fetch;
+  let resposta: Response;
+  try {
+    resposta = await fetchFn(new URL(`${options.baseUrl.replace(/\/+$/, "")}/api/auth/login`), {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({ email, senha, provider: "credentials" }),
+      signal: AbortSignal.timeout(options.timeoutMs ?? 15_000),
+    });
+  } catch (cause: unknown) {
+    throw new IamControlError(`IAM Control indisponível: ${cause instanceof Error ? cause.message : String(cause)}`);
+  }
+  if (resposta.status === 400 || resposta.status === 401 || resposta.status === 403) return { ok: false };
+  if (!resposta.ok) throw new IamControlError(`IAM Control respondeu ${resposta.status}`, resposta.status);
+  const leitura = loginSchema.safeParse(await resposta.json().catch(() => null));
+  if (!leitura.success) throw new IamControlError("Resposta do login do IAM Control fora do formato esperado");
+  return { ok: true, email: leitura.data.user.email.trim().toLowerCase() };
+}

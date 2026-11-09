@@ -37,6 +37,12 @@ const environmentSchema = z.object({
     .string()
     .optional()
     .transform((value) => (value === "" ? undefined : value)),
+  // Login com e-mail e senha do IAM Control (docs/10): assina o cookie da sessão própria. Sem ela, só Google.
+  EVENTOS_SESSAO_SEGREDO: z
+    .string()
+    .optional()
+    .transform((value) => (value === "" ? undefined : value))
+    .pipe(z.string().min(32, "pelo menos 32 caracteres").optional()),
   // Endereço público do Eventos: monta o redirectTo do Google e o destino do callback (nunca o Host da requisição).
   EVENTOS_URL_PUBLICA: z
     .string()

@@ -3,6 +3,9 @@ import { type NextRequest, NextResponse } from "next/server";
 
 import { lerConfig } from "@/core/config/leitura";
 
+/** Mesmo nome de src/core/auth/sessao-propria.ts (que usa node:crypto e não roda no edge). */
+const COOKIE_SESSAO = "eventos_sessao";
+
 // Só autentica (docs/09 L2): renova a sessão do Supabase e manda para /login quem não tem. Quem decide o acesso é o
 // servidor (layout do (time), executarAcao e o fluxo). Roda no edge: não importa banco nem @/core/auth (que lê o banco).
 // No modo local não fala com o Supabase; o layout leva para "Entrar como". Na demo (sem login) também não.
@@ -24,6 +27,8 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     return paraOLogin(request);
   }
   if (config.EVENTOS_MODO === "local" || config.EVENTOS_MODO === "demo") return NextResponse.next();
+  // Login com e-mail e senha (docs/10): o cookie é conferido (assinatura e validade) pelo layout e pelas actions.
+  if (config.EVENTOS_SESSAO_SEGREDO && request.cookies.has(COOKIE_SESSAO)) return NextResponse.next();
   if (!config.NEXT_PUBLIC_SUPABASE_URL || !config.NEXT_PUBLIC_SUPABASE_ANON_KEY) return paraOLogin(request);
 
   const reforco: CookieOptions = { httpOnly: true, secure: config.NODE_ENV === "production", sameSite: "lax", path: "/" };
