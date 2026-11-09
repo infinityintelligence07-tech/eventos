@@ -27,7 +27,7 @@ export type ResumoSincronizacao = {
 };
 
 /** Mensagem do erro com a causa (o Drizzle embrulha o erro do Postgres em "Failed query: ..."). */
-function mensagemDeErro(cause: unknown): string {
+export function mensagemDeErro(cause: unknown): string {
   if (!(cause instanceof Error)) return String(cause);
   const interna = cause.cause instanceof Error ? cause.cause.message : null;
   const principal = cause.message.startsWith("Failed query") ? "falha no banco" : cause.message;

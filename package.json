@@ -19,7 +19,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:check": "drizzle-kit check",
-    "sync:turmas": "node --env-file-if-exists=.env --import tsx src/jobs/cli-sincronizar-turmas.ts"
+    "sync:turmas": "node --env-file-if-exists=.env --import tsx src/jobs/cli-sincronizar-turmas.ts",
+    "sync:colaboradores": "node --env-file-if-exists=.env --import tsx src/jobs/cli-sincronizar-colaboradores.ts"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.10.0",

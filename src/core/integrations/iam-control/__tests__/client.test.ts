@@ -34,4 +34,30 @@ describe("cliente do IAM Control", () => {
     });
     await expect(com(caiu).listarTurmas()).rejects.toBeInstanceOf(IamControlError);
   });
+
+  it("lê os colaboradores com o mesmo token e valida a resposta", async () => {
+    const colaborador = {
+      id: 2,
+      nome: "Ana",
+      email: "ana@exemplo.test",
+      telefone: null,
+      cidade: null,
+      estado: null,
+      setores: ["EVENTOS"],
+      funcoes: ["STAFF"],
+      ativo: true,
+      atualizado_em: "2026-11-09T12:00:00Z",
+      excluido_em: null,
+    };
+    const fetch = fetchQueResponde(200, { total: 1, colaboradores: [colaborador] });
+    const cliente = createIamControlClient({ baseUrl: "https://iam.test", token: "tok", fetch });
+
+    await expect(cliente.listarColaboradores()).resolves.toEqual({ total: 1, colaboradores: [colaborador] });
+    const [url, init] = fetch.mock.calls[0] as unknown as [URL, RequestInit];
+    expect(String(url)).toBe("https://iam.test/api/webhooks/eventos/colaboradores");
+    expect((init.headers as Record<string, string>)["x-webhook-token"]).toBe("tok");
+
+    const semCampo = createIamControlClient({ baseUrl: "https://iam.test", token: "t", fetch: fetchQueResponde(200, { total: 1, colaboradores: [{ id: 2 }] }) });
+    await expect(semCampo.listarColaboradores()).rejects.toThrow(/fora do formato/);
+  });
 });
