@@ -1,5 +1,6 @@
 // Colaborador do IAM Control -> usuário, pessoa e staff do Eventos (docs/10, decisões de 09/11).
-//   Time de eventos (perfil EVENTOS_TIME): conta ativa com o setor EVENTOS. Líder nunca vem daqui (só manual).
+//   Acesso de time (EVENTOS_TIME e EVENTOS_LIDER) nunca vem daqui: só manual (decisão de 10/11 — o staff também está
+//   no setor EVENTOS do IAM Control, e o setor dava acesso de time a quase todo o staff).
 //   Staff escalável (eventos.pessoa_evento): conta ativa com alguma função de evento.
 //   Funções do Eventos: só as que têm correspondente direto; o time completa à mão.
 
@@ -28,8 +29,6 @@ const FUNCAO_NO_EVENTOS: Readonly<Record<string, string>> = {
   PALESTRANTE: "PALESTRANTE",
 };
 
-export const SETOR_DO_TIME = "EVENTOS";
-
 export type ColaboradorDoIamControl = {
   id: number;
   nome: string;
@@ -47,8 +46,6 @@ export type PlanoDoColaborador = {
   nome: string;
   telefone: string | null;
   ativo: boolean;
-  /** Ganha EVENTOS_TIME (nunca é retirado pela sincronização). */
-  timeDeEventos: boolean;
   /** Entra (ou continua) como staff escalável. */
   escalavel: boolean;
   /** Códigos de eventos.funcao, sem repetição. */
@@ -75,7 +72,6 @@ export function planoDoColaborador(colaborador: ColaboradorDoIamControl): { ok: 
       nome,
       telefone: colaborador.telefone?.trim() || null,
       ativo,
-      timeDeEventos: ativo && colaborador.setores.includes(SETOR_DO_TIME),
       escalavel: ativo && FUNCOES_ESCALAVEIS.some((funcao) => funcoes.has(funcao)),
       funcoesDoEventos: [...new Set([...funcoes].flatMap((funcao) => (FUNCAO_NO_EVENTOS[funcao] ? [FUNCAO_NO_EVENTOS[funcao]] : [])))],
     },

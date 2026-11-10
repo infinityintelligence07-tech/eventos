@@ -54,7 +54,7 @@ describe.skipIf(!TEST_DATABASE_URL)("sincronização de colaboradores no Postgre
     await banco?.encerrar();
   });
 
-  it("cria usuário, perfil do time e staff escalável com as funções; ignora inativo novo e e-mail inválido", async () => {
+  it("cria usuário e staff escalável com as funções, sem nenhum perfil de time; ignora inativo novo e e-mail inválido", async () => {
     colaboradores = [
       colaborador({ id: 1, email: "Time@Exemplo.test", setores: ["EVENTOS"], funcoes: ["LIDER_DE_EVENTOS"] }),
       colaborador({ id: 2, email: "dj@exemplo.test", funcoes: ["DJ", "STAFF"] }),
@@ -63,11 +63,11 @@ describe.skipIf(!TEST_DATABASE_URL)("sincronização de colaboradores no Postgre
       colaborador({ id: 5, email: "sem-arroba" }),
     ];
     const resumo = await sincronizar();
-    expect(resumo).toMatchObject({ lidos: 5, criados: 3, atualizados: 0, desativados: 0, inativosIgnorados: 1, timeDeEventos: 1, escalaveis: 2, falhas: [] });
+    expect(resumo).toMatchObject({ lidos: 5, criados: 3, atualizados: 0, desativados: 0, inativosIgnorados: 1, escalaveis: 2, falhas: [] });
     expect(resumo.ignorados).toEqual([{ iamControlUserId: 5, motivo: "EMAIL_INVALIDO" }]);
 
-    // Time: perfil EVENTOS_TIME (nunca EVENTOS_LIDER) e, por ter função de evento, também escalável.
-    expect(await usuario("time@exemplo.test")).toMatchObject({ ativo: true, nome_usuario: null, perfis: ["EVENTOS_TIME"] });
+    // Setor EVENTOS com função de líder: escalável, mas sem acesso de time (só manual).
+    expect(await usuario("time@exemplo.test")).toMatchObject({ ativo: true, nome_usuario: null, perfis: [] });
     expect(await staff(1)).toMatchObject({ nome_completo: "Pessoa 1", funcoes: ["LIDER_EVENTO"] });
     expect(await staff(2)).toMatchObject({ email: "dj@exemplo.test", ativo: true, funcoes: ["DJ", "STAFF"] });
 
@@ -102,10 +102,11 @@ describe.skipIf(!TEST_DATABASE_URL)("sincronização de colaboradores no Postgre
     expect(((await banco.sql(`select count(*)::int as n from core.pessoa`)) as [{ n: number }])[0].n).toBe(2);
   });
 
-  it("liga a conta já cadastrada à mão pelo e-mail, sem duplicar usuário", async () => {
+  it("liga a conta já cadastrada à mão pelo e-mail, sem duplicar usuário e sem mexer nos perfis dados à mão", async () => {
     const { id } = ((await banco.sql(`insert into core.usuario (email, nome_usuario) values ('dono@exemplo.test', 'Dono') returning id`)) as [{ id: string }])[0];
-    colaboradores = [colaborador({ id: 9, email: "DONO@exemplo.test", setores: ["EVENTOS"], funcoes: [] })];
-    expect(await sincronizar()).toMatchObject({ criados: 0, atualizados: 1, timeDeEventos: 1, escalaveis: 0 });
+    await banco.sql(`insert into core.usuario_perfil (usuario_id, perfil_id, escopo) select $1, id, 'GLOBAL' from core.perfil where codigo = 'EVENTOS_TIME'`, [id]);
+    colaboradores = [colaborador({ id: 9, email: "DONO@exemplo.test", setores: ["EVENTOS"], funcoes: ["STAFF"] })];
+    expect(await sincronizar()).toMatchObject({ criados: 0, atualizados: 1, escalaveis: 1 });
     expect(await usuario("dono@exemplo.test")).toMatchObject({ id, nome_usuario: "Dono", perfis: ["EVENTOS_TIME"] });
     expect(((await banco.sql(`select nome_completo from core.pessoa where usuario_id = $1`, [id])) as { nome_completo: string }[])).toEqual([{ nome_completo: "Pessoa 9" }]);
   });

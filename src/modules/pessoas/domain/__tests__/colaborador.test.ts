@@ -24,11 +24,12 @@ describe("colaborador do IAM Control no Eventos", () => {
     expect(plano({ telefone: "  " }).telefone).toBeNull();
   });
 
-  it("time de eventos só com o setor EVENTOS e conta ativa; líder nunca vem daqui", () => {
-    expect(plano().timeDeEventos).toBe(true);
-    expect(plano({ setores: ["COMERCIAL"] }).timeDeEventos).toBe(false);
-    expect(plano({ ativo: false }).timeDeEventos).toBe(false);
-    expect(plano({ funcoes: ["LIDER_DE_EVENTOS"] })).not.toHaveProperty("lider");
+  it("nunca dá acesso de time: nem pelo setor EVENTOS, nem por função de líder", () => {
+    for (const mudanca of [{}, { funcoes: ["LIDER_DE_EVENTOS"] }, { setores: ["EVENTOS", "ADMINISTRADOR"] }]) {
+      const resultado = plano(mudanca);
+      expect(resultado).not.toHaveProperty("timeDeEventos");
+      expect(resultado).not.toHaveProperty("lider");
+    }
   });
 
   it("escalável com alguma função de evento e conta ativa", () => {

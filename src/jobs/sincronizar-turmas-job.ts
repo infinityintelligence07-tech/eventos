@@ -15,7 +15,9 @@ export const SINCRONIZAR_TURMAS_CRON = "*/30 6-23 * * *";
 const OPCOES = {
   // Uma sincronização por vez: se a anterior ainda roda, a próxima não empilha.
   policy: "exclusive",
-  expireInSeconds: 600,
+  // ~900 turmas, uma transação cada, pelo pooler a partir da VPS passa de 10 min (estourava o limite). 25 min fica
+  // abaixo do intervalo de 30 min; com policy exclusive, uma rodada não encavala na outra.
+  expireInSeconds: 1500,
   retryLimit: 2,
   retryDelay: 60,
   retryBackoff: true,
