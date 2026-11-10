@@ -16,6 +16,7 @@ import {
   Receipt,
   Settings,
   Sun,
+  UserRound,
   Users,
   X,
 } from "lucide-react";
@@ -45,12 +46,15 @@ export type UsuarioDoPainel = {
   email: string;
   origem: "SESSAO" | "LOCAL" | "DEMO";
   perfis: ("EVENTOS_TIME" | "EVENTOS_LIDER")[];
+  /** Também é staff (tem pessoa_evento): ganha o atalho para "Meu cadastro". */
+  ehStaff: boolean;
 };
 
 /** Calculado no servidor pelo layout (guarda de escrita e ator da requisição). */
-export type AmbienteDoPainel = { escritaLiberada: boolean; usuario: UsuarioDoPainel | null };
+/** `motivoDaEscrita`: por que está somente leitura (texto da guarda, sem segredo), na dica do selo. */
+export type AmbienteDoPainel = { escritaLiberada: boolean; motivoDaEscrita?: string; usuario: UsuarioDoPainel | null };
 
-function BarraLateral({ aberta, aoFechar, rotas }: { aberta: boolean; aoFechar: () => void; rotas: typeof ROTAS_DO_MENU }) {
+function BarraLateral({ aberta, aoFechar, rotas, ehStaff }: { aberta: boolean; aoFechar: () => void; rotas: typeof ROTAS_DO_MENU; ehStaff: boolean }) {
   const ativoNoMenu = itemAtivoDoMenu(usePathname());
   return (
     <aside
@@ -88,6 +92,15 @@ function BarraLateral({ aberta, aoFechar, rotas }: { aberta: boolean; aoFechar: 
             );
           })}
         </ul>
+        {ehStaff && (
+          <>
+            <h2 className="mt-6 mb-3 text-[12px] font-medium tracking-[0.012em] text-white/55">Você no staff</h2>
+            <Link href="/meu-cadastro" onClick={aoFechar} className="menu-item menu-item-inactive">
+              <UserRound size={20} className="shrink-0" aria-hidden />
+              Meu cadastro
+            </Link>
+          </>
+        )}
       </nav>
     </aside>
   );
@@ -132,7 +145,7 @@ function SeloDoAmbiente({ ambiente }: { ambiente: AmbienteDoPainel }) {
   return (
     <span
       className="inline-flex items-center gap-1.5 rounded-full bg-[var(--ds-orange-soft)] px-3 py-1 text-[12px] font-medium text-[var(--ds-orange-deep)]"
-      title="Escrita desligada neste ambiente: dá para consultar, mas nada é gravado."
+      title={`Escrita desligada neste ambiente: dá para consultar, mas nada é gravado.${ambiente.motivoDaEscrita ? ` Motivo: ${ambiente.motivoDaEscrita}` : ""}`}
     >
       <Lock size={14} aria-hidden />
       {ambiente.usuario?.origem === "DEMO" ? "Demo · somente leitura" : "Somente leitura"}
@@ -159,6 +172,14 @@ function UsuarioNoCabecalho({ usuario }: { usuario: UsuarioDoPainel }) {
               {" · "}
               <Link href="/entrar-local" className="font-medium text-[var(--ds-tint-text)] hover:underline">
                 trocar
+              </Link>
+            </>
+          )}
+          {usuario.ehStaff && (
+            <>
+              {" · "}
+              <Link href="/meu-cadastro" className="font-medium text-[var(--ds-tint-text)] hover:underline">
+                meu cadastro
               </Link>
             </>
           )}
@@ -190,7 +211,7 @@ export function Painel({ ambiente, children }: { ambiente: AmbienteDoPainel; chi
       >
         Pular para o conteúdo
       </a>
-      <BarraLateral aberta={menuAberto} aoFechar={() => setMenuAberto(false)} rotas={ambiente.usuario ? rotasDoMenu(ambiente.usuario) : ROTAS_DO_MENU} />
+      <BarraLateral aberta={menuAberto} aoFechar={() => setMenuAberto(false)} rotas={ambiente.usuario ? rotasDoMenu(ambiente.usuario) : ROTAS_DO_MENU} ehStaff={ambiente.usuario?.ehStaff ?? false} />
       {menuAberto && (
         <div className="fixed inset-0 z-40 bg-[var(--ds-scrim)] lg:hidden" onClick={() => setMenuAberto(false)} aria-hidden="true" />
       )}
