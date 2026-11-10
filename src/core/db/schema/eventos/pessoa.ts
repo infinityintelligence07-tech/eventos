@@ -13,7 +13,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import { pessoa } from "../core";
+import { pessoa, polo } from "../core";
 import { funcao } from "./cadastros";
 import { eventosSchema } from "./schemas";
 
@@ -32,6 +32,11 @@ export const pessoaEvento = eventosSchema.table(
     possuiCamiseta: boolean("possui_camiseta"),
     fezConfronto: boolean("fez_confronto"),
     temCnpj: boolean("tem_cnpj"),
+    // Preenchidos pelo próprio staff em "Meu cadastro" (docs/10). Rua e número não ficam: só viram lat/lng.
+    poloId: uuid("polo_id").references(() => polo.id, { onDelete: "set null" }),
+    cep: text("cep"),
+    cidade: text("cidade"),
+    uf: text("uf"),
     // Geocodificação do endereço de sensivel.pessoa_dado_sensivel (distância e caronas).
     lat: doublePrecision("lat"),
     lng: doublePrecision("lng"),
@@ -51,6 +56,9 @@ export const pessoaEvento = eventosSchema.table(
       sql`${table.camisetaTamanho} IS NULL OR ${table.camisetaTamanho} IN ('PP', 'P', 'M', 'G', 'GG', 'XG')`,
     ),
     index("pessoa_evento_aluno_idx").on(table.iamControlAlunoId),
+    index("pessoa_evento_polo_idx").on(table.poloId),
+    check("pessoa_evento_cep_check", sql`${table.cep} IS NULL OR ${table.cep} ~ '^[0-9]{8}$'`),
+    check("pessoa_evento_uf_check", sql`${table.uf} IS NULL OR ${table.uf} ~ '^[A-Z]{2}$'`),
   ],
 );
 

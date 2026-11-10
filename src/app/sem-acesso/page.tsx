@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { sair } from "@/app/(time)/_servidor/sessao";
-import { situacaoDoAtor } from "@/app/(time)/_servidor/usuario-atual";
+import { identidadeDaSessao, situacaoDoAtor } from "@/app/(time)/_servidor/usuario-atual";
+import { staffDaIdentidade } from "@/fluxos/pessoas";
 
 import { MolduraDeEntrada } from "../login/_componentes/moldura";
 
@@ -19,8 +20,12 @@ export default async function PaginaSemAcesso() {
       redirect(atual.destino);
     case "SEM_CADASTRO":
       redirect("/auth/encerrar?motivo=sem-cadastro");
-    case "SEM_PERFIL":
+    case "SEM_PERFIL": {
+      // Staff sem perfil do time: o lugar dele é "Meu cadastro" (docs/10).
+      const sessao = await identidadeDaSessao();
+      if (sessao && (await staffDaIdentidade(sessao.identidade))) redirect("/meu-cadastro");
       break;
+    }
     default: {
       const desconhecida: never = atual;
       throw new Error(`situação do ator desconhecida: ${JSON.stringify(desconhecida)}`);
