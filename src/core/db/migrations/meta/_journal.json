@@ -43,6 +43,13 @@
       "when": 1793302390446,
       "tag": "0005_papeis-do-app",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794315095275,
+      "tag": "0006_meu-cadastro",
+      "breakpoints": true
     }
   ]
 }

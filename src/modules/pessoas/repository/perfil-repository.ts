@@ -1,10 +1,11 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 
 import type { Executor } from "@/core/db/database";
 import { registrarAcao } from "@/core/db/registro-acao";
-import { pessoa } from "@/core/db/schema/core";
+import { pessoa, polo } from "@/core/db/schema/core";
 import { funcao, pessoaEvento, pessoaFuncao, pessoaVeiculo } from "@/core/db/schema/eventos";
 
+import type { RepositorioMeuCadastro } from "../service/meu-cadastro";
 import type { RepositorioPerfil } from "../service/perfil";
 import { nomeDaPessoa } from "./sql";
 
@@ -94,6 +95,52 @@ export function criarRepositorioPerfil(executor: Executor): RepositorioPerfil {
 
     async registrar({ pessoaId, acao, usuarioId, dados }) {
       await registrarAcao(executor, { entidade: "PESSOA", entidadeId: pessoaId, acao, usuarioId, dados });
+    },
+  };
+}
+
+/** "Meu cadastro" (docs/10): a ficha mais polo, local resumido e a marca de revisado. */
+export function criarRepositorioMeuCadastro(executor: Executor): RepositorioMeuCadastro {
+  return {
+    ...criarRepositorioPerfil(executor),
+
+    async poloPorCodigo(codigo) {
+      const [linha] = await executor
+        .select({ id: polo.id })
+        .from(polo)
+        .where(and(eq(polo.codigo, codigo), eq(polo.ativo, true), isNull(polo.deletedAt)));
+      return linha?.id ?? null;
+    },
+
+    async funcoesComId(pessoaId) {
+      const linhas = await executor.select({ funcaoId: pessoaFuncao.funcaoId, nivel: pessoaFuncao.nivel }).from(pessoaFuncao).where(eq(pessoaFuncao.pessoaId, pessoaId));
+      return linhas.map((linha) => ({ funcaoId: linha.funcaoId, nivel: linha.nivel === "TRAINEE" ? "TRAINEE" : "HABILITADO" }));
+    },
+
+    async localAtual(pessoaId) {
+      const [linha] = await executor
+        .select({ poloId: pessoaEvento.poloId, cep: pessoaEvento.cep, cidade: pessoaEvento.cidade, uf: pessoaEvento.uf })
+        .from(pessoaEvento)
+        .where(eq(pessoaEvento.pessoaId, pessoaId));
+      return linha ?? null;
+    },
+
+    async salvarLocal({ pessoaId, poloId, cep, cidade, uf, coordenadas, instante }) {
+      await executor
+        .update(pessoaEvento)
+        .set({
+          poloId,
+          cep,
+          cidade,
+          uf,
+          ...(coordenadas && { lat: coordenadas.lat, lng: coordenadas.lng, geocodificadoEm: instante }),
+          atualizadoEm: instante,
+        })
+        .where(eq(pessoaEvento.pessoaId, pessoaId));
+    },
+
+    async marcarRevisado(pessoaId, instante) {
+      await executor.update(pessoaEvento).set({ cadastroRevisadoEm: instante, atualizadoEm: instante }).where(eq(pessoaEvento.pessoaId, pessoaId));
     },
   };
 }

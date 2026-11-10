@@ -20,7 +20,13 @@ export type RepositorioPerfil = {
   registrar(dados: { pessoaId: string; acao: AcaoNoCadastro; usuarioId: string; dados: Record<string, unknown> }): Promise<void>;
 };
 
-export type AcaoNoCadastro = "PERFIL_ALTERADO" | "COORDENADAS_ALTERADAS" | "FUNCOES_DEFINIDAS" | "VEICULO_SALVO" | "VEICULO_REMOVIDO";
+export type AcaoNoCadastro =
+  | "PERFIL_ALTERADO"
+  | "COORDENADAS_ALTERADAS"
+  | "FUNCOES_DEFINIDAS"
+  | "VEICULO_SALVO"
+  | "VEICULO_REMOVIDO"
+  | "CADASTRO_REVISADO";
 
 export type Autoria = { usuarioId: string; instante: Date };
 

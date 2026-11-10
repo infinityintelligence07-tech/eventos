@@ -348,6 +348,57 @@ a[class*="situacao-"]:hover {
 .login-campo input:focus { border-color: #9fbcff; outline: none; }
 .login-esqueci { justify-self: center; font-size: 12.5px; color: #9fbcff; }
 .login-ou { margin: 14px 0; font-size: 12.5px; color: rgba(235, 235, 245, 0.45); }
+/* Meu cadastro (staff, celular; docs/10) */
+.cadastro-form { display: grid; gap: 18px; text-align: left; }
+.cadastro-form fieldset { display: grid; gap: 12px; margin: 0; padding: 0; border: 0; }
+.cadastro-form legend { margin-bottom: 4px; font-size: 15px; font-weight: 700; color: #ffffff; }
+.login-campo select {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+  font-size: 15px;
+}
+.login-campo select option { color: #1d1d1f; }
+/* minmax(0, 1fr) e min-width: 0: sem isso o campo não encolhe e o cartão vaza da tela no celular. */
+.cadastro-form, .cadastro-form fieldset, .cadastro-form .login-campo { min-width: 0; }
+.cadastro-form .login-campo input:not([type="radio"]):not([type="checkbox"]),
+.cadastro-form .login-campo select { width: 100%; min-width: 0; box-sizing: border-box; }
+.cadastro-duas-colunas { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.cadastro-opcoes, .cadastro-funcoes { display: grid; gap: 8px; }
+.cadastro-funcoes { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.cadastro-opcao { min-width: 0; overflow-wrap: anywhere; }
+.cadastro-opcao {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(235, 235, 245, 0.9);
+}
+.cadastro-opcao small { color: #9fbcff; }
+.cadastro-opcao input { flex: none; width: 18px; height: 18px; margin: 0; accent-color: #0a84ff; }
+.cadastro-ajuda { margin: 0; font-size: 12.5px; line-height: 1.45; color: rgba(235, 235, 245, 0.6); }
+.cadastro-erro { font-size: 12.5px; font-weight: 500; color: #ffb4ad; }
+.cadastro-pendencias,
+.cadastro-ok {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: left;
+}
+.cadastro-pendencias { background: rgba(255, 159, 10, 0.14); color: #ffd60a; }
+.cadastro-ok { background: rgba(48, 209, 88, 0.14); color: #7ee2a0; }
+.cadastro-sair { margin-top: 16px; }
+.cadastro-sair button { border: 0; background: none; font-size: 13px; color: #9fbcff; cursor: pointer; }
 .login-error {
   margin: 0 0 14px;
   padding: 10px 12px;

@@ -93,6 +93,26 @@ direta ou session pooler, papel `postgres` até existir o `app_eventos_worker`),
 `IAM_CONTROL_EVENTOS_TOKEN` e `LOG_LEVEL`. A imagem do worker define `EVENTOS_PROCESSO=worker`, que dispensa as variáveis do
 login (o worker não tem tela); antes disso (até 09/11) ele morria ao subir pedindo `NEXT_PUBLIC_SUPABASE_*`. Trocar o `EVENTOS_SESSAO_SEGREDO` desloga todo mundo que entrou com senha.
 
+## Meu cadastro do staff (10/11)
+
+Link para mandar ao staff: **https://eventos.iamcontrol.com.br/meu-cadastro**. A pessoa entra com a conta do IAM
+Control (e-mail e senha ou Google) e completa só os próprios dados, num formulário feito para celular. Quem é staff e
+não é do time cai direto aqui depois do login (a tela "Sem acesso" leva para cá).
+
+- **Polo:** a pessoa escolhe; grava em `eventos.pessoa_evento.polo_id` (migration 0006), sem mexer no vínculo do GH.
+  As telas do time usam esse polo primeiro e, sem ele, o do vínculo.
+- **Sexo e camiseta:** gravam no perfil do staff. Fez Confronto, CNPJ e "já tem camiseta" continuam com o time.
+- **Funções:** a pessoa sugere; o que ela marca entra como TRAINEE e o time muda para HABILITADO na ficha. As já
+  habilitadas aparecem travadas e nunca saem por ela.
+- **Endereço:** CEP (com preenchimento automático pelo ViaCEP), rua, número, bairro, cidade e UF. O servidor converte em
+  coordenada pela Google Geocoding API (`GOOGLE_MAPS_API_KEY`, só no servidor) e guarda só CEP, cidade, UF e a
+  coordenada; rua e número não ficam gravados nem vão para o log. Sem a chave, salva sem coordenada e avisa.
+- **Carro:** lugares para passageiros e consumo.
+- O histórico (`registro_acao`, ação `CADASTRO_REVISADO`) guarda só os nomes dos campos que mudaram.
+
+Para ligar a localização: no Google Cloud, ative a **Geocoding API**, crie uma chave restrita a ela (e, se possível, ao
+IP do servidor do Easypanel) e ponha `GOOGLE_MAPS_API_KEY` no serviço `eventos`.
+
 ## Falta (Vitor)
 
 ### 1. Senha do papel de leitura (Supabase › SQL Editor)

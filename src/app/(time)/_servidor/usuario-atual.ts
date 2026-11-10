@@ -17,6 +17,7 @@ import {
 } from "@/core/auth";
 import { type Permissao, pode } from "@/core/autorizacao";
 import { bancoParaLeitura, situacaoDaEscrita } from "@/fluxos/_base";
+import type { IdentidadeDaSessao } from "@/fluxos/pessoas";
 
 export type { Ator, PerfilDoEventos } from "@/core/auth";
 
@@ -69,6 +70,30 @@ async function situacaoDaSessao(): Promise<SituacaoDoAtor> {
   if (!user.email || !user.email_confirmed_at) return { situacao: "SEM_CADASTRO" };
   return resolverAtorPorEmail(user.email, await bancoParaLeitura());
 }
+
+/**
+ * Quem está logado, sem exigir perfil do Eventos (para "Meu cadastro", docs/10): o e-mail da sessão (senha ou Google) ou,
+ * no modo local, o usuário do "Entrar como". Nulo = sem sessão (ou demo, que não tem pessoa).
+ */
+export const identidadeDaSessao = cache(async (): Promise<{ identidade: IdentidadeDaSessao; origem: "SESSAO" | "LOCAL" } | null> => {
+  if (modoDemo()) return null;
+  if (modoLocal()) {
+    if (!(await entradaLocalLiberada())) return null;
+    const usuarioId = usuarioDoCookieLocal((await cookies()).get(COOKIE_ATOR_LOCAL)?.value);
+    return usuarioId ? { identidade: { usuarioId }, origem: "LOCAL" } : null;
+  }
+  const segredo = segredoDaSessao();
+  const daSenha = segredo ? lerSessao((await cookies()).get(COOKIE_SESSAO)?.value, segredo, new Date()) : null;
+  if (daSenha) return { identidade: { email: daSenha }, origem: "SESSAO" };
+  const supabase = await criarSupabaseDoServidor();
+  if (!supabase) return null;
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+  if (error || !user?.email || !user.email_confirmed_at) return null;
+  return { identidade: { email: user.email }, origem: "SESSAO" };
+});
 
 /** Uma vez por requisição. */
 export const situacaoDoAtor = cache(async (): Promise<SituacaoDoAtor> => {

@@ -30,6 +30,8 @@ export {
   type PlanoDoColaborador,
   planoDoColaborador,
 } from "./domain/colaborador";
+export { enderecoParaGeocodificar, type FuncaoDoStaff, funcoesDepoisDoStaff, type MeuCadastro, meuCadastroSchema } from "./domain/meu-cadastro";
+export { type AtualizarMeuCadastro, atualizarMeuCadastro, type LocalDoStaff, PoloInvalidoError, type RepositorioMeuCadastro } from "./service/meu-cadastro";
 export { type ItemDoHistorico, rotuloDaSituacaoNaEscala, type SituacaoNaEscala } from "./domain/historico";
 export {
   type AtalhoDaLista,
@@ -55,7 +57,7 @@ export {
   salvarVeiculoSchema,
 } from "./domain/schemas";
 export { definirFuncoes, type RepositorioPerfil, salvarCoordenadas, salvarPerfilDoStaff, salvarVeiculo } from "./service/perfil";
-export { criarRepositorioPerfil } from "./repository/perfil-repository";
+export { criarRepositorioMeuCadastro, criarRepositorioPerfil } from "./repository/perfil-repository";
 export {
   type AcaoDoColaborador,
   type ColaboradorSalvo,
