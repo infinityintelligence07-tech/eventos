@@ -81,11 +81,22 @@ export function funcoesDepoisDoStaff(atuais: readonly FuncaoDoStaff[], marcadas:
   return [...mantidas, ...novas];
 }
 
+/** O que pedir ao mapa (docs/10). */
+export type PedidoDeLocalizacao =
+  | { tipo: "ENDERECO"; rua: string; numero: string; cidade: string; uf: string; cep: string | null }
+  | { tipo: "CEP"; cep: string };
+
 /**
- * Endereço para a geocodificação: só com rua e número (cidade sozinha daria um ponto no centro da cidade e um km
- * errado). Nulo = não recalcular (mantém a coordenada que já existe, se houver).
+ * Com rua e número: o endereço (e o CEP como reserva). Sem rua e número: o ponto do CEP só para quem ainda não tem
+ * localização (não troca uma coordenada pelo endereço por outra só do CEP). Nulo = não recalcular.
  */
-export function enderecoParaGeocodificar(dados: Pick<MeuCadastro, "logradouro" | "numero" | "bairro" | "cidade" | "uf" | "cep">): string | null {
-  if (!dados.logradouro || !dados.numero || !dados.cidade || !dados.uf) return null;
-  return [`${dados.logradouro}, ${dados.numero}`, dados.bairro, `${dados.cidade} - ${dados.uf}`, dados.cep, "Brasil"].filter(Boolean).join(", ");
+export function pedidoDeLocalizacao(
+  dados: Pick<MeuCadastro, "logradouro" | "numero" | "cidade" | "uf" | "cep">,
+  jaTemLocalizacao: boolean,
+): PedidoDeLocalizacao | null {
+  if (dados.logradouro && dados.numero && dados.cidade && dados.uf) {
+    return { tipo: "ENDERECO", rua: dados.logradouro, numero: dados.numero, cidade: dados.cidade, uf: dados.uf, cep: dados.cep };
+  }
+  if (dados.cep && !jaTemLocalizacao) return { tipo: "CEP", cep: dados.cep };
+  return null;
 }

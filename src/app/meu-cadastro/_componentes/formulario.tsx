@@ -21,9 +21,11 @@ export type OpcoesDoMeuCadastro = { polos: { codigo: string; nome: string }[]; f
 
 const AVISO_DA_LOCALIZACAO: Record<string, string> = {
   CALCULADA: "Localização calculada pelo endereço.",
+  APROXIMADA: "Localização aproximada pelo CEP. Se puder, confira rua e número e salve de novo.",
   MANTIDA: "Localização anterior mantida (para recalcular, preencha rua e número).",
+  SEM_ENDERECO: "Falta a localização: preencha rua e número (ou pelo menos o CEP) e salve de novo.",
   NAO_ENCONTRADA: "Não achamos esse endereço no mapa. Confira rua, número e CEP e salve de novo.",
-  INDISPONIVEL: "A localização será calculada depois pelo time.",
+  INDISPONIVEL: "O mapa não respondeu agora. O resto foi salvo; tente salvar de novo mais tarde para calcular a localização.",
 };
 
 function Erro({ erros, campo }: { erros?: Record<string, string>; campo: string }) {

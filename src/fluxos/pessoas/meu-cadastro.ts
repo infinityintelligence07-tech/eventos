@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 
-import { lerConfig } from "@/core/config/leitura";
-import { geocodificar } from "@/core/integrations/google-maps/geocodificacao";
+import { type Coordenadas, localizarCep, localizarEndereco } from "@/core/integrations/localizacao/localizacao";
 import { logger } from "@/core/logging";
 import { type AtorDaEscrita, bancoParaLeitura, RegraDeNegocioError, transacao } from "@/fluxos/_base";
 import {
@@ -9,11 +8,11 @@ import {
   comPendencias,
   criarConsultaPessoas,
   criarRepositorioMeuCadastro,
-  enderecoParaGeocodificar,
   type FichaDaPessoa,
   FuncaoInvalidaError,
   type MeuCadastro,
   type OpcoesDePessoas,
+  pedidoDeLocalizacao,
   type PendenciaDoCadastro,
   PessoaNaoEncontradaError,
   PoloInvalidoError,
@@ -75,26 +74,54 @@ export async function carregarMeuCadastro(pessoaId: string, agora: Date): Promis
 }
 
 /** O que aconteceu com a localização: o staff vê o aviso certo. */
-export type SituacaoDaLocalizacao = "CALCULADA" | "MANTIDA" | "SEM_ENDERECO" | "NAO_ENCONTRADA" | "INDISPONIVEL";
+export type SituacaoDaLocalizacao = "CALCULADA" | "APROXIMADA" | "MANTIDA" | "SEM_ENDERECO" | "NAO_ENCONTRADA" | "INDISPONIVEL";
 
-async function coordenadasDo(dados: MeuCadastro): Promise<{ coordenadas: { lat: number; lng: number } | null; situacao: SituacaoDaLocalizacao }> {
-  const endereco = enderecoParaGeocodificar(dados);
-  if (!endereco) return { coordenadas: null, situacao: "SEM_ENDERECO" };
-  const chave = lerConfig().GOOGLE_MAPS_API_KEY;
-  if (!chave) return { coordenadas: null, situacao: "INDISPONIVEL" };
+type Localizacao = { coordenadas: Coordenadas | null; situacao: SituacaoDaLocalizacao };
+
+const falhou = (erro: unknown) =>
+  // Sem o endereço no log.
+  logger.warn({ componente: "meu-cadastro", erro: erro instanceof Error ? erro.message : String(erro) }, "localização falhou");
+
+/** Nulo = não achou; "ERRO" = o serviço falhou (já registrado no log). */
+async function tentar(busca: () => Promise<Coordenadas | null>): Promise<Coordenadas | null | "ERRO"> {
   try {
-    const coordenadas = await geocodificar(endereco, { chave });
-    return coordenadas ? { coordenadas, situacao: "CALCULADA" } : { coordenadas: null, situacao: "NAO_ENCONTRADA" };
+    return await busca();
   } catch (erro: unknown) {
-    // Sem o endereço no log.
-    logger.warn({ componente: "meu-cadastro", erro: erro instanceof Error ? erro.message : String(erro) }, "geocodificação falhou");
-    return { coordenadas: null, situacao: "INDISPONIVEL" };
+    falhou(erro);
+    return "ERRO";
   }
 }
 
-/** A geocodificação roda antes e fora da transação (chamada externa); o resto grava junto. */
+/** Endereço no Nominatim; sem ele (ou fora do ar), o ponto do CEP na BrasilAPI. Tudo gratuito e sem chave. */
+async function localizacaoDo(dados: MeuCadastro, jaTemLocalizacao: boolean): Promise<Localizacao> {
+  const pedido = pedidoDeLocalizacao(dados, jaTemLocalizacao);
+  if (!pedido) return { coordenadas: null, situacao: jaTemLocalizacao ? "MANTIDA" : "SEM_ENDERECO" };
+
+  let errou = false;
+  if (pedido.tipo === "ENDERECO") {
+    const peloEndereco = await tentar(() => localizarEndereco(pedido));
+    if (peloEndereco !== null && peloEndereco !== "ERRO") return { coordenadas: peloEndereco, situacao: "CALCULADA" };
+    errou = peloEndereco === "ERRO";
+  }
+  const cep = pedido.cep;
+  if (cep) {
+    const peloCep = await tentar(() => localizarCep(cep));
+    if (peloCep !== null && peloCep !== "ERRO") return { coordenadas: peloCep, situacao: "APROXIMADA" };
+    errou ||= peloCep === "ERRO";
+  }
+  return { coordenadas: null, situacao: errou ? "INDISPONIVEL" : "NAO_ENCONTRADA" };
+}
+
+async function jaTemLocalizacao(pessoaId: string): Promise<boolean> {
+  const linhas = await (await bancoParaLeitura()).execute<{ tem: boolean }>(
+    sql`select lat is not null and lng is not null as tem from eventos.pessoa_evento where pessoa_id = ${pessoaId}`,
+  );
+  return linhas.rows[0]?.tem ?? false;
+}
+
+/** A localização roda antes e fora da transação (chamada externa); o resto grava junto. */
 export async function salvarMeuCadastro(dados: MeuCadastro, staff: StaffDaSessao, ator: AtorDaEscrita, agora: Date): Promise<{ localizacao: SituacaoDaLocalizacao }> {
-  const { coordenadas, situacao } = await coordenadasDo(dados);
+  const { coordenadas, situacao } = await localizacaoDo(dados, await jaTemLocalizacao(staff.pessoaId));
   try {
     await transacao(ator, (tx) =>
       atualizarMeuCadastro(criarRepositorioMeuCadastro(tx), { ...dados, pessoaId: staff.pessoaId, coordenadas }, { usuarioId: staff.usuarioId, instante: agora }),
@@ -105,5 +132,5 @@ export async function salvarMeuCadastro(dados: MeuCadastro, staff: StaffDaSessao
     if (erro instanceof PessoaNaoEncontradaError) throw new RegraDeNegocioError("Seu cadastro de staff não foi encontrado.");
     throw erro;
   }
-  return { localizacao: situacao === "SEM_ENDERECO" ? "MANTIDA" : situacao };
+  return { localizacao: situacao };
 }

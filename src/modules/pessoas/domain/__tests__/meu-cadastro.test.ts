@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { enderecoParaGeocodificar, funcoesDepoisDoStaff, meuCadastroSchema } from "../meu-cadastro";
+import { funcoesDepoisDoStaff, meuCadastroSchema, pedidoDeLocalizacao } from "../meu-cadastro";
 
 const A = "0193a3f0-0000-7000-8000-00000000000a";
 const B = "0193a3f0-0000-7000-8000-00000000000b";
@@ -56,12 +56,18 @@ describe("meu cadastro: funções sugeridas pelo staff", () => {
   });
 });
 
-describe("meu cadastro: endereço para o mapa", () => {
-  it("só com rua, número, cidade e UF; sem rua ou número não recalcula", () => {
-    expect(enderecoParaGeocodificar({ logradouro: "Rua A", numero: "10", bairro: "Centro", cidade: "Campinas", uf: "SP", cep: "13015001" })).toBe(
-      "Rua A, 10, Centro, Campinas - SP, 13015001, Brasil",
-    );
-    expect(enderecoParaGeocodificar({ logradouro: null, numero: null, bairro: null, cidade: "Campinas", uf: "SP", cep: null })).toBeNull();
-    expect(enderecoParaGeocodificar({ logradouro: "Rua A", numero: null, bairro: null, cidade: "Campinas", uf: "SP", cep: null })).toBeNull();
+describe("meu cadastro: o que pedir ao mapa", () => {
+  const endereco = { logradouro: "Rua A", numero: "10", cidade: "Campinas", uf: "SP", cep: "13015001" };
+
+  it("com rua e número: o endereço, com o CEP de reserva", () => {
+    expect(pedidoDeLocalizacao(endereco, true)).toEqual({ tipo: "ENDERECO", rua: "Rua A", numero: "10", cidade: "Campinas", uf: "SP", cep: "13015001" });
+  });
+
+  it("sem rua ou número: o CEP só para quem ainda não tem localização; senão, não recalcula", () => {
+    const soCep = { ...endereco, logradouro: null, numero: null };
+    expect(pedidoDeLocalizacao(soCep, false)).toEqual({ tipo: "CEP", cep: "13015001" });
+    expect(pedidoDeLocalizacao(soCep, true)).toBeNull();
+    expect(pedidoDeLocalizacao({ ...endereco, numero: null }, false)).toEqual({ tipo: "CEP", cep: "13015001" });
+    expect(pedidoDeLocalizacao({ ...soCep, cep: null }, false)).toBeNull();
   });
 });

@@ -30,7 +30,14 @@ export {
   type PlanoDoColaborador,
   planoDoColaborador,
 } from "./domain/colaborador";
-export { enderecoParaGeocodificar, type FuncaoDoStaff, funcoesDepoisDoStaff, type MeuCadastro, meuCadastroSchema } from "./domain/meu-cadastro";
+export {
+  type FuncaoDoStaff,
+  funcoesDepoisDoStaff,
+  type MeuCadastro,
+  meuCadastroSchema,
+  type PedidoDeLocalizacao,
+  pedidoDeLocalizacao,
+} from "./domain/meu-cadastro";
 export { type AtualizarMeuCadastro, atualizarMeuCadastro, type LocalDoStaff, PoloInvalidoError, type RepositorioMeuCadastro } from "./service/meu-cadastro";
 export { type ItemDoHistorico, rotuloDaSituacaoNaEscala, type SituacaoNaEscala } from "./domain/historico";
 export {

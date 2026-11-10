@@ -50,11 +50,6 @@ const environmentSchema = z.object({
     .optional()
     .transform((value) => (value === "" ? undefined : value))
     .pipe(z.string().min(32, "pelo menos 32 caracteres").optional()),
-  // Google Geocoding (docs/10): endereço do "Meu cadastro" -> coordenadas. Sem ela, salva sem coordenada.
-  GOOGLE_MAPS_API_KEY: z
-    .string()
-    .optional()
-    .transform((value) => (value === "" ? undefined : value)),
   // Endereço público do Eventos: monta o redirectTo do Google e o destino do callback (nunca o Host da requisição).
   EVENTOS_URL_PUBLICA: z
     .string()
