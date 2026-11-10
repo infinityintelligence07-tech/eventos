@@ -3,7 +3,7 @@ import { type ColaboradorIgnorado, planoDoColaborador, type RepositorioColaborad
 
 import { mensagemDeErro } from "./sincronizar-turmas";
 
-// Colaboradores do IAM Control -> login (core.usuario), time de eventos (EVENTOS_TIME) e staff escalável (docs/10).
+// Colaboradores do IAM Control -> login (core.usuario) e staff escalável (docs/10). Acesso de time é só manual.
 // Idempotente: rodar de novo só atualiza o que mudou. Uma transação por colaborador: um erro não derruba os outros.
 
 export type DependenciasColaboradores = {
@@ -18,7 +18,6 @@ export type ResumoColaboradores = {
   atualizados: number;
   desativados: number;
   inativosIgnorados: number;
-  timeDeEventos: number;
   escalaveis: number;
   ignorados: ColaboradorIgnorado[];
   falhas: { iamControlUserId: number; erro: string }[];
@@ -32,7 +31,6 @@ export async function sincronizarColaboradores(deps: DependenciasColaboradores):
     atualizados: 0,
     desativados: 0,
     inativosIgnorados: 0,
-    timeDeEventos: 0,
     escalaveis: 0,
     ignorados: [],
     falhas: [],
@@ -64,7 +62,6 @@ export async function sincronizarColaboradores(deps: DependenciasColaboradores):
           throw new Error(`ação desconhecida: ${String(desconhecida)}`);
         }
       }
-      if (salvo.timeDeEventos) resumo.timeDeEventos += 1;
       if (salvo.escalavel) resumo.escalaveis += 1;
     } catch (cause: unknown) {
       resumo.falhas.push({ iamControlUserId: colaborador.id, erro: mensagemDeErro(cause) });

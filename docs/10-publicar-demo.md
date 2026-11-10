@@ -52,8 +52,9 @@ muda regras) continuam valendo; o dono tem os dois perfis.
 
 Quem tem conta ativa no IAM Control entra no Eventos com o mesmo e-mail e senha, ou com o Google. As decisões:
 
-- **Time de eventos** (`EVENTOS_TIME`): conta ativa com o setor `EVENTOS` no IAM Control. Líder (`EVENTOS_LIDER`) nunca
-  vem do IAM Control: só à mão (passo 3 abaixo).
+- **Acesso de time** (`EVENTOS_TIME` e `EVENTOS_LIDER`): **só manual** (decisão de 10/11). O staff também está no
+  setor `EVENTOS` do IAM Control, e a primeira regra (setor EVENTOS dá acesso de time) liberou 148 pessoas, 69 delas só
+  STAFF; os 147 perfis automáticos foram retirados. Para liberar alguém, use o SQL do passo 3 abaixo.
 - **Staff escalável** (`eventos.pessoa_evento`): conta ativa com alguma função de evento (STAFF, DJ, FOTOGRAFO,
   SOCIAL_MEDIA, LIDER_DE_EVENTOS, LIDER_DE_CONFRONTO, LIDER_DE_MASTERCLASS, PALESTRANTE, LOGISTICA).
 - **Quem saiu** (não aprovado, excluído ou com demissão): fica inativo e perde o login. Nada é apagado.
@@ -63,8 +64,8 @@ Peças:
 1. **IAM Control** (`IAM-Control-Backend`): `GET /api/webhooks/eventos/colaboradores`, com o mesmo token das turmas
    (`EVENTOS_WEBHOOK_TOKENS`). Sem CPF, CNPJ, RG, PIS, CTPS, PIX, nascimento, endereço completo, foto nem senha.
 2. **Sincronização** (`src/jobs/sincronizar-colaboradores.ts`): no worker a cada 30 minutos (`15,45 6-23 * * *`) ou à
-   mão com `npm run sync:colaboradores`. Grava `core.usuario` (por e-mail), `core.pessoa`, o perfil `EVENTOS_TIME`,
-   `eventos.pessoa_evento` e as funções. Só acrescenta: perfil e função dados à mão não são retirados.
+   mão com `npm run sync:colaboradores`. Grava `core.usuario` (por e-mail), `core.pessoa`,
+   `eventos.pessoa_evento` e as funções. Não dá perfil do Eventos; perfil e função dados à mão não são retirados.
 3. **Login com senha** (`src/app/login/acoes.ts`): o Eventos manda e-mail e senha para `POST /api/auth/login` do IAM
    Control (servidor a servidor), descarta o token dele e guarda só o e-mail num cookie httpOnly assinado
    (`EVENTOS_SESSAO_SEGREDO`, 8 h). Limite: 5 falhas por e-mail e 20 por IP a cada 15 minutos. A senha nunca vai para

@@ -4,13 +4,13 @@ import type { Db, Executor } from "@/core/db/database";
 
 import type { PlanoDoColaborador } from "../domain/colaborador";
 
-// Sincronização dos colaboradores do IAM Control (docs/10). Escreve em core.usuario, core.pessoa e core.usuario_perfil
-// (tabelas do GH; o worker roda com o papel do dono) e em pessoa_evento/pessoa_funcao. Só acrescenta: perfil e função
+// Sincronização dos colaboradores do IAM Control (docs/10). Escreve em core.usuario e core.pessoa (tabelas do GH; o
+// worker roda com o papel do dono) e em pessoa_evento/pessoa_funcao. Não dá perfil do Eventos: acesso de time é manual. Só acrescenta: perfil e função
 // dados à mão nunca são retirados; quem saiu do IAM Control fica inativo (perde o login), sem apagar histórico.
 
 export type AcaoDoColaborador = "CRIADO" | "ATUALIZADO" | "DESATIVADO" | "IGNORADO_INATIVO";
 
-export type ColaboradorSalvo = { acao: AcaoDoColaborador; escalavel: boolean; timeDeEventos: boolean };
+export type ColaboradorSalvo = { acao: AcaoDoColaborador; escalavel: boolean };
 
 export type RepositorioColaboradores = {
   salvarColaborador(plano: PlanoDoColaborador, agora: Date): Promise<ColaboradorSalvo>;
@@ -59,8 +59,8 @@ async function salvarPessoa(tx: Executor, plano: PlanoDoColaborador, usuarioId: 
        where id = ${existente.id}`);
     return existente.id;
   }
-  // Só cria pessoa para quem o Eventos usa (time ou staff) e está ativo: minimização.
-  if (!plano.ativo || (!plano.escalavel && !plano.timeDeEventos)) return null;
+  // Só cria pessoa para o staff ativo: minimização.
+  if (!plano.ativo || !plano.escalavel) return null;
   const criada = await uma<{ id: string }>(
     tx,
     sql`insert into core.pessoa (usuario_id, nome_completo, email, telefone, ativo, criado_em, atualizado_em)
@@ -74,14 +74,7 @@ export function criarRepositorioColaboradores(db: Db): RepositorioColaboradores 
     salvarColaborador(plano, agora) {
       return db.transaction(async (tx) => {
         const usuario = await salvarUsuario(tx, plano, agora);
-        if (!usuario) return { acao: "IGNORADO_INATIVO", escalavel: false, timeDeEventos: false };
-
-        if (plano.timeDeEventos) {
-          await tx.execute(sql`
-            insert into core.usuario_perfil (usuario_id, perfil_id, escopo)
-            select ${usuario.id}, id, 'GLOBAL' from core.perfil where codigo = 'EVENTOS_TIME'
-            on conflict do nothing`);
-        }
+        if (!usuario) return { acao: "IGNORADO_INATIVO", escalavel: false };
 
         const pessoaId = await salvarPessoa(tx, plano, usuario.id, agora);
         if (pessoaId && plano.escalavel) {
@@ -100,7 +93,7 @@ export function criarRepositorioColaboradores(db: Db): RepositorioColaboradores 
               on conflict do nothing`);
           }
         }
-        return { acao: usuario.acao, escalavel: plano.escalavel, timeDeEventos: plano.timeDeEventos };
+        return { acao: usuario.acao, escalavel: plano.escalavel };
       });
     },
   };
