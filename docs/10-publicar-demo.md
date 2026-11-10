@@ -105,13 +105,14 @@ não é do time cai direto aqui depois do login (a tela "Sem acesso" leva para c
 - **Funções:** a pessoa sugere; o que ela marca entra como TRAINEE e o time muda para HABILITADO na ficha. As já
   habilitadas aparecem travadas e nunca saem por ela.
 - **Endereço:** CEP (com preenchimento automático pelo ViaCEP), rua, número, bairro, cidade e UF. O servidor converte em
-  coordenada pela Google Geocoding API (`GOOGLE_MAPS_API_KEY`, só no servidor) e guarda só CEP, cidade, UF e a
-  coordenada; rua e número não ficam gravados nem vão para o log. Sem a chave, salva sem coordenada e avisa.
+  coordenada **sem custo e sem chave**: primeiro o endereço no Nominatim (OpenStreetMap, até 1 pedido por segundo,
+  identificado como `EventosIAM/1.0`); se não achar ou estiver fora do ar, o ponto do CEP na BrasilAPI (aviso de
+  "aproximada"). Guarda só CEP, cidade, UF e a coordenada; rua e número não ficam gravados nem vão para o log. Sem rua e
+  número, quem já tem localização a mantém; quem não tem recebe o ponto do CEP.
 - **Carro:** lugares para passageiros e consumo.
 - O histórico (`registro_acao`, ação `CADASTRO_REVISADO`) guarda só os nomes dos campos que mudaram.
 
-Para ligar a localização: no Google Cloud, ative a **Geocoding API**, crie uma chave restrita a ela (e, se possível, ao
-IP do servidor do Easypanel) e ponha `GOOGLE_MAPS_API_KEY` no serviço `eventos`.
+A localização não precisa de configuração (nenhuma chave ou variável).
 
 ## Falta (Vitor)
 

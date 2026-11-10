@@ -8,7 +8,9 @@ import { type BancoDeTeste, criarBancoDeTeste, TEST_DATABASE_URL } from "@/test/
 import { carregarMeuCadastro, salvarMeuCadastro, type StaffDaSessao, staffDaIdentidade } from "../meu-cadastro";
 
 const banco = vi.hoisted(() => ({ db: null as Db | null }));
-const google = vi.hoisted(() => ({ chave: undefined as string | undefined, resposta: null as { lat: number; lng: number } | null, enderecos: [] as string[] }));
+// Mapas (Nominatim e BrasilAPI) controlados pelo teste: coordenada, nulo (não achou) ou "ERRO" (fora do ar).
+type Resposta = { lat: number; lng: number } | null | "ERRO";
+const mapa = vi.hoisted(() => ({ endereco: null as Resposta, cep: null as Resposta, pedidos: [] as string[] }));
 
 vi.mock("@/fluxos/_base", async (importOriginal) => {
   const original = await importOriginal<Record<string, unknown>>();
@@ -18,16 +20,22 @@ vi.mock("@/fluxos/_base", async (importOriginal) => {
     transacao: async (_ator: unknown, trabalho: (tx: never) => Promise<unknown>) => (await import("@/fluxos/_base/banco")).transacaoNoBanco(banco.db!, trabalho as never),
   };
 });
-vi.mock("@/core/config/leitura", async (importOriginal) => {
-  const original = await importOriginal<typeof import("@/core/config/leitura")>();
-  return { ...original, lerConfig: () => ({ GOOGLE_MAPS_API_KEY: google.chave }) as ReturnType<typeof original.lerConfig> };
+vi.mock("@/core/integrations/localizacao/localizacao", () => {
+  const responder = (resposta: Resposta) => {
+    if (resposta === "ERRO") throw new Error("fora do ar");
+    return resposta;
+  };
+  return {
+    localizarEndereco: async (endereco: { rua: string; numero: string }) => {
+      mapa.pedidos.push(`endereco:${endereco.numero} ${endereco.rua}`);
+      return responder(mapa.endereco);
+    },
+    localizarCep: async (cep: string) => {
+      mapa.pedidos.push(`cep:${cep}`);
+      return responder(mapa.cep);
+    },
+  };
 });
-vi.mock("@/core/integrations/google-maps/geocodificacao", () => ({
-  geocodificar: async (endereco: string) => {
-    google.enderecos.push(endereco);
-    return google.resposta;
-  },
-}));
 
 describe.skipIf(!TEST_DATABASE_URL)("Meu cadastro no banco", () => {
   let teste: BancoDeTeste;
@@ -88,11 +96,10 @@ describe.skipIf(!TEST_DATABASE_URL)("Meu cadastro no banco", () => {
     expect(comoLeitura).toEqual([{ id: staff.pessoaId }]);
   });
 
-  it("salva tudo numa vez; a coordenada vem do Google; rua e número não ficam no banco nem no histórico", async () => {
-    google.chave = "k";
-    google.resposta = { lat: -22.905, lng: -47.061 };
+  it("salva tudo numa vez; a coordenada vem do endereço; rua e número não ficam no banco nem no histórico", async () => {
+    mapa.endereco = { lat: -22.905, lng: -47.061 };
     await expect(salvar()).resolves.toEqual({ localizacao: "CALCULADA" });
-    expect(google.enderecos.at(-1)).toBe("Rua Barão de Jaguara, 100, Campinas - SP, 13015001, Brasil");
+    expect(mapa.pedidos).toEqual(["endereco:100 Rua Barão de Jaguara"]);
 
     const gravado = await um(
       `select pe.sexo, pe.camiseta_modelo, pe.camiseta_tamanho, pe.fez_confronto, pe.tem_cnpj, pe.cep, pe.cidade, pe.uf, pe.lat, pe.lng,
@@ -118,16 +125,36 @@ describe.skipIf(!TEST_DATABASE_URL)("Meu cadastro no banco", () => {
     expect(JSON.parse(registro.dados as string).campos).toEqual(expect.arrayContaining(["sexo", "funcoes", "poloId", "localizacao"]));
   });
 
-  it("sem rua e número mantém a coordenada; sem chave do Google salva sem recalcular; endereço não achado avisa", async () => {
+  it("sem rua e número mantém a coordenada; endereço não achado cai no CEP (aproximada); mapas fora do ar não impedem salvar", async () => {
+    mapa.pedidos = [];
     await expect(salvar({ logradouro: "", numero: "", temCarro: "NAO" })).resolves.toEqual({ localizacao: "MANTIDA" });
+    expect(mapa.pedidos).toEqual([]);
     expect(await um(`select lat, (select count(*)::int from eventos.pessoa_veiculo where pessoa_id = $1) as carros from eventos.pessoa_evento where pessoa_id = $1`, [staff.pessoaId])).toEqual({ lat: -22.905, carros: 0 });
 
-    google.chave = undefined;
-    await expect(salvar({ numero: "200" })).resolves.toEqual({ localizacao: "INDISPONIVEL" });
-    google.chave = "k";
-    google.resposta = null;
-    await expect(salvar({ numero: "300" })).resolves.toEqual({ localizacao: "NAO_ENCONTRADA" });
-    expect((await um(`select lat from eventos.pessoa_evento where pessoa_id = $1`, [staff.pessoaId])).lat).toBe(-22.905);
+    mapa.endereco = null;
+    mapa.cep = { lat: -22.9056, lng: -47.0608 };
+    await expect(salvar({ numero: "200" })).resolves.toEqual({ localizacao: "APROXIMADA" });
+    expect(mapa.pedidos).toEqual(["endereco:200 Rua Barão de Jaguara", "cep:13015001"]);
+    expect((await um(`select lat from eventos.pessoa_evento where pessoa_id = $1`, [staff.pessoaId])).lat).toBe(-22.9056);
+
+    mapa.endereco = "ERRO";
+    mapa.cep = "ERRO";
+    await expect(salvar({ numero: "300", sexo: "M" })).resolves.toEqual({ localizacao: "INDISPONIVEL" });
+    expect(await um(`select lat, sexo from eventos.pessoa_evento where pessoa_id = $1`, [staff.pessoaId])).toEqual({ lat: -22.9056, sexo: "M" });
+
+    mapa.endereco = null;
+    mapa.cep = null;
+    await expect(salvar({ numero: "400" })).resolves.toEqual({ localizacao: "NAO_ENCONTRADA" });
+  });
+
+  it("quem ainda não tem localização e só põe o CEP recebe o ponto do CEP", async () => {
+    await teste.sql(`update eventos.pessoa_evento set lat = null, lng = null where pessoa_id = $1`, [staff.pessoaId]);
+    mapa.pedidos = [];
+    mapa.cep = { lat: -22.9056, lng: -47.0608 };
+    await expect(salvar({ logradouro: "", numero: "" })).resolves.toEqual({ localizacao: "APROXIMADA" });
+    expect(mapa.pedidos).toEqual(["cep:13015001"]);
+    await teste.sql(`update eventos.pessoa_evento set lat = null, lng = null where pessoa_id = $1`, [staff.pessoaId]);
+    await expect(salvar({ logradouro: "", numero: "", cep: "" })).resolves.toEqual({ localizacao: "SEM_ENDERECO" });
   });
 
   it("desmarcar tira só a sugestão (TRAINEE); a habilitada pelo time fica; polo inexistente é recusado", async () => {
