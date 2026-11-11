@@ -96,7 +96,15 @@ export function criarRepositorioComunicacao(executor: Executor): RepositorioComu
           nome: nomeDaPessoa,
           telefone: pessoa.telefone,
           sexo: pessoaEvento.sexo,
-          funcao: sql<string | null>`coalesce(${funcao.nome}, ${cargo.nome})`,
+          // Quem tem mais de uma função no evento recebe uma copy só, com todas ("Fotógrafo e Staff").
+          funcao: sql<string | null>`(
+            select string_agg(distinct coalesce(f2.nome, cg2.nome), ' e ')
+              from ${convocacao} c2
+              join ${escala} e2 on e2.id = c2.escala_id and e2.deleted_at is null
+              left join ${funcao} f2 on f2.id = e2.funcao_id
+              left join ${cargo} cg2 on cg2.id = e2.cargo_id
+             where e2.evento_id = ${escala.eventoId} and c2.pessoa_id = ${convocacao.pessoaId}
+               and c2.status in ('SUGERIDA', 'CONVIDADA', 'ACEITA'))`,
           data: escala.data,
           horaInicio: escala.horaInicio,
           horaFim: escala.horaFim,
@@ -106,13 +114,12 @@ export function criarRepositorioComunicacao(executor: Executor): RepositorioComu
         .innerJoin(escala, eq(escala.id, convocacao.escalaId))
         .innerJoin(pessoa, eq(pessoa.id, convocacao.pessoaId))
         .leftJoin(pessoaEvento, eq(pessoaEvento.pessoaId, convocacao.pessoaId))
-        .leftJoin(funcao, eq(funcao.id, escala.funcaoId))
-        .leftJoin(cargo, eq(cargo.id, escala.cargoId))
         .where(
           and(
             inArray(escala.eventoId, eventoIds),
             isNull(escala.deletedAt),
             inArray(convocacao.status, ATIVAS),
+            eq(convocacao.principal, true),
             convocacaoId ? eq(convocacao.id, convocacaoId) : undefined,
           ),
         )

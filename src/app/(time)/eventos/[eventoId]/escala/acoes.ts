@@ -12,6 +12,7 @@ import {
   definirVagaDigitadaSchema,
   devolverEscalaSchema,
   enviarParaAprovacaoSchema,
+  mudancaDaConvocacao,
   porNaVagaSchema,
   reabrirEscalaSchema,
   registrarRespostaDoStaffSchema,
@@ -91,9 +92,21 @@ export async function tirarDaVaga(_estado: ResultadoAcao, form: FormData): Promi
 
 export async function atualizarConvocacao(_estado: ResultadoAcao, form: FormData): Promise<ResultadoAcao> {
   return executarAcao(form, atualizarConvocacaoSchema, "escala.montar", async (dados, ator) => {
-    await fluxo.atualizarConvocacao(dados, quem(ator));
+    const mudanca = mudancaDaConvocacao(dados);
+    await fluxo.atualizarConvocacao({ eventoId: dados.eventoId, convocacaoId: dados.convocacaoId, mudanca }, quem(ator));
     atualizarTelas(dados.eventoId);
-    return "Deslocamento salvo.";
+    switch (mudanca.campo) {
+      case "deslocamento":
+        return "Deslocamento salvo.";
+      case "montagem":
+        return mudanca.montagem ? "Marcada para a montagem." : "Tirada da montagem.";
+      case "observacao":
+        return mudanca.observacao ? "Observação salva." : "Observação apagada.";
+      default: {
+        const desconhecida: never = mudanca;
+        throw new Error(`mudança desconhecida: ${String(desconhecida)}`);
+      }
+    }
   });
 }
 

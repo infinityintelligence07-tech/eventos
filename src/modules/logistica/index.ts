@@ -18,12 +18,16 @@ export {
 } from "./domain/pedido";
 export {
   misturaSexos,
+  nomeComPeriodo,
+  type Periodo,
+  periodoProprio,
   podeOcupar,
   type QuartoDoRooming,
   rotuloDaCapacidade,
   rotuloDoSexoDoQuarto,
   type Sexo,
   sugerirRooming,
+  textoDoPeriodo,
   textoDoRooming,
 } from "./domain/rooming";
 export { lugaresLivres } from "./domain/caronas";
@@ -37,6 +41,7 @@ export {
   type CriarCarona,
   type CriarHospedagem,
   type DefinirCarona,
+  type DefinirPeriodoDoOcupante,
   type PorNoQuarto,
   type RegistrarPedidoDeHospedagem,
   type RegistrarPedidoDeVoo,
@@ -49,6 +54,7 @@ export {
   criarCaronaSchema,
   criarHospedagemSchema,
   definirCaronaSchema,
+  definirPeriodoDoOcupanteSchema,
   PREFERENCIAS,
   porNoQuartoSchema,
   registrarPedidoDeHospedagemSchema,
@@ -81,3 +87,4 @@ export {
   type QuartoDaHospedagem,
 } from "./repository/hospedagem-repository";
 export { type CaronaDoEvento, criarRepositorioCaronas, type PessoaDaCarona } from "./repository/caronas-repository";
+export { transferirLogisticaDaConvocacao } from "./repository/comum";

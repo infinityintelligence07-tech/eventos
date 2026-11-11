@@ -185,7 +185,16 @@ export const quartoOcupante = eventosSchema.table(
       .notNull()
       .unique()
       .references(() => convocacao.id, { onDelete: "cascade" }),
+    // Período da pessoa quando difere do da hospedagem (chega depois ou sai antes). Nulo = o da hospedagem.
+    checkIn: date("check_in"),
+    checkOut: date("check_out"),
     criadoEm: timestamp("criado_em", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [primaryKey({ columns: [table.quartoId, table.convocacaoId] })],
+  (table) => [
+    primaryKey({ columns: [table.quartoId, table.convocacaoId] }),
+    check(
+      "quarto_ocupante_periodo_check",
+      sql`(${table.checkIn} IS NULL) = (${table.checkOut} IS NULL) AND (${table.checkIn} IS NULL OR ${table.checkOut} > ${table.checkIn})`,
+    ),
+  ],
 );

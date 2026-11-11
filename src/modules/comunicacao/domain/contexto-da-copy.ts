@@ -4,7 +4,7 @@ import { type DadosCopy, formatarDataEHora, formatarHorario, formatarPeriodo, pr
 // Dado ausente fica nulo: o motor de copy aponta a falta em vez de mandar a copy com buraco.
 
 /** Valores do CHECK convocacao_deslocamento_check. */
-export type Deslocamento = "CARRO_PROPRIO" | "CARONA" | "CARRO_IAM" | "UBER" | "ONIBUS" | "VOO" | "NAO_SE_APLICA";
+export type Deslocamento = "CARRO_PROPRIO" | "CARONA" | "CARRO_IAM" | "UBER" | "ONIBUS" | "VOO" | "MOTO" | "A_PE" | "NAO_SE_APLICA";
 
 export function rotuloDoDeslocamento(deslocamento: Deslocamento): string {
   switch (deslocamento) {
@@ -20,6 +20,10 @@ export function rotuloDoDeslocamento(deslocamento: Deslocamento): string {
       return "Ônibus";
     case "VOO":
       return "Voo";
+    case "MOTO":
+      return "Moto";
+    case "A_PE":
+      return "A pé";
     case "NAO_SE_APLICA":
       return "Não se aplica";
     default: {

@@ -580,7 +580,7 @@ Server actions (Zod):
 | `adicionarVagaManual` / `removerVagaManual` | `{ eventoId, funcaoId, quantidade }` / `{ escalaId }` (origem `MANUAL`, já confirmada) |
 | `porNaVaga` | `{ escalaId, pessoaId, sugestaoScore?: number }` |
 | `tirarDaVaga` | `{ convocacaoId }` |
-| `atualizarConvocacao` | `{ convocacaoId, deslocamento?: enum do CHECK, montagem?: boolean, observacao?: string ≤ 500 }` |
+| `atualizarConvocacao` | `{ convocacaoId, campo: deslocamento \| montagem \| observacao, deslocamento?: enum do CHECK (inclui MOTO e A_PE desde a 0007), montagem?: "sim", observacao?: string ≤ 500 }` — um campo por envio; os outros não mudam |
 | `enviarParaAprovacao` | `{ eventoId, statusEsperado: 'RASCUNHO' \| 'DEVOLVIDA' }` |
 | `aprovarEscala` | `{ eventoId }` (esperado `AGUARDANDO_APROVACAO`) |
 | `devolverEscala` | `{ eventoId, comentario?: string ≤ 1000 }` |
@@ -980,6 +980,7 @@ Onde a doc 08 diverge, vale o que está aqui.
 | Alterar eventos de uma enquete criada | Fora desta rodada (remover evento apagaria as respostas). |
 | "Último evento" da pessoa | Conta só convocações ACEITAS em eventos já iniciados (quem de fato serviu). |
 | Deslocamento depois de aprovada | Editável sem reabrir (não muda quem está na escala); travado só enquanto a escala está com a líder. |
+| Mesma pessoa em mais de uma função do evento (10/11/2026) | Permitido (planilhas: staff num dia e fotógrafo nos outros; DJ e som na Masterclass). `convocacao.principal` marca a convocação que carrega o que é da pessoa no evento: deslocamento, carona, quarto, pedido de voo, solicitação de custo e copy. Logística, comunicação e custos listam só a principal; a copy leva todas as funções. Se a pessoa sai da principal e segue em outra função, a mais antiga herda a principal e os vínculos vão junto (`passarPrincipalAdiante` + `AoTrocarPrincipal` no fluxo). Migration 0008. |
 | Conflito de agenda | Recusa incluir a pessoa (§4.2). Validar com a Patricia se há casos legítimos (ex.: Masterclass e evento no mesmo dia). |
 | "Desfazer" ao aprovar | Não nesta rodada; o caminho é reabrir e aprovar de novo. |
 | Trocar o tipo de um modelo ativo | Recusado ("desative antes"). |

@@ -52,8 +52,14 @@ export type ConvocacaoDaTela = {
   motivoRecusa: string | null;
   registradoPor: string | null;
   deslocamento: string | null;
+  montagem: boolean;
+  observacao: string | null;
   distanciaKm: number | null;
   conflitos: string[];
+  /** Falso = segunda função da pessoa neste evento: o deslocamento fica na principal. */
+  principal: boolean;
+  /** Outras funções da pessoa neste evento. */
+  outrasFuncoes: string[];
 };
 
 export type RegistroDaEscala = {
@@ -76,7 +82,8 @@ export type CandidatoDoBanco = {
   ultimaData: string | null;
   ultimoEvento: string | null;
   diasDesdeUltima: number | null;
-  jaNoEvento: boolean;
+  jaNaLinha: boolean;
+  funcoesNoEvento: string[];
   conflitos: string[];
 };
 
@@ -194,18 +201,36 @@ export function criarConsultaDaEscala(executor: Executor) {
         motivo_recusa: string | null;
         registrado_por: string | null;
         deslocamento: string | null;
+        montagem: boolean;
+        observacao: string | null;
         distancia_km: string | null;
         conflitos: string[] | null;
+        principal: boolean;
+        outras_funcoes: string[] | null;
+        deslocamento_da_principal: string | null;
       }>(sql`
         select c.id, c.escala_id, c.pessoa_id, coalesce(p.nome_social, p.nome_completo) as nome, c.status, pf.nivel,
                c.convidada_em, c.respondida_em, c.motivo_recusa, coalesce(u.nome_usuario, u.email) as registrado_por,
-               c.deslocamento, c.distancia_km,
+               c.deslocamento, c.montagem, c.observacao, c.distancia_km,
                (select array_agg(distinct coalesce(outro.codigo, outro.nome))
                   from ${convocacao} c2
                   join ${escala} e2 on e2.id = c2.escala_id and e2.deleted_at is null
                   join ${evento} outro on outro.id = e2.evento_id and outro.deleted_at is null and outro.status <> 'CANCELADO'
                  where c2.pessoa_id = c.pessoa_id and c2.status in ('SUGERIDA', 'CONVIDADA', 'ACEITA')
-                   and outro.id <> ev.id and outro.inicio <= ev.fim and outro.fim >= ev.inicio) as conflitos
+                   and outro.id <> ev.id and outro.inicio <= ev.fim and outro.fim >= ev.inicio) as conflitos,
+               c.principal,
+               (select array_agg(distinct coalesce(f3.nome, 'Função sem nome'))
+                  from ${convocacao} c3
+                  join ${escala} e3 on e3.id = c3.escala_id and e3.deleted_at is null
+                  left join ${funcao} f3 on f3.id = e3.funcao_id
+                 where c3.pessoa_id = c.pessoa_id and e3.evento_id = e.evento_id and c3.id <> c.id
+                   and c3.status in ('SUGERIDA', 'CONVIDADA', 'ACEITA')) as outras_funcoes,
+               (select c4.deslocamento
+                  from ${convocacao} c4
+                  join ${escala} e4 on e4.id = c4.escala_id and e4.deleted_at is null
+                 where c4.pessoa_id = c.pessoa_id and e4.evento_id = e.evento_id and c4.principal
+                   and c4.status in ('SUGERIDA', 'CONVIDADA', 'ACEITA')
+                 limit 1) as deslocamento_da_principal
           from ${convocacao} c
           join ${escala} e on e.id = c.escala_id and e.deleted_at is null
           join ${evento} ev on ev.id = e.evento_id
@@ -225,9 +250,14 @@ export function criarConsultaDaEscala(executor: Executor) {
         respondidaEm: linha.respondida_em ? new Date(linha.respondida_em) : null,
         motivoRecusa: linha.motivo_recusa,
         registradoPor: linha.registrado_por,
-        deslocamento: linha.deslocamento,
+        // Na segunda função, mostra o deslocamento da pessoa (que fica na principal).
+        deslocamento: linha.principal ? linha.deslocamento : linha.deslocamento_da_principal,
+        montagem: linha.montagem,
+        observacao: linha.observacao,
         distanciaKm: numero(linha.distancia_km),
         conflitos: linha.conflitos ?? [],
+        principal: linha.principal,
+        outrasFuncoes: linha.outras_funcoes ?? [],
       }));
     },
 
@@ -312,7 +342,8 @@ export function criarConsultaDaEscala(executor: Executor) {
         ultima_data: string | null;
         ultimo_evento: string | null;
         dias_desde_ultima: number | null;
-        ja_no_evento: boolean;
+        ja_na_linha: boolean;
+        funcoes_no_evento: string[] | null;
         conflitos: string[] | null;
       }>(sql`
         with este as (select id, inicio, fim from ${evento} where id = ${linha.eventoId}),
@@ -329,9 +360,15 @@ export function criarConsultaDaEscala(executor: Executor) {
                (select to_char(max(t.inicio) at time zone 'America/Sao_Paulo', 'YYYY-MM-DD') from trabalhos t where t.pessoa_id = pe.pessoa_id) as ultima_data,
                (select t.evento from trabalhos t where t.pessoa_id = pe.pessoa_id order by t.inicio desc limit 1) as ultimo_evento,
                (select extract(day from ${agora}::timestamptz - max(t.inicio))::int from trabalhos t where t.pessoa_id = pe.pessoa_id) as dias_desde_ultima,
-               exists (select 1 from ${convocacao} c join ${escala} e on e.id = c.escala_id and e.deleted_at is null
-                        where c.pessoa_id = pe.pessoa_id and e.evento_id = ${linha.eventoId}
-                          and c.status in ('SUGERIDA', 'CONVIDADA', 'ACEITA')) as ja_no_evento,
+               exists (select 1 from ${convocacao} c
+                        where c.pessoa_id = pe.pessoa_id and c.escala_id = ${linha.escalaId}
+                          and c.status in ('SUGERIDA', 'CONVIDADA', 'ACEITA')) as ja_na_linha,
+               (select array_agg(distinct coalesce(f.nome, 'Função sem nome'))
+                  from ${convocacao} c
+                  join ${escala} e on e.id = c.escala_id and e.deleted_at is null
+                  left join ${funcao} f on f.id = e.funcao_id
+                 where c.pessoa_id = pe.pessoa_id and e.evento_id = ${linha.eventoId} and e.id <> ${linha.escalaId}
+                   and c.status in ('SUGERIDA', 'CONVIDADA', 'ACEITA')) as funcoes_no_evento,
                (select array_agg(distinct coalesce(outro.codigo, outro.nome))
                   from ${convocacao} c
                   join ${escala} e on e.id = c.escala_id and e.deleted_at is null
@@ -355,7 +392,8 @@ export function criarConsultaDaEscala(executor: Executor) {
         ultimaData: linhaDoBanco.ultima_data,
         ultimoEvento: linhaDoBanco.ultimo_evento,
         diasDesdeUltima: linhaDoBanco.dias_desde_ultima,
-        jaNoEvento: linhaDoBanco.ja_no_evento,
+        jaNaLinha: linhaDoBanco.ja_na_linha,
+        funcoesNoEvento: linhaDoBanco.funcoes_no_evento ?? [],
         conflitos: linhaDoBanco.conflitos ?? [],
       }));
     },
@@ -474,13 +512,13 @@ export function criarConsultaDaEscala(executor: Executor) {
            where e.evento_id in (${ids}) and c.status in ('SUGERIDA', 'CONVIDADA', 'ACEITA')
         )
         select ev.id as evento_id,
-               (select count(*)::int from ativas a join eventos.disponibilidade d on d.evento_id = a.evento_id and d.pessoa_id = a.pessoa_id
+               (select count(distinct a.pessoa_id)::int from ativas a join eventos.disponibilidade d on d.evento_id = a.evento_id and d.pessoa_id = a.pessoa_id
                  where a.evento_id = ev.id and not d.disponivel) as nao_podem,
-               (select count(*)::int from ativas a
+               (select count(distinct a.pessoa_id)::int from ativas a
                  where a.evento_id = ev.id
                    and exists (select 1 from eventos.enquete_evento ee where ee.evento_id = ev.id)
                    and not exists (select 1 from eventos.disponibilidade d where d.evento_id = a.evento_id and d.pessoa_id = a.pessoa_id)) as sem_resposta,
-               (select count(*)::int from ativas a
+               (select count(distinct a.pessoa_id)::int from ativas a
                  where a.evento_id = ev.id and a.deslocamento = 'VOO'
                    and not exists (select 1 from eventos.pedido_sdc ps
                                     where ps.evento_id = a.evento_id and ps.pessoa_id = a.pessoa_id and ps.tipo = 'VOO' and ps.situacao <> 'CANCELADO')) as voo_sem_pedido,

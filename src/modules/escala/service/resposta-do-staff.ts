@@ -2,7 +2,8 @@ import { EscalaMudouError } from "../domain/convite";
 import { transicaoDaConvocacao } from "../domain/convocacao";
 import { EscalaTravadaError, NaoEncontradoError, TransicaoInvalidaError } from "../domain/erros";
 import { aceitaResposta, eventoEncerrado } from "../domain/status-escala";
-import type { RepositorioMontagem } from "./portas";
+import { passarPrincipalAdiante } from "./montar-escala";
+import type { AoTrocarPrincipal, RepositorioMontagem } from "./portas";
 
 // "Registrar resposta" em nome do staff (docs/07 §3.3 e §4.2): grava registrado_por e o registro_acao
 // com em_nome_de_pessoa_id. Só com a escala aprovada ou comunicada.
@@ -16,6 +17,7 @@ export async function registrarRespostaDoStaff(
     motivoRecusa: string | null;
     usuarioId: string;
     instante: Date;
+    aoTrocarPrincipal?: AoTrocarPrincipal;
   },
 ): Promise<{ nome: string }> {
   const evento = await repo.travarEvento(entrada.eventoId);
@@ -35,6 +37,8 @@ export async function registrarRespostaDoStaff(
     throw new TransicaoInvalidaError(motivo);
   }
 
+  // Recusou esta função mas segue em outra do evento: a outra herda a principal.
+  if (entrada.resposta === "RECUSADA") await passarPrincipalAdiante(repo, convocacao, entrada);
   const motivoRecusa = entrada.resposta === "RECUSADA" ? entrada.motivoRecusa : null;
   const alterou = await repo.mudarConvocacao(entrada.convocacaoId, {
     de: convocacao.status,

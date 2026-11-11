@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { lugaresLivres, podeEntrarNaCarona } from "../caronas";
-import { misturaSexos, podeOcupar, type QuartoDoRooming, sugerirRooming } from "../rooming";
-import { centavosDoTexto, registrarPedidoDeVooSchema, registrarRetornoDeVooSchema } from "../schemas";
+import { misturaSexos, nomeComPeriodo, periodoProprio, podeOcupar, type QuartoDoRooming, sugerirRooming } from "../rooming";
+import { centavosDoTexto, definirPeriodoDoOcupanteSchema, registrarPedidoDeVooSchema, registrarRetornoDeVooSchema } from "../schemas";
 
 const quarto = (id: string, capacidade: number, sexo: "F" | "M" | null, ocupantes: ("F" | "M" | null)[] = []): QuartoDoRooming => ({
   id,
@@ -30,6 +30,36 @@ describe("podeOcupar", () => {
   it("mistura de sexos ignora quem está sem sexo", () => {
     expect(misturaSexos([{ sexo: "F" }, { sexo: null }])).toBe(false);
     expect(misturaSexos([{ sexo: "F" }, { sexo: "M" }])).toBe(true);
+  });
+});
+
+describe("período próprio do ocupante", () => {
+  const hospedagem = { checkIn: "2026-12-14", checkOut: "2026-12-18" };
+
+  it("dentro da hospedagem vale; igual ao da hospedagem ou sem datas volta a segui-la", () => {
+    expect(periodoProprio(hospedagem, { checkIn: "2026-12-15", checkOut: "2026-12-17" })).toEqual({ ok: true, periodo: { checkIn: "2026-12-15", checkOut: "2026-12-17" } });
+    expect(periodoProprio(hospedagem, { ...hospedagem })).toEqual({ ok: true, periodo: null });
+    expect(periodoProprio(hospedagem, null)).toEqual({ ok: true, periodo: null });
+  });
+
+  it.each([
+    ["chega antes", { checkIn: "2026-12-13", checkOut: "2026-12-16" }],
+    ["sai depois", { checkIn: "2026-12-15", checkOut: "2026-12-19" }],
+  ])("recusa quem %s do período da hospedagem", (_caso, pedido) => {
+    expect(periodoProprio(hospedagem, pedido)).toEqual({ ok: false, motivo: "FORA_DA_HOSPEDAGEM" });
+  });
+
+  it("a rooming list mostra as datas só de quem tem período próprio", () => {
+    expect(nomeComPeriodo("Bia", { checkIn: "2026-12-15", checkOut: "2026-12-17" })).toBe("Bia (15/12 a 17/12)");
+    expect(nomeComPeriodo("Bia", { checkIn: null, checkOut: null })).toBe("Bia");
+  });
+
+  it("o formulário exige as duas datas ou nenhuma, com check-out depois do check-in", () => {
+    const ids = { quartoId: "018f4e2a-0000-7000-8000-000000000001", convocacaoId: "018f4e2a-0000-7000-8000-000000000002" };
+    expect(definirPeriodoDoOcupanteSchema.safeParse(ids).success).toBe(true);
+    expect(definirPeriodoDoOcupanteSchema.safeParse({ ...ids, checkIn: "2026-12-15", checkOut: "2026-12-17" }).success).toBe(true);
+    expect(definirPeriodoDoOcupanteSchema.safeParse({ ...ids, checkIn: "2026-12-15" }).success).toBe(false);
+    expect(definirPeriodoDoOcupanteSchema.safeParse({ ...ids, checkIn: "2026-12-17", checkOut: "2026-12-17" }).success).toBe(false);
   });
 });
 

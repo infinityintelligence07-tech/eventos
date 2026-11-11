@@ -6,7 +6,7 @@ import { pessoa } from "@/core/db/schema/core";
 import { carona, convocacao, escala, funcao, pessoaVeiculo } from "@/core/db/schema/eventos";
 
 import type { RepositorioCaronas } from "../service/caronas";
-import { CONVOCACAO_ATIVA, nomeDaPessoa, travarLinha } from "./comum";
+import { CONVOCACAO_ATIVA, convocacaoPrincipal, nomeDaPessoa, travarLinha } from "./comum";
 
 export type CaronaDoEvento = {
   id: string;
@@ -52,7 +52,7 @@ export function criarRepositorioCaronas(executor: Executor): RepositorioCaronas 
       .innerJoin(pessoa, eq(pessoa.id, convocacao.pessoaId))
       .leftJoin(funcao, eq(funcao.id, escala.funcaoId))
       .leftJoin(pessoaVeiculo, eq(pessoaVeiculo.pessoaId, convocacao.pessoaId))
-      .where(and(eq(escala.eventoId, eventoId), isNull(escala.deletedAt), inArray(convocacao.status, CONVOCACAO_ATIVA)))
+      .where(and(eq(escala.eventoId, eventoId), isNull(escala.deletedAt), inArray(convocacao.status, CONVOCACAO_ATIVA), convocacaoPrincipal))
       .orderBy(asc(nomeDaPessoa));
     return linhas.map((linha) => ({ ...linha, distanciaKm: paraNumero(linha.distanciaKm) }));
   }
@@ -87,6 +87,7 @@ export function criarRepositorioCaronas(executor: Executor): RepositorioCaronas 
           nome: nomeDaPessoa,
           eventoId: escala.eventoId,
           status: convocacao.status,
+          principal: convocacao.principal,
           escalaApagada: escala.deletedAt,
           caronaId: convocacao.caronaId,
         })
@@ -95,8 +96,8 @@ export function criarRepositorioCaronas(executor: Executor): RepositorioCaronas 
         .innerJoin(pessoa, eq(pessoa.id, convocacao.pessoaId))
         .where(eq(convocacao.id, convocacaoId));
       if (!linha) return null;
-      const { status, escalaApagada, ...resto } = linha;
-      return { ...resto, ativa: escalaApagada === null && CONVOCACAO_ATIVA.includes(status) };
+      const { status, principal, escalaApagada, ...resto } = linha;
+      return { ...resto, ativa: escalaApagada === null && CONVOCACAO_ATIVA.includes(status) && principal };
     },
 
     async lugaresDoVeiculo(pessoaId) {

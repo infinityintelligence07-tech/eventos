@@ -240,7 +240,7 @@ A leitura de todas as telas vale para os dois perfis. Não há permissão só de
 | `disponibilidade/nova/acoes.ts` | `abrirEnqueteAcao` → `disponibilidade.gerir` |
 | `disponibilidade/[enqueteId]/acoes.ts` | `encerrarEnqueteAcao`, `reabrirEnqueteAcao` → `disponibilidade.gerir`; `registrarRespostaAcao` → `disponibilidade.registrar_resposta` |
 | `pessoas/[pessoaId]/acoes.ts` | `salvarPerfilAcao`, `definirFuncoesAcao`, `salvarVeiculoAcao`, `salvarCoordenadasAcao` → `pessoas.editar` |
-| `logistica/acoes.ts` | `registrarPedidoDeVooAcao`, `alterarPedidoAcao`, `cancelarPedidoAcao`, `criarHospedagemAcao`, `alterarHospedagemAcao`, `registrarPedidoDeHospedagemAcao`, `adicionarQuartoAcao`, `removerQuartoAcao`, `porNoQuartoAcao`, `tirarDoQuartoAcao`, `aplicarRoomingSugeridoAcao`, `criarCaronaAcao`, `removerCaronaAcao`, `definirCaronaAcao`, `tirarDaCaronaAcao` → `logistica.gerir`; `registrarRetornoDeVooAcao`, `registrarRetornoDeHospedagemAcao` → `logistica.registrar_retorno_sdc` |
+| `logistica/acoes.ts` | `registrarPedidoDeVooAcao`, `alterarPedidoAcao`, `cancelarPedidoAcao`, `criarHospedagemAcao`, `alterarHospedagemAcao`, `registrarPedidoDeHospedagemAcao`, `adicionarQuartoAcao`, `removerQuartoAcao`, `porNoQuartoAcao`, `tirarDoQuartoAcao`, `definirPeriodoDoOcupanteAcao`, `aplicarRoomingSugeridoAcao`, `criarCaronaAcao`, `removerCaronaAcao`, `definirCaronaAcao`, `tirarDaCaronaAcao` → `logistica.gerir`; `registrarRetornoDeVooAcao`, `registrarRetornoDeHospedagemAcao` → `logistica.registrar_retorno_sdc` |
 | `custos/acoes.ts` | `registrarSolicitacaoAcao`, `corrigirSolicitacaoAcao`, `calcularPreviaAcao` (não grava) → `custos.registrar`; `aprovarSolicitacaoAcao`, `reprovarSolicitacaoAcao` → `custos.auditar`; `reabrirAuditoriaAcao` → `custos.reabrir_auditoria` |
 | `configuracoes/locais/acoes.ts` | `salvarLocalAcao`, `arquivarLocalAcao` → `config.locais` |
 | `configuracoes/modelos-de-copy/acoes.ts` | `salvarModeloAcao`, `definirModeloAtivoAcao`, `previaDoModeloAcao` (não grava) → `config.modelos_copy`; `salvarLinkDeCustosAcao` → `config.link_custos` |
@@ -564,12 +564,15 @@ líder, registrar e auditar um custo) e conferência do `registro_acao`. Revisã
    (§2.4) — vale também para o GH.
 
 **C. Banco de produção** (nesta ordem; fazer um backup antes)
-6. Aplicar as migrations 0004 e 0005 do Eventos (`npm run db:migrate` exige `EVENTOS_CONFIRMO_MIGRAR_REMOTO=sim`).
+6. Aplicar as migrations 0004 a 0009 do Eventos (`npm run db:migrate` exige `EVENTOS_CONFIRMO_MIGRAR_REMOTO=sim`).
    A 0004 troca CHECKs em `evento` e `convocacao` (o GH lê essas tabelas: conferir o GH depois).
 7. Aplicar as migrations do GH dos passos 1 e 2.
 8. Papéis: `ALTER ROLE app_eventos LOGIN PASSWORD '…'`, idem `app_eventos_leitura` e `app_eventos_copia`; e
    `ALTER ROLE app_eventos SET eventos.ambiente = 'producao'`. Senhas fortes, guardadas só no Easypanel (a da cópia no
    `.env` local como `ORIGEM_DATABASE_URL`).
+   Sincronização de turmas (0009): rodar de novo `docs/gh-proposta-papeis-do-eventos.sql` (dá ao `app_eventos_worker` a
+   leitura de `core.polo`), `ALTER ROLE app_eventos_worker LOGIN PASSWORD '…'` e pôr a URL dele em `WORKER_DATABASE_URL`
+   (session pooler, porta 5432). Com isso `npm run sync:turmas` e o worker deixam de usar o `postgres`.
 9. Atribuir os perfis às pessoas reais (`core.usuario_perfil`, escopo `GLOBAL`): a Patricia com `EVENTOS_LIDER`; o
    restante do time com `EVENTOS_TIME`. Conferir que o e-mail do Google de cada uma é o mesmo de `core.usuario.email`.
 10. Só depois que o código desta branch estiver no ar: incluir `{"funcao":"STAFF","digitado":true}` na regra de vagas
@@ -588,7 +591,8 @@ líder, registrar e auditar um custo) e conferência do `registro_acao`. Revisã
     evento de teste (montar, enviar, aprovar, comunicar, auditar um custo) e conferir o `registro_acao`.
 
 **F. Avisar**
-15. Avisar o Lucas do que mudou no banco compartilhado: os CHECKs novos de `status_escala` e `convocacao.status`, os
+15. Avisar o Lucas do que mudou no banco compartilhado: a coluna `convocacao.principal` (0008; nasce `true`, então o GH segue
+    funcionando, mas se o GH passar a pôr a mesma pessoa em duas funções do evento precisa marcar a segunda como `false`); os CHECKs novos de `status_escala` e `convocacao.status`, os
     perfis `EVENTOS_*`, as políticas em `core`, o RESTRICT do histórico (apagar pessoa vira anonimizar) e o callback
     corrigido.
 

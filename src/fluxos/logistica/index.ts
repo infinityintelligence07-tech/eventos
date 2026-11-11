@@ -18,6 +18,7 @@ export {
   aplicarRoomingSugerido,
   carregarHospedagem,
   criarHospedagem,
+  definirPeriodoDoOcupante,
   type HospedagemCarregada,
   type HospedagemDoEventoCarregada,
   porNoQuarto,

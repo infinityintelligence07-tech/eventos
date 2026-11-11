@@ -147,7 +147,8 @@ export async function sugerirPessoas(eventoId: string, escalaId: string, agora: 
       distanciaKm: distanciaKm(doBanco.lat !== null && doBanco.lng !== null ? { lat: doBanco.lat, lng: doBanco.lng } : null, local),
       convocacoesUltimos90Dias: doBanco.convocacoesUltimos90Dias,
       diasDesdeUltima: doBanco.diasDesdeUltima,
-      jaNoEvento: doBanco.jaNoEvento,
+      jaNaLinha: doBanco.jaNaLinha,
+      funcoesNoEvento: doBanco.funcoesNoEvento,
       conflitos: doBanco.conflitos,
     };
   });

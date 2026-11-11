@@ -1,10 +1,10 @@
 import { convocacaoAtiva, EscalaMudouError, type StatusEscala } from "../domain/convite";
 import { transicaoDaConvocacao } from "../domain/convocacao";
 import { ConflitoDeAgendaError, EscalaTravadaError, NaoEncontradoError, TransicaoInvalidaError, VagasEsgotadasError } from "../domain/erros";
-import type { Deslocamento } from "../domain/schemas";
+import type { MudancaDaConvocacao } from "../domain/schemas";
 import { escalaEditavel, eventoEncerrado } from "../domain/status-escala";
 import { calcularVagas, RegraVagasInvalidaError } from "../domain/vagas";
-import type { EventoTravado, LinhaTravada, RepositorioMontagem } from "./portas";
+import type { AoTrocarPrincipal, ConvocacaoTravada, EventoTravado, LinhaTravada, RepositorioMontagem } from "./portas";
 
 // Casos de uso de "Montar escala" (docs/07 §6.2). Cada um trava o evento, confere se a escala é editável
 // (SEM_ESCALA, RASCUNHO, DEVOLVIDA) e grava; SEM_ESCALA vira RASCUNHO na primeira mudança.
@@ -162,13 +162,13 @@ export async function porNaVaga(
   if (linha.ativas >= linha.quantidade) {
     throw new VagasEsgotadasError(`As ${linha.quantidade} vagas de ${linha.nomeDaFuncao} já estão preenchidas. Aumente o número de vagas antes.`);
   }
-  if (await repo.ativaEmOutraLinhaDoEvento(entrada.eventoId, entrada.escalaId, entrada.pessoaId)) {
-    throw new ConflitoDeAgendaError(`${pessoa.nome} já está em outra função deste evento.`);
-  }
+  // Segunda função no mesmo evento (planilha BD 2026: staff num dia e fotógrafo nos outros; DJ e som na Masterclass).
+  // A primeira convocação ativa é a principal; as outras só marcam a função.
+  const principal = !(await repo.ativaEmOutraLinhaDoEvento(entrada.eventoId, entrada.escalaId, entrada.pessoaId));
   const conflitos = await repo.conflitosDeAgenda(entrada.eventoId, entrada.pessoaId);
   if (conflitos.length > 0) throw new ConflitoDeAgendaError(`${pessoa.nome} já está na escala de ${conflitos.join(", ")}, com datas que coincidem.`);
 
-  const dados = { usuarioId: entrada.usuarioId, sugestaoScore: entrada.sugestaoScore, instante: entrada.instante };
+  const dados = { usuarioId: entrada.usuarioId, sugestaoScore: entrada.sugestaoScore, principal, instante: entrada.instante };
   const incluida = (convocacaoId: string, de: string | null) =>
     repo.registrar({
       entidade: "CONVOCACAO",
@@ -178,7 +178,7 @@ export async function porNaVaga(
       statusDe: de,
       statusPara: "SUGERIDA",
       usuarioId: entrada.usuarioId,
-      dados: { funcao: linha.nomeDaFuncao },
+      dados: { funcao: linha.nomeDaFuncao, principal },
     });
   if (existente) {
     if (!(await repo.reativarConvocacao(existente.id, { de: existente.status, ...dados }))) throw new EscalaMudouError("a convocação mudou");
@@ -190,10 +190,40 @@ export async function porNaVaga(
   return { convocacaoId, nome: pessoa.nome, nomeDaFuncao: linha.nomeDaFuncao };
 }
 
+/**
+ * A pessoa está saindo desta função mas continua em outra do mesmo evento: a outra convocação ativa mais antiga herda
+ * a principal, com o deslocamento e a carona, e quem guarda dados por convocação é avisado para levá-los junto.
+ */
+export async function passarPrincipalAdiante(
+  repo: RepositorioMontagem,
+  convocacao: ConvocacaoTravada,
+  { usuarioId, instante, aoTrocarPrincipal }: { usuarioId: string; instante: Date; aoTrocarPrincipal?: AoTrocarPrincipal },
+): Promise<void> {
+  if (!convocacao.principal || !convocacaoAtiva(convocacao.status)) return;
+  const herdeira = await repo.outraAtivaMaisAntiga(convocacao.eventoId, convocacao.pessoaId, convocacao.id);
+  if (!herdeira) return;
+  await repo.passarPrincipal(convocacao.id, herdeira, instante);
+  await aoTrocarPrincipal?.({ de: convocacao.id, para: herdeira });
+  await repo.registrar({
+    entidade: "CONVOCACAO",
+    entidadeId: herdeira,
+    eventoId: convocacao.eventoId,
+    acao: "CONVOCACAO_ATUALIZADA",
+    usuarioId,
+    dados: { campos: ["principal"], herdouDe: convocacao.id },
+  });
+}
+
 /** Nunca avisada (SUGERIDA): a linha some. Já avisada: vira CANCELADA e guarda o histórico. */
 export async function tirarDaVaga(
   repo: RepositorioMontagem,
-  { eventoId, convocacaoId, usuarioId, instante }: { eventoId: string; convocacaoId: string; usuarioId: string; instante: Date },
+  {
+    eventoId,
+    convocacaoId,
+    usuarioId,
+    instante,
+    aoTrocarPrincipal,
+  }: { eventoId: string; convocacaoId: string; usuarioId: string; instante: Date; aoTrocarPrincipal?: AoTrocarPrincipal },
 ): Promise<{ nome: string; jaAvisada: boolean }> {
   await travarEventoEditavel(repo, eventoId, instante);
   const convocacao = await repo.travarConvocacao(convocacaoId);
@@ -201,6 +231,8 @@ export async function tirarDaVaga(
 
   const transicao = transicaoDaConvocacao(convocacao.status, "TIRAR_DA_VAGA");
   if ("erro" in transicao) throw new TransicaoInvalidaError(`${convocacao.nome} já não ocupa a vaga.`);
+  // Antes de sair: apagar a convocação levaria junto o quarto e os vínculos dela.
+  await passarPrincipalAdiante(repo, convocacao, { usuarioId, instante, aoTrocarPrincipal });
   if ("apagar" in transicao) {
     if (!(await repo.apagarConvocacao(convocacaoId, convocacao.status))) throw new EscalaMudouError("a convocação mudou");
     await repo.registrar({ entidade: "CONVOCACAO", entidadeId: convocacaoId, eventoId, acao: "CONVOCACAO_REMOVIDA", statusDe: convocacao.status, usuarioId });
@@ -221,16 +253,19 @@ export async function tirarDaVaga(
   return { nome: convocacao.nome, jaAvisada: true };
 }
 
-/** Deslocamento é dado de logística: muda em qualquer momento, menos com a escala na mão da líder. */
-export async function definirDeslocamento(
+/**
+ * Deslocamento, montagem e observação são dados de logística: mudam em qualquer momento, menos com a escala na mão
+ * da líder. Um campo por chamada.
+ */
+export async function atualizarConvocacao(
   repo: RepositorioMontagem,
   {
     eventoId,
     convocacaoId,
-    deslocamento,
+    mudanca,
     usuarioId,
     instante,
-  }: { eventoId: string; convocacaoId: string; deslocamento: Deslocamento | null; usuarioId: string; instante: Date },
+  }: { eventoId: string; convocacaoId: string; mudanca: MudancaDaConvocacao; usuarioId: string; instante: Date },
 ): Promise<void> {
   const evento = await repo.travarEvento(eventoId);
   if (!evento) throw new NaoEncontradoError("Evento não encontrado.");
@@ -240,15 +275,19 @@ export async function definirDeslocamento(
   if (!convocacao || convocacao.eventoId !== eventoId || !convocacaoAtiva(convocacao.status)) {
     throw new NaoEncontradoError("A pessoa não está mais nesta escala.");
   }
-  await repo.definirDeslocamento(convocacaoId, deslocamento, instante);
-  // Só o deslocamento leva valor (docs/09 §7.1): é logística, não dado pessoal.
+  const { campo, ...valor } = mudanca;
+  // O deslocamento é da pessoa no evento: mesmo pedido pela linha da segunda função, vai para a principal.
+  const alvo = campo === "deslocamento" && !convocacao.principal ? ((await repo.principalDaPessoa(eventoId, convocacao.pessoaId)) ?? convocacaoId) : convocacaoId;
+  await repo.atualizarConvocacao(alvo, valor, instante);
+  // docs/09 §7.1: o histórico leva o nome do campo; valor só de deslocamento e montagem (logística). A observação é
+  // texto livre e pode citar a pessoa, então não entra no registro, que é imutável.
   await repo.registrar({
     entidade: "CONVOCACAO",
-    entidadeId: convocacaoId,
+    entidadeId: alvo,
     eventoId,
     acao: "CONVOCACAO_ATUALIZADA",
     usuarioId,
-    dados: { campos: ["deslocamento"], deslocamento },
+    dados: mudanca.campo === "observacao" ? { campos: [campo] } : { campos: [campo], ...valor },
   });
 }
 

@@ -7,7 +7,7 @@ import { convocacao, escala, evento, hospedagem, local, pedidoSdc, trechoVoo } f
 
 import type { PreferenciaDeHorario, Sentido, SituacaoDoPedido, TipoDoPedido } from "../domain/pedido";
 import type { RepositorioPedidos } from "../service/pedidos";
-import { CONVOCACAO_ATIVA, eventoTerminaDesde, fimDoEvento, inicioDoEvento, mesmaVersao, nomeDaPessoa, travarLinha } from "./comum";
+import { CONVOCACAO_ATIVA, convocacaoPrincipal, eventoTerminaDesde, fimDoEvento, inicioDoEvento, mesmaVersao, nomeDaPessoa, travarLinha } from "./comum";
 
 export type EventoDaLogistica = {
   id: string;
@@ -155,6 +155,7 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
             isNull(evento.deletedAt),
             eq(convocacao.deslocamento, "VOO"),
             inArray(convocacao.status, CONVOCACAO_ATIVA),
+            convocacaoPrincipal,
             eventoId ? eq(evento.id, eventoId) : eventoTerminaDesde(desde),
           ),
         )
@@ -211,12 +212,13 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
     async travarConvocacao(convocacaoId) {
       if (!(await travarLinha(executor, convocacao, convocacaoId))) return null;
       const [linha] = await executor
-        .select({ convocacaoId: convocacao.id, pessoaId: convocacao.pessoaId, eventoId: escala.eventoId, status: convocacao.status, deslocamento: convocacao.deslocamento })
+        .select({ convocacaoId: convocacao.id, pessoaId: convocacao.pessoaId, eventoId: escala.eventoId, status: convocacao.status, principal: convocacao.principal, deslocamento: convocacao.deslocamento })
         .from(convocacao)
         .innerJoin(escala, eq(escala.id, convocacao.escalaId))
         .where(and(eq(convocacao.id, convocacaoId), isNull(escala.deletedAt)));
       if (!linha) return null;
-      return { ...linha, ativa: CONVOCACAO_ATIVA.includes(linha.status) };
+      const { principal, ...resto } = linha;
+      return { ...resto, ativa: CONVOCACAO_ATIVA.includes(linha.status) && principal };
     },
 
     async pedidoDeVooAtivo(eventoId, pessoaId) {

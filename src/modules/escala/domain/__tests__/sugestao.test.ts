@@ -11,7 +11,8 @@ const candidato = (nome: string, dados: Partial<Candidato> = {}): Candidato => (
   distanciaKm: 10,
   convocacoesUltimos90Dias: 0,
   diasDesdeUltima: null,
-  jaNoEvento: false,
+  jaNaLinha: false,
+  funcoesNoEvento: [],
   conflitos: [],
   ...dados,
 });
@@ -57,9 +58,9 @@ describe("ordem das sugestões", () => {
     expect(nomes(sugeridos)).toEqual(["nunca", "trabalhou-mes-passado", "trabalhou-ontem"]);
   });
 
-  it("quem já está no evento sai; quem não pode fica num grupo à parte; conflito só marca", () => {
+  it("quem já está nesta função sai; quem não pode fica num grupo à parte; conflito e outra função só marcam", () => {
     const resultado = ordenarSugestoes([
-      candidato("no-evento", { jaNoEvento: true, disponibilidade: "PODE" }),
+      candidato("na-linha", { jaNaLinha: true, disponibilidade: "PODE" }),
       candidato("nao-pode", { disponibilidade: "NAO_PODE" }),
       candidato("conflito", { conflitos: ["MC_POA_POA"] }),
     ]);

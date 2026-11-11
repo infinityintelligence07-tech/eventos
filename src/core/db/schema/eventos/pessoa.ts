@@ -53,7 +53,7 @@ export const pessoaEvento = eventosSchema.table(
     ),
     check(
       "pessoa_evento_camiseta_tamanho_check",
-      sql`${table.camisetaTamanho} IS NULL OR ${table.camisetaTamanho} IN ('PP', 'P', 'M', 'G', 'GG', 'XG')`,
+      sql`${table.camisetaTamanho} IS NULL OR ${table.camisetaTamanho} IN ('PP', 'P', 'M', 'G', 'GG', 'XG', 'G1')`,
     ),
     index("pessoa_evento_aluno_idx").on(table.iamControlAlunoId),
     index("pessoa_evento_polo_idx").on(table.poloId),

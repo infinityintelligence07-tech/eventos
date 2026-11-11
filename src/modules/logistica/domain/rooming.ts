@@ -93,6 +93,31 @@ export function rotuloDoSexoDoQuarto(sexo: Sexo | null): string {
   return "Misto";
 }
 
+export type Periodo = { checkIn: string; checkOut: string };
+
+/**
+ * Período de quem chega depois ou sai antes (planilha GESTÃO HOSP: check-in e diárias por pessoa). Vale dentro do
+ * período da hospedagem; igual ao da hospedagem não é gravado (nulo = acompanha a hospedagem se ela mudar).
+ */
+export function periodoProprio(hospedagem: Periodo, pedido: Periodo | null): { ok: true; periodo: Periodo | null } | { ok: false; motivo: "FORA_DA_HOSPEDAGEM" } {
+  if (!pedido) return { ok: true, periodo: null };
+  if (pedido.checkIn < hospedagem.checkIn || pedido.checkOut > hospedagem.checkOut) return { ok: false, motivo: "FORA_DA_HOSPEDAGEM" };
+  if (pedido.checkIn === hospedagem.checkIn && pedido.checkOut === hospedagem.checkOut) return { ok: true, periodo: null };
+  return { ok: true, periodo: pedido };
+}
+
+const diaEMes = (valor: string) => `${valor.slice(8, 10)}/${valor.slice(5, 7)}`;
+
+/** "12/11 a 14/11". */
+export function textoDoPeriodo(periodo: Periodo): string {
+  return `${diaEMes(periodo.checkIn)} a ${diaEMes(periodo.checkOut)}`;
+}
+
+/** Nome na rooming list: quem tem período próprio leva as datas ao lado. */
+export function nomeComPeriodo(nome: string, periodo: { checkIn: string | null; checkOut: string | null }): string {
+  return periodo.checkIn && periodo.checkOut ? `${nome} (${textoDoPeriodo({ checkIn: periodo.checkIn, checkOut: periodo.checkOut })})` : nome;
+}
+
 /** Texto para o hotel ("Copiar rooming list"). */
 export function textoDoRooming(hospedagem: {
   hotel: string;

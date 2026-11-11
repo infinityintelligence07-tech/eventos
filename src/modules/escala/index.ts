@@ -65,12 +65,17 @@ export {
   alterarVagasSchema,
   aprovarEscalaSchema,
   atualizarConvocacaoSchema,
+  type CampoDaConvocacao,
+  CAMPOS_DA_CONVOCACAO,
   confirmarVagasSchema,
   definirVagaDigitadaSchema,
   type Deslocamento,
   DESLOCAMENTOS,
   devolverEscalaSchema,
   enviarParaAprovacaoSchema,
+  LIMITE_DA_OBSERVACAO,
+  type MudancaDaConvocacao,
+  mudancaDaConvocacao,
   porNaVagaSchema,
   reabrirEscalaSchema,
   recalcularVagasDoTipoSchema,
@@ -79,12 +84,12 @@ export {
   salvarRegraDeVagasSchema,
   tirarDaVagaSchema,
 } from "./domain/schemas";
-export type { ConvocacaoTravada, EventoTravado, LinhaTravada, RepositorioMontagem } from "./service/portas";
+export type { AoTrocarPrincipal, ConvocacaoTravada, EventoTravado, LinhaTravada, RepositorioMontagem } from "./service/portas";
 export {
   adicionarVagaManual,
   alterarVagas,
   confirmarVagas,
-  definirDeslocamento,
+  atualizarConvocacao,
   definirVagaDigitada,
   porNaVaga,
   removerVagaManual,

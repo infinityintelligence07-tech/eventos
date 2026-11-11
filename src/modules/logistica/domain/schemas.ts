@@ -174,6 +174,12 @@ export const removerQuartoSchema = z.object({ quartoId: id });
 export const porNoQuartoSchema = z.object({ quartoId: id, convocacaoId: id });
 export type PorNoQuarto = z.output<typeof porNoQuartoSchema>;
 export const tirarDoQuartoSchema = z.object({ quartoId: id, convocacaoId: id });
+/** Sem datas = volta a acompanhar o período da hospedagem. */
+export const definirPeriodoDoOcupanteSchema = z
+  .object({ quartoId: id, convocacaoId: id, checkIn: data.optional(), checkOut: data.optional() })
+  .refine((periodo) => (periodo.checkIn === undefined) === (periodo.checkOut === undefined), { path: ["checkOut"], message: "Informe o check-in e o check-out, ou deixe os dois em branco." })
+  .refine((periodo) => !periodo.checkIn || !periodo.checkOut || periodo.checkOut > periodo.checkIn, periodoValido);
+export type DefinirPeriodoDoOcupante = z.output<typeof definirPeriodoDoOcupanteSchema>;
 export const aplicarRoomingSugeridoSchema = z.object({ eventoId: id });
 
 export const criarCaronaSchema = z.object({ eventoId: id, motoristaConvocacaoId: id });

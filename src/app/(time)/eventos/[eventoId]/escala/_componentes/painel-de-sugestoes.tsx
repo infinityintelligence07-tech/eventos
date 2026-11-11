@@ -114,6 +114,11 @@ function ItemDaSugestao({
             </Chip>
           </p>
         )}
+        {candidato.funcoesNoEvento.length > 0 && (
+          <p className="mt-1">
+            <Chip tom="informacao">Já neste evento: {candidato.funcoesNoEvento.join(", ")}. Entra como mais uma função.</Chip>
+          </p>
+        )}
         <p className="mt-0.5 text-[12px] text-[var(--ds-label-2)]">Desempenho: em breve</p>
       </div>
       {naoPode ? (

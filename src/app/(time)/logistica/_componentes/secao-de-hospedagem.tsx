@@ -1,7 +1,7 @@
 import { BedDouble, Hotel, Sparkles } from "lucide-react";
 
 import type { HospedagemDoEventoCarregada } from "@/fluxos/logistica";
-import { rotuloDaCapacidade, rotuloDoSexoDoQuarto, somarDias } from "@/modules/logistica";
+import { diasEntre, rotuloDaCapacidade, rotuloDoSexoDoQuarto, somarDias, textoDoPeriodo } from "@/modules/logistica";
 import { BotaoCopiar, FormularioDeAcao } from "@/app/(time)/_componentes/ui";
 
 import { Aviso, FaixaSomenteLeitura } from "../../_componentes/ui/aviso";
@@ -17,15 +17,18 @@ import {
   alterarHospedagemAcao,
   aplicarRoomingSugeridoAcao,
   criarHospedagemAcao,
+  definirPeriodoDoOcupanteAcao,
   porNoQuartoAcao,
   registrarPedidoDeHospedagemAcao,
   removerQuartoAcao,
   tirarDoQuartoAcao,
 } from "../acoes";
-import { BotaoDefinirHospedagem, FormularioNovoQuarto } from "./formularios-de-hospedagem";
+import { BotaoDefinirHospedagem, BotaoPeriodoDoOcupante, FormularioNovoQuarto } from "./formularios-de-hospedagem";
 import { ChipDoVoo } from "./situacoes";
 
 type OpcaoDeQuarto = { id: string; rotulo: string; cheio: boolean };
+
+const diarias = (noites: number) => (noites === 1 ? "1 diária" : `${noites} diárias`);
 
 /** Seletor "Mover para…" / "Colocar no quarto…" (alternativa a arrastar, WCAG 2.5.7). */
 function MoverPara({ convocacaoId, nome, quartos, atual, rotulo }: { convocacaoId: string; nome: string; quartos: OpcaoDeQuarto[]; atual: string | null; rotulo: string }) {
@@ -237,9 +240,22 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
                           <span>
                             {ocupante.nome}
                             {ocupante.sexo === null && <span className="ml-1 text-[12px] text-[var(--ds-orange-deep)]">(sem sexo no cadastro)</span>}
+                            {ocupante.checkIn && ocupante.checkOut && (
+                              <span className="block text-[12px] text-[var(--ds-label-2)]">
+                                {textoDoPeriodo({ checkIn: ocupante.checkIn, checkOut: ocupante.checkOut })} · {diarias(diasEntre(ocupante.checkIn, ocupante.checkOut))}
+                              </span>
+                            )}
                           </span>
                           {escrita && (
                             <span className="flex flex-wrap items-center gap-1">
+                              <BotaoPeriodoDoOcupante
+                                acao={definirPeriodoDoOcupanteAcao}
+                                quartoId={quarto.id}
+                                convocacaoId={ocupante.convocacaoId}
+                                nome={ocupante.nome}
+                                hospedagem={{ checkIn: hospedagem.checkIn, checkOut: hospedagem.checkOut }}
+                                proprio={ocupante.checkIn && ocupante.checkOut ? { checkIn: ocupante.checkIn, checkOut: ocupante.checkOut } : null}
+                              />
                               <MoverPara convocacaoId={ocupante.convocacaoId} nome={ocupante.nome} quartos={quartos} atual={quarto.id} rotulo="Mover para" />
                               <FormularioDeAcao acao={tirarDoQuartoAcao} aria-label={`Tirar ${ocupante.nome} do quarto`}>
                                 <input type="hidden" name="quartoId" value={quarto.id} />
