@@ -18,7 +18,7 @@ export default async function PaginaEncerrar() {
   return (
     <MolduraDeEntrada>
       <h1>Encerrando a sessão</h1>
-      <p className="login-lead">Sua conta Google não está cadastrada na IAM. Você vai voltar para a tela de entrada.</p>
+      <p className="login-lead">Esta conta Google ainda não tem cadastro no IAM Control. Você vai voltar para a tela de entrada, que mostra como criar.</p>
       <FormularioDeSaida motivo="sem-cadastro" />
     </MolduraDeEntrada>
   );

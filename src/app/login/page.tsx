@@ -6,6 +6,7 @@ import { modoDemo, modoLocal } from "@/core/ambiente";
 import { configuracaoDoLogin, destinoSeguro, segredoDaSessao } from "@/core/auth";
 import { lerConfig } from "@/core/config/leitura";
 
+import { AvisoSemCadastro } from "./_componentes/aviso-sem-cadastro";
 import { MolduraDeEntrada } from "./_componentes/moldura";
 import { entrarComGoogle, entrarComSenha } from "./acoes";
 
@@ -14,6 +15,7 @@ export const metadata: Metadata = { title: "Entrar" };
 
 // Mensagem por código, nunca o texto do provedor (docs/09 §2.2).
 const MENSAGENS: Record<string, string> = {
+  // Só aparece sem IAM_CONTROL_URL; com ela, o aviso leva a criar a conta no IAM Control (AvisoSemCadastro).
   "sem-cadastro": "Sua conta Google não está cadastrada na IAM. Peça ao RH para conferir o seu e-mail no cadastro de pessoas.",
   "link-expirado": "O link de entrada expirou ou já foi usado. Tente de novo.",
   falhou: "Não foi possível entrar. Tente de novo.",
@@ -64,14 +66,18 @@ export default async function PaginaLogin({ searchParams }: { searchParams: Prom
 
   const googleConfigurado = Boolean(configuracaoDoLogin()?.urlPublica);
   const senhaConfigurada = loginComSenhaConfigurado();
-  const mensagem = (erro && MENSAGENS[erro]) || (!googleConfigurado && !senhaConfigurada ? MENSAGENS["nao-configurado"] : null);
   const destino = destinoSeguro(proximo);
   const urlDoIamControl = lerConfig().IAM_CONTROL_URL;
+  const criarContaNoIamControl = erro === "sem-cadastro" && urlDoIamControl ? urlDoIamControl : null;
+  const mensagem = criarContaNoIamControl
+    ? null
+    : (erro && MENSAGENS[erro]) || (!googleConfigurado && !senhaConfigurada ? MENSAGENS["nao-configurado"] : null);
 
   return (
     <MolduraDeEntrada>
       <h1>Entrar</h1>
       <p className="login-lead">Use a mesma conta do IAM Control: e-mail e senha, ou o Google.</p>
+      {criarContaNoIamControl && <AvisoSemCadastro urlDoIamControl={criarContaNoIamControl} />}
       {mensagem && (
         <p className="login-error" role="alert">
           {mensagem}
