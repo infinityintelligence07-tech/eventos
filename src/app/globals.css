@@ -409,6 +409,24 @@ a[class*="situacao-"]:hover {
   line-height: 1.4;
   text-align: left;
 }
+/* Conta Google sem cadastro: o caminho para criar no IAM Control (login). */
+.login-aviso {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 18px;
+  padding: 14px;
+  border: 1px solid rgba(159, 188, 255, 0.28);
+  border-radius: 12px;
+  background: rgba(10, 132, 255, 0.12);
+  color: rgba(235, 235, 245, 0.85);
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: left;
+}
+.login-aviso p { margin: 0; }
+.login-aviso .login-aviso-titulo { font-size: 14px; font-weight: 700; color: #ffffff; }
+.login-aviso .login-submit { box-sizing: border-box; padding: 10px 12px; line-height: 1.3; text-align: center; text-decoration: none; }
+.login-aviso ol { display: grid; gap: 4px; margin: 0; padding-left: 18px; list-style: decimal; color: rgba(235, 235, 245, 0.7); }
 .login-terms {
   margin: 18px 0 0;
   font-size: 12.5px;

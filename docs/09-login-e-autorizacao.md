@@ -157,7 +157,10 @@ exigirAtor(): Promise<Ator>                 // usado pelo layout: redireciona pa
 Regras:
 1. `email` vem do usuário do Supabase; só aceito se `email_confirmed_at` estiver preenchido (o Google confirma).
    Compara em minúsculas com `core.usuario.email`, `ativo = true` e `deleted_at IS NULL` (mesma regra do GH).
-2. `SEM_CADASTRO` → `auth.signOut()` e `/login?erro=sem-cadastro` ("Sua conta Google não está cadastrada na IAM.").
+2. `SEM_CADASTRO` → `auth.signOut()` e `/login?erro=sem-cadastro`. Com `IAM_CONTROL_URL`, a tela mostra o aviso com o botão
+   "Criar conta no IAM Control com o Google" (abre `/api/auth/google` do IAM Control em outra aba) e os passos: criar a
+   conta, esperar a aprovação de um administrador e voltar (a sincronização de colaboradores traz a conta em até 30
+   minutos). Sem a variável, fica a mensagem "Sua conta Google não está cadastrada na IAM.".
 3. Perfis: `usuario_perfil` × `perfil` com `codigo IN ('EVENTOS_TIME','EVENTOS_LIDER')`. Linha com `escopo <> 'GLOBAL'` é
    **ignorada** e registrada no log como aviso (fail-closed até existir escopo por polo). Perfis do GH (`CEO`,
    `COORD_EVENTOS`…) não dão acesso ao Eventos.
@@ -638,7 +641,7 @@ líder, registrar e auditar um custo) e conferência do `registro_acao`. Revisã
 | R5 | Opção A de §8 bloqueia hard delete de pessoa no banco compartilhado | Hoje ninguém apaga no código; procedimento de pseudonimização no GH antes do primeiro pedido de eliminação |
 | R6 | Esquecer a permissão numa action nova | Parâmetro obrigatório + teste que varre os `acoes.ts` |
 | R7 | O worker continua com o papel `postgres` | Registrado; `app_eventos_worker` na próxima rodada |
-| R8 | E-mail do Google diferente do `core.usuario.email` (ex.: apelido, outro domínio) | Mensagem `sem-cadastro` clara; o RH/GH corrige o e-mail no cadastro |
+| R8 | E-mail do Google diferente do `core.usuario.email` (ex.: apelido, outro domínio) | Aviso `sem-cadastro` leva a criar a conta no IAM Control com o mesmo Google; e-mail diferente no cadastro, o RH/GH corrige |
 
 ---
 
