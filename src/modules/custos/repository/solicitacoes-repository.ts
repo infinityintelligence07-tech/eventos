@@ -158,6 +158,14 @@ export function lerRegra(linha: typeof regraCusto.$inferSelect): RegraDeCusto {
   };
 }
 
+/**
+ * A principal da pessoa no evento mudou de convocação: a solicitação de custo dela segue para a nova.
+ * Chamado pelo fluxo da escala, na mesma transação, antes de a convocação antiga sair.
+ */
+export async function transferirSolicitacaoDaConvocacao(executor: Executor, { de, para }: { de: string; para: string }): Promise<void> {
+  await executor.update(solicitacaoCusto).set({ convocacaoId: para }).where(eq(solicitacaoCusto.convocacaoId, de));
+}
+
 export function criarRepositorioSolicitacoes(executor: Executor): RepositorioSolicitacoes & {
   fila(filtro: FiltroDaFila): Promise<SolicitacaoDaFila[]>;
   numeros(inicioDoMes: string): Promise<NumerosDaFila>;
@@ -346,7 +354,8 @@ export function criarRepositorioSolicitacoes(executor: Executor): RepositorioSol
         .from(convocacao)
         .innerJoin(escala, eq(escala.id, convocacao.escalaId))
         .where(and(eq(escala.eventoId, eventoId), eq(convocacao.pessoaId, pessoaId), isNull(escala.deletedAt), inArray(convocacao.status, NA_ESCALA)))
-        .orderBy(asc(convocacao.criadoEm));
+        // Com mais de uma função no evento, vale a convocação principal.
+        .orderBy(desc(convocacao.principal), asc(convocacao.criadoEm));
       return linha?.id ?? null;
     },
 

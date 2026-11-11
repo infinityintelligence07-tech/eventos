@@ -1,14 +1,28 @@
-import { sql } from "drizzle-orm";
-
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 import type { Executor } from "@/core/db/database";
 import { pessoa } from "@/core/db/schema/core";
-import { carona, convocacao, evento, hospedagem, quarto } from "@/core/db/schema/eventos";
+import { carona, convocacao, evento, hospedagem, pedidoSdc, quarto, quartoOcupante } from "@/core/db/schema/eventos";
 
 // Trechos de SQL repetidos nos repositórios da logística.
 
 export const CONVOCACAO_ATIVA = ["SUGERIDA", "CONVIDADA", "ACEITA"];
+
+/**
+ * Quem tem mais de uma função no evento aparece uma vez só na logística: pela convocação principal, que carrega o
+ * deslocamento, a carona, o quarto e o pedido de voo da pessoa.
+ */
+export const convocacaoPrincipal = eq(convocacao.principal, true);
+
+/**
+ * A principal da pessoa mudou de convocação (ela saiu de uma função e ficou em outra): o quarto e os pedidos à SDC
+ * seguem a pessoa. Chamado pelo fluxo da escala, na mesma transação, antes de a convocação antiga sair.
+ */
+export async function transferirLogisticaDaConvocacao(executor: Executor, { de, para }: { de: string; para: string }): Promise<void> {
+  await executor.delete(quartoOcupante).where(eq(quartoOcupante.convocacaoId, para));
+  await executor.update(quartoOcupante).set({ convocacaoId: para }).where(eq(quartoOcupante.convocacaoId, de));
+  await executor.update(pedidoSdc).set({ convocacaoId: para }).where(eq(pedidoSdc.convocacaoId, de));
+}
 
 export const nomeDaPessoa = sql<string>`coalesce(${pessoa.nomeSocial}, ${pessoa.nomeCompleto})`;
 

@@ -41,14 +41,48 @@ export const porNaVagaSchema = z.object({
 
 export const tirarDaVagaSchema = z.object({ eventoId: id, convocacaoId: id });
 
-export const DESLOCAMENTOS = ["CARRO_PROPRIO", "CARONA", "CARRO_IAM", "UBER", "ONIBUS", "VOO", "NAO_SE_APLICA"] as const;
+export const DESLOCAMENTOS = ["CARRO_PROPRIO", "CARONA", "CARRO_IAM", "UBER", "ONIBUS", "VOO", "MOTO", "A_PE", "NAO_SE_APLICA"] as const;
 export type Deslocamento = (typeof DESLOCAMENTOS)[number];
+
+/** Um campo por envio: o formulário diz qual mudou, e os outros ficam como estão. */
+export const CAMPOS_DA_CONVOCACAO = ["deslocamento", "montagem", "observacao"] as const;
+export type CampoDaConvocacao = (typeof CAMPOS_DA_CONVOCACAO)[number];
+export const LIMITE_DA_OBSERVACAO = 500;
 
 export const atualizarConvocacaoSchema = z.object({
   eventoId: id,
   convocacaoId: id,
+  campo: z.enum(CAMPOS_DA_CONVOCACAO).default("deslocamento"),
+  /** Ausente = "Não definido". */
   deslocamento: z.enum(DESLOCAMENTOS).optional(),
+  /** Caixa de seleção: só chega quando marcada. */
+  montagem: z
+    .literal("sim")
+    .optional()
+    .transform((valor) => valor === "sim"),
+  /** Ausente = apaga a observação. */
+  observacao: textoOpcional(LIMITE_DA_OBSERVACAO),
 });
+
+export type MudancaDaConvocacao =
+  | { campo: "deslocamento"; deslocamento: Deslocamento | null }
+  | { campo: "montagem"; montagem: boolean }
+  | { campo: "observacao"; observacao: string | null };
+
+export function mudancaDaConvocacao(dados: z.output<typeof atualizarConvocacaoSchema>): MudancaDaConvocacao {
+  switch (dados.campo) {
+    case "deslocamento":
+      return { campo: "deslocamento", deslocamento: dados.deslocamento ?? null };
+    case "montagem":
+      return { campo: "montagem", montagem: dados.montagem };
+    case "observacao":
+      return { campo: "observacao", observacao: dados.observacao ?? null };
+    default: {
+      const desconhecido: never = dados.campo;
+      throw new Error(`campo da convocação desconhecido: ${String(desconhecido)}`);
+    }
+  }
+}
 
 export const enviarParaAprovacaoSchema = z.object({ eventoId: id, statusEsperado: z.enum(["RASCUNHO", "DEVOLVIDA"]) });
 

@@ -13,6 +13,7 @@ import {
   criarCarona,
   criarHospedagem,
   definirCarona,
+  definirPeriodoDoOcupante,
   porNoQuarto,
   registrarPedidoDeHospedagem,
   registrarPedidoDeVoo,
@@ -32,6 +33,7 @@ import {
   criarCaronaSchema,
   criarHospedagemSchema,
   definirCaronaSchema,
+  definirPeriodoDoOcupanteSchema,
   porNoQuartoSchema,
   registrarPedidoDeHospedagemSchema,
   registrarPedidoDeVooSchema,
@@ -154,6 +156,14 @@ export async function tirarDoQuartoAcao(_estado: ResultadoAcao, form: FormData):
     const eventoId = await tirarDoQuarto(dados, ator, new Date());
     revalidarLogistica(eventoId);
     return "Pessoa tirada do quarto.";
+  });
+}
+
+export async function definirPeriodoDoOcupanteAcao(_estado: ResultadoAcao, form: FormData): Promise<ResultadoAcao> {
+  return executarAcao(form, definirPeriodoDoOcupanteSchema, "logistica.gerir", async (dados, ator) => {
+    const resultado = await definirPeriodoDoOcupante(dados, ator, new Date());
+    revalidarLogistica(resultado.eventoId);
+    return resultado.periodo ? "Período da pessoa salvo." : "A pessoa voltou a seguir o período da hospedagem.";
   });
 }
 

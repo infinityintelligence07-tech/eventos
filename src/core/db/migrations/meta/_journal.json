@@ -50,6 +50,27 @@
       "when": 1794315095275,
       "tag": "0006_meu-cadastro",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794335374446,
+      "tag": "0007_ajustes-escala-e-cadastro",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794336688204,
+      "tag": "0008_convocacao-principal",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794401684011,
+      "tag": "0009_papel-do-worker",
+      "breakpoints": true
     }
   ]
 }

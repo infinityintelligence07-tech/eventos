@@ -30,7 +30,13 @@ export type LinhaTravada = {
   ativas: number;
 };
 
-export type ConvocacaoTravada = { id: string; escalaId: string; eventoId: string; pessoaId: string; nome: string; status: StatusConvocacao };
+export type ConvocacaoTravada = { id: string; escalaId: string; eventoId: string; pessoaId: string; nome: string; status: StatusConvocacao; principal: boolean };
+
+/**
+ * A principal da pessoa no evento mudou de convocação. Quem guarda dados por convocação fora da escala (quarto,
+ * pedido de voo, solicitação de custo) leva esses dados para a nova. Chamado antes de a antiga sair.
+ */
+export type AoTrocarPrincipal = (troca: { de: string; para: string }) => Promise<void>;
 
 export type EntradaDoHistorico = {
   entidade: "ESCALA_DO_EVENTO" | "CONVOCACAO" | "VAGA";
@@ -71,19 +77,31 @@ export type RepositorioMontagem = {
   ativaEmOutraLinhaDoEvento(eventoId: string, escalaId: string, pessoaId: string): Promise<boolean>;
   /** Códigos (ou nomes) dos outros eventos com datas sobrepostas onde a pessoa está ativa. */
   conflitosDeAgenda(eventoId: string, pessoaId: string): Promise<string[]>;
-  inserirConvocacao(entrada: { escalaId: string; pessoaId: string; usuarioId: string; sugestaoScore: number | null; instante: Date }): Promise<string>;
+  /** `principal`: falso quando a pessoa já tem outra função ativa neste evento. */
+  inserirConvocacao(entrada: { escalaId: string; pessoaId: string; usuarioId: string; sugestaoScore: number | null; principal: boolean; instante: Date }): Promise<string>;
   /** CANCELADA/RECUSADA → SUGERIDA na mesma linha (limpa convite e resposta). false = o status mudou. */
   reativarConvocacao(
     convocacaoId: string,
-    entrada: { de: StatusConvocacao; usuarioId: string; sugestaoScore: number | null; instante: Date },
+    entrada: { de: StatusConvocacao; usuarioId: string; sugestaoScore: number | null; principal: boolean; instante: Date },
   ): Promise<boolean>;
   travarConvocacao(convocacaoId: string): Promise<ConvocacaoTravada | null>;
+  /** A convocação ativa mais antiga da pessoa no evento, fora a informada (quem herda a principal). */
+  outraAtivaMaisAntiga(eventoId: string, pessoaId: string, excetoConvocacaoId: string): Promise<string | null>;
+  /** A convocação principal ativa da pessoa no evento. */
+  principalDaPessoa(eventoId: string, pessoaId: string): Promise<string | null>;
+  /** `para` vira a principal e recebe deslocamento, carona, distância e tempo de `de`, que deixa de ser. */
+  passarPrincipal(de: string, para: string, instante: Date): Promise<void>;
   apagarConvocacao(convocacaoId: string, de: StatusConvocacao): Promise<boolean>;
   mudarConvocacao(
     convocacaoId: string,
     entrada: { de: StatusConvocacao; para: StatusConvocacao; instante: Date; resposta?: { motivoRecusa: string | null; registradoPor: string } },
   ): Promise<boolean>;
-  definirDeslocamento(convocacaoId: string, deslocamento: Deslocamento | null, instante: Date): Promise<void>;
+  /** Grava só os campos informados (deslocamento, montagem, observação). */
+  atualizarConvocacao(
+    convocacaoId: string,
+    campos: { deslocamento?: Deslocamento | null; montagem?: boolean; observacao?: string | null },
+    instante: Date,
+  ): Promise<void>;
   /** Compare-and-set do status. `aprovadoPor` grava aprovado_por/em; `limparAprovacao` zera os dois. */
   mudarStatusDaEscala(
     eventoId: string,

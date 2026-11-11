@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 
 import { pessoa } from "@/core/db/schema/core";
 import type { Executor } from "@/core/db/database";
@@ -192,13 +192,14 @@ export function criarRepositorioMontagem(executor: Executor): RepositorioMontage
       return resultado.rows.map((linha) => linha.evento);
     },
 
-    async inserirConvocacao({ escalaId, pessoaId, usuarioId, sugestaoScore, instante }) {
+    async inserirConvocacao({ escalaId, pessoaId, usuarioId, sugestaoScore, principal, instante }) {
       const [linha] = await executor
         .insert(convocacao)
         .values({
           escalaId,
           pessoaId,
           status: "SUGERIDA",
+          principal,
           criadoPor: usuarioId,
           sugestaoScore: sugestaoScore === null ? null : sugestaoScore.toFixed(2),
           criadoEm: instante,
@@ -208,11 +209,14 @@ export function criarRepositorioMontagem(executor: Executor): RepositorioMontage
       return linha!.id;
     },
 
-    async reativarConvocacao(convocacaoId, { de, usuarioId, sugestaoScore, instante }) {
+    async reativarConvocacao(convocacaoId, { de, usuarioId, sugestaoScore, principal, instante }) {
       const alteradas = await executor
         .update(convocacao)
         .set({
           status: "SUGERIDA",
+          principal,
+          // Voltando como segunda função, o que é da pessoa no evento fica só na principal.
+          ...(principal ? {} : { deslocamento: null, caronaId: null }),
           convidadaEm: null,
           respondidaEm: null,
           motivoRecusa: null,
@@ -237,12 +241,57 @@ export function criarRepositorioMontagem(executor: Executor): RepositorioMontage
           pessoaId: convocacao.pessoaId,
           nome: nomeDaPessoa,
           status: convocacao.status,
+          principal: convocacao.principal,
         })
         .from(convocacao)
         .innerJoin(escala, and(eq(escala.id, convocacao.escalaId), isNull(escala.deletedAt)))
         .innerJoin(pessoa, eq(pessoa.id, convocacao.pessoaId))
         .where(eq(convocacao.id, convocacaoId));
       return linha ? { ...linha, status: linha.status as StatusConvocacao } : null;
+    },
+
+    async outraAtivaMaisAntiga(eventoId, pessoaId, excetoConvocacaoId) {
+      const [linha] = await executor
+        .select({ id: convocacao.id })
+        .from(convocacao)
+        .innerJoin(escala, eq(escala.id, convocacao.escalaId))
+        .where(
+          and(
+            eq(escala.eventoId, eventoId),
+            isNull(escala.deletedAt),
+            eq(convocacao.pessoaId, pessoaId),
+            ne(convocacao.id, excetoConvocacaoId),
+            inArray(convocacao.status, ATIVAS),
+          ),
+        )
+        .orderBy(asc(convocacao.criadoEm), asc(convocacao.id))
+        .limit(1);
+      return linha?.id ?? null;
+    },
+
+    async principalDaPessoa(eventoId, pessoaId) {
+      const [linha] = await executor
+        .select({ id: convocacao.id })
+        .from(convocacao)
+        .innerJoin(escala, eq(escala.id, convocacao.escalaId))
+        .where(
+          and(eq(escala.eventoId, eventoId), isNull(escala.deletedAt), eq(convocacao.pessoaId, pessoaId), eq(convocacao.principal, true), inArray(convocacao.status, ATIVAS)),
+        )
+        .orderBy(asc(convocacao.criadoEm), asc(convocacao.id))
+        .limit(1);
+      return linha?.id ?? null;
+    },
+
+    async passarPrincipal(de, para, instante) {
+      const [antiga] = await executor
+        .select({ deslocamento: convocacao.deslocamento, caronaId: convocacao.caronaId, distanciaKm: convocacao.distanciaKm, tempoTrajetoMin: convocacao.tempoTrajetoMin })
+        .from(convocacao)
+        .where(eq(convocacao.id, de));
+      await executor.update(convocacao).set({ principal: false, caronaId: null, atualizadoEm: instante }).where(eq(convocacao.id, de));
+      await executor
+        .update(convocacao)
+        .set({ principal: true, ...(antiga ?? {}), atualizadoEm: instante })
+        .where(eq(convocacao.id, para));
     },
 
     async apagarConvocacao(convocacaoId, de) {
@@ -266,8 +315,11 @@ export function criarRepositorioMontagem(executor: Executor): RepositorioMontage
       return alteradas.length === 1;
     },
 
-    async definirDeslocamento(convocacaoId, deslocamento, instante) {
-      await executor.update(convocacao).set({ deslocamento, atualizadoEm: instante }).where(eq(convocacao.id, convocacaoId));
+    async atualizarConvocacao(convocacaoId, campos, instante) {
+      await executor
+        .update(convocacao)
+        .set({ ...campos, atualizadoEm: instante })
+        .where(eq(convocacao.id, convocacaoId));
     },
 
     async mudarStatusDaEscala(eventoId, { de, para, instante, aprovadoPor, limparAprovacao }) {

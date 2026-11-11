@@ -73,6 +73,7 @@ export {
   type NumerosDaFila,
   type PessoaParaRegistro,
   type SolicitacaoDaFila,
+  transferirSolicitacaoDaConvocacao,
 } from "./repository/solicitacoes-repository";
 export { criarRepositorioRegras, type RegraComTipo } from "./repository/regras-repository";
 export { type AcaoSegregada, type AutoriaDaSolicitacao, type Auditor, exigirSegregacao, SegregacaoDeFuncoesError, type ViolacaoDeSegregacao, violacaoDeSegregacao } from "./domain/segregacao";

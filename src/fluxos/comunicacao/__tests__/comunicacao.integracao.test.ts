@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type * as Base from "@/fluxos/_base";
 import { RegraDeNegocioError } from "@/fluxos/_base";
-import { idDaConfiguracao } from "@/modules/comunicacao";
+import { criarRepositorioComunicacao, idDaConfiguracao } from "@/modules/comunicacao";
 import { type BancoDeTeste, criarBancoDeTeste, TEST_DATABASE_URL } from "@/test/banco";
 
 import {
@@ -261,6 +261,25 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da Comunicação no banco", () => {
       new RegraDeNegocioError("A escala deste evento não está aprovada. As copys saem depois da aprovação."),
     );
     await banco().sql(`update eventos.evento set status_escala = 'COMUNICADA', aprovado_em = now() where id = $1`, [eventoId]);
+  });
+
+  it("quem tem duas funções recebe uma copy só, com as duas funções", async () => {
+    const { id: funcaoDj } = await um(`select id from eventos.funcao where codigo = 'DJ'`);
+    const { id: linhaDj } = await um(
+      `insert into eventos.escala (evento_id, data, hora_inicio, hora_fim, quantidade_vagas, status, funcao_id)
+       values ($1, '2026-12-13', '07:30', '18:00', 1, 'ABERTA', $2) returning id`,
+      [eventoId, funcaoDj],
+    );
+    const { pessoa_id: pessoaDoBruno } = await um(`select pessoa_id from eventos.convocacao where id = $1`, [bruno]);
+    const { id: segunda } = await um(`insert into eventos.convocacao (escala_id, pessoa_id, status, principal) values ($1, $2, 'SUGERIDA', false) returning id`, [linhaDj, pessoaDoBruno]);
+
+    const tela = await comunicacao();
+    expect(tela.pessoas.filter((pessoa) => pessoa.nome === "Bruno Lima").map((pessoa) => pessoa.convocacaoId)).toEqual([bruno]);
+    const equipe = await criarRepositorioComunicacao(banco().db).equipe([eventoId]);
+    expect(equipe.filter((pessoa) => pessoa.pessoaId === pessoaDoBruno).map((pessoa) => pessoa.funcao)).toEqual(["DJ e Staff"]);
+
+    await banco().sql(`delete from eventos.convocacao where id = $1`, [segunda]);
+    await banco().sql(`delete from eventos.escala where id = $1`, [linhaDj]);
   });
 
   it("modelos: lista, desativa e prévia com pessoa de exemplo", async () => {

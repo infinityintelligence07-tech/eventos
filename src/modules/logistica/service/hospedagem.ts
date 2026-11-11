@@ -1,6 +1,6 @@
 import { ErroDaLogistica, LogisticaMudouError } from "../domain/erros";
-import { mensagemDaRecusa, podeOcupar, type QuartoDoRooming, type Sexo, sugerirRooming } from "../domain/rooming";
-import type { AdicionarQuarto, AlterarHospedagem, CriarHospedagem, PorNoQuarto } from "../domain/schemas";
+import { mensagemDaRecusa, type Periodo, periodoProprio, podeOcupar, type QuartoDoRooming, type Sexo, sugerirRooming, textoDoPeriodo } from "../domain/rooming";
+import type { AdicionarQuarto, AlterarHospedagem, CriarHospedagem, DefinirPeriodoDoOcupante, PorNoQuarto } from "../domain/schemas";
 import type { ContextoDaAcao } from "./pedidos";
 
 // Hospedagem e rooming list (docs/07 §5.3): ocupantes < capacidade, sexo do quarto, convocação ativa do mesmo
@@ -20,7 +20,9 @@ export type RepositorioHospedagem = {
   eventoExiste(eventoId: string): Promise<boolean>;
   localDeHospedagem(localId: string): Promise<{ tipo: string; arquivado: boolean } | null>;
   inserirHospedagem(hospedagem: CriarHospedagem & { usuarioId: string; instante: Date }): Promise<string>;
-  travarHospedagem(hospedagemId: string): Promise<{ id: string; eventoId: string } | null>;
+  travarHospedagem(hospedagemId: string): Promise<({ id: string; eventoId: string } & Periodo) | null>;
+  /** Quantos ocupantes têm período próprio que não cabe nestas datas. */
+  periodosForaDe(hospedagemId: string, periodo: Periodo): Promise<number>;
   /** Compare-and-set pela versão da tela. false = outra pessoa mudou antes. */
   atualizarHospedagem(entrada: AlterarHospedagem, instante: Date): Promise<boolean>;
   quartoComNome(hospedagemId: string, nome: string): Promise<boolean>;
@@ -33,6 +35,8 @@ export type RepositorioHospedagem = {
   /** Tira a convocação do quarto em que estiver e põe neste (uma cama por convocação). */
   porOcupante(quartoId: string, convocacaoId: string): Promise<void>;
   tirarOcupante(quartoId: string, convocacaoId: string): Promise<boolean>;
+  /** null = volta ao período da hospedagem. false = a pessoa já não está neste quarto. */
+  definirPeriodoDoOcupante(quartoId: string, convocacaoId: string, periodo: Periodo | null): Promise<boolean>;
   registrar(registro: RegistroDaHospedagem & { usuarioId: string }): Promise<void>;
 };
 
@@ -54,6 +58,14 @@ export async function alterarHospedagem(repo: RepositorioHospedagem, entrada: Al
   const atual = await repo.travarHospedagem(entrada.hospedagemId);
   if (!atual) throw new ErroDaLogistica("Hospedagem não encontrada. Recarregue a página.");
   await localValido(repo, entrada.localId);
+  const fora = await repo.periodosForaDe(atual.id, { checkIn: entrada.checkIn, checkOut: entrada.checkOut });
+  if (fora > 0) {
+    throw new ErroDaLogistica(
+      fora === 1
+        ? "1 pessoa tem período próprio fora das novas datas. Ajuste o período dela antes de mudar a hospedagem."
+        : `${fora} pessoas têm período próprio fora das novas datas. Ajuste o período delas antes de mudar a hospedagem.`,
+    );
+  }
   if (!(await repo.atualizarHospedagem(entrada, instante))) throw new LogisticaMudouError("a hospedagem mudou");
   await repo.registrar({ hospedagemId: atual.id, eventoId: atual.eventoId, acao: "HOSPEDAGEM_ALTERADA", usuarioId, dados: { localId: entrada.localId } });
   return atual.eventoId;
@@ -122,6 +134,33 @@ export async function tirarDoQuarto(repo: RepositorioHospedagem, entrada: PorNoQ
     dados: { convocacaoId: entrada.convocacaoId, quartoId: quarto.id },
   });
   return quarto.eventoId;
+}
+
+/** Período de quem chega depois ou sai antes. Sem datas, ou com as datas da hospedagem, volta a acompanhá-la. */
+export async function definirPeriodoDoOcupante(
+  repo: RepositorioHospedagem,
+  entrada: DefinirPeriodoDoOcupante,
+  { usuarioId }: ContextoDaAcao,
+): Promise<{ eventoId: string; periodo: Periodo | null }> {
+  const quarto = await repo.travarQuarto(entrada.quartoId);
+  if (!quarto) throw new ErroDaLogistica("Quarto não encontrado. Recarregue a página.");
+  const hospedagem = await repo.travarHospedagem(quarto.hospedagemId);
+  if (!hospedagem) throw new ErroDaLogistica("Hospedagem não encontrada. Recarregue a página.");
+
+  const pedido = entrada.checkIn && entrada.checkOut ? { checkIn: entrada.checkIn, checkOut: entrada.checkOut } : null;
+  const resultado = periodoProprio(hospedagem, pedido);
+  if (!resultado.ok) {
+    throw new ErroDaLogistica(`O período da pessoa precisa ficar dentro da hospedagem (${textoDoPeriodo(hospedagem)}). Para mais dias, mude antes as datas da hospedagem.`);
+  }
+  if (!(await repo.definirPeriodoDoOcupante(quarto.id, entrada.convocacaoId, resultado.periodo))) throw new LogisticaMudouError("a pessoa já não estava no quarto");
+  await repo.registrar({
+    hospedagemId: quarto.hospedagemId,
+    eventoId: quarto.eventoId,
+    acao: "PERIODO_DO_OCUPANTE_DEFINIDO",
+    usuarioId,
+    dados: { convocacaoId: entrada.convocacaoId, quartoId: quarto.id, checkIn: resultado.periodo?.checkIn ?? null, checkOut: resultado.periodo?.checkOut ?? null },
+  });
+  return { eventoId: quarto.eventoId, periodo: resultado.periodo };
 }
 
 /** Aplica a sugestão por sexo a quem está sem quarto. Devolve quantas pessoas foram alocadas e quantas não couberam. */

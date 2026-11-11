@@ -108,6 +108,69 @@ export function BotaoDefinirHospedagem({
   );
 }
 
+/** Período de quem chega depois ou sai antes do grupo. Com as datas da hospedagem, a pessoa volta a segui-la. */
+export function BotaoPeriodoDoOcupante({
+  acao,
+  quartoId,
+  convocacaoId,
+  nome,
+  hospedagem,
+  proprio,
+}: {
+  acao: AcaoDoFormulario;
+  quartoId: string;
+  convocacaoId: string;
+  nome: string;
+  hospedagem: { checkIn: string; checkOut: string };
+  proprio: { checkIn: string; checkOut: string } | null;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const { despachar, erros, estado } = useAcao(acao, () => setAberto(false));
+  return (
+    <>
+      <Botao tamanho="pequeno" variante="texto" aria-label={`Período de ${nome}`} onClick={() => setAberto(true)}>
+        Período
+      </Botao>
+      <PainelLateral aberto={aberto} aoFechar={() => setAberto(false)} titulo={`Período de ${nome}`}>
+        <form action={despachar} aria-label={`Período de ${nome}`}>
+          <ErroDoFormulario estado={estado} />
+          <input type="hidden" name="quartoId" value={quartoId} />
+          <input type="hidden" name="convocacaoId" value={convocacaoId} />
+          <Aviso tom="neutro" className="mb-4">
+            Use quando a pessoa chega depois ou sai antes do grupo. Com as mesmas datas da hospedagem, ela volta a seguir o período do grupo.
+          </Aviso>
+          <div className="grid grid-cols-2 gap-3">
+            <CampoDeTexto
+              nome="checkIn"
+              rotulo="Check-in"
+              type="date"
+              obrigatorio
+              min={hospedagem.checkIn}
+              max={hospedagem.checkOut}
+              defaultValue={proprio?.checkIn ?? hospedagem.checkIn}
+              erros={erros("checkIn")}
+            />
+            <CampoDeTexto
+              nome="checkOut"
+              rotulo="Check-out"
+              type="date"
+              obrigatorio
+              min={hospedagem.checkIn}
+              max={hospedagem.checkOut}
+              defaultValue={proprio?.checkOut ?? hospedagem.checkOut}
+              erros={erros("checkOut")}
+            />
+          </div>
+          <div className="mt-5 flex justify-end gap-2">
+            <Botao onClick={() => setAberto(false)}>Cancelar</Botao>
+            <BotaoDeEnvio textoCarregando="Salvando…">Salvar período</BotaoDeEnvio>
+          </div>
+        </form>
+      </PainelLateral>
+    </>
+  );
+}
+
 export function FormularioNovoQuarto({ acao, hospedagemId, proximoNome }: { acao: AcaoDoFormulario; hospedagemId: string; proximoNome: string }) {
   const [aberto, setAberto] = useState(false);
   const { despachar, erros, estado } = useAcao(acao, () => setAberto(false));

@@ -3,9 +3,10 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { Client } from "pg";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Client, Pool } from "pg";
 
-import { criarDb, type Db } from "@/core/db/database";
+import { criarDb, type Db, schema } from "@/core/db/database";
 
 import { lerCredenciaisLocais, urlLocal } from "./credenciais-locais";
 
@@ -26,13 +27,15 @@ const FIXTURE = path.resolve(import.meta.dirname, "fixtures/gh-schema.sql");
 const MIGRATIONS = path.resolve(import.meta.dirname, "../core/db/migrations");
 const PROPOSTA_DO_GH = path.resolve(import.meta.dirname, "../../docs/gh-proposta-papeis-do-eventos.sql");
 
-export type PapelDoApp = "app_eventos" | "app_eventos_leitura" | "app_eventos_copia";
+export type PapelDoApp = "app_eventos" | "app_eventos_leitura" | "app_eventos_copia" | "app_eventos_worker";
 
 export type BancoDeTeste = {
   db: Db;
   sql: (texto: string, params?: unknown[]) => Promise<unknown[]>;
   /** Roda como o papel (SET LOCAL ROLE numa transação desfeita no fim): exercita grants e RLS de verdade. */
   comoPapel: (papel: PapelDoApp, texto: string, params?: unknown[]) => Promise<unknown[]>;
+  /** Conexão Drizzle com o papel fixado na sessão (SET ROLE ao conectar): roda código de verdade com os grants dele. */
+  dbComoPapel: (papel: PapelDoApp) => { db: Db; encerrar: () => Promise<void> };
   encerrar: () => Promise<void>;
 };
 
@@ -86,6 +89,10 @@ export async function criarBancoDeTeste(): Promise<BancoDeTeste> {
         await cliente.query("ROLLBACK");
         cliente.release();
       }
+    },
+    dbComoPapel: (papel) => {
+      const doPapel = new Pool({ connectionString: url.toString(), options: `-c role=${papel}`, max: 2 });
+      return { db: drizzle({ client: doPapel, schema }), encerrar: () => doPapel.end() };
     },
     encerrar: async () => {
       await pool.end();

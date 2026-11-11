@@ -128,6 +128,9 @@ export const convocacao = eventosSchema.table(
     distanciaKm: numeric("distancia_km", { precision: 7, scale: 1 }),
     tempoTrajetoMin: integer("tempo_trajeto_min"),
     montagem: boolean("montagem").notNull().default(false),
+    // Uma pessoa pode ter mais de uma função no evento. A convocação principal é a única que carrega o que é da pessoa
+    // no evento (deslocamento, carona, quarto, voo, custo, copy). Entre as ativas da pessoa no evento, só uma é principal.
+    principal: boolean("principal").notNull().default(true),
     observacao: text("observacao"),
     // Por que o sistema sugeriu a pessoa (distância, rodízio, disponibilidade).
     sugestaoScore: numeric("sugestao_score", { precision: 6, scale: 2 }),
@@ -147,7 +150,7 @@ export const convocacao = eventosSchema.table(
     index("convocacao_registrado_por_idx").on(table.registradoPor),
     check(
       "convocacao_deslocamento_check",
-      sql`${table.deslocamento} IS NULL OR ${table.deslocamento} IN ('CARRO_PROPRIO', 'CARONA', 'CARRO_IAM', 'UBER', 'ONIBUS', 'VOO', 'NAO_SE_APLICA')`,
+      sql`${table.deslocamento} IS NULL OR ${table.deslocamento} IN ('CARRO_PROPRIO', 'CARONA', 'CARRO_IAM', 'UBER', 'ONIBUS', 'VOO', 'MOTO', 'A_PE', 'NAO_SE_APLICA')`,
     ),
     check(
       "convocacao_status_check",

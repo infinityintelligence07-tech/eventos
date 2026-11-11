@@ -4,12 +4,12 @@
 
 export type Sexo = "F" | "M";
 export type ModeloDeCamiseta = "CAMISETA" | "BABY_LOOK";
-export type TamanhoDeCamiseta = "PP" | "P" | "M" | "G" | "GG" | "XG";
+export type TamanhoDeCamiseta = "PP" | "P" | "M" | "G" | "GG" | "XG" | "G1";
 export type NivelNaFuncao = "TRAINEE" | "HABILITADO";
 
 export const SEXOS: readonly Sexo[] = ["F", "M"];
 export const MODELOS_DE_CAMISETA: readonly ModeloDeCamiseta[] = ["CAMISETA", "BABY_LOOK"];
-export const TAMANHOS_DE_CAMISETA: readonly TamanhoDeCamiseta[] = ["PP", "P", "M", "G", "GG", "XG"];
+export const TAMANHOS_DE_CAMISETA: readonly TamanhoDeCamiseta[] = ["PP", "P", "M", "G", "GG", "XG", "G1"];
 export const NIVEIS: readonly NivelNaFuncao[] = ["HABILITADO", "TRAINEE"];
 
 export type PerfilDoStaff = {

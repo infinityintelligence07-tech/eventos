@@ -173,13 +173,70 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da escala no banco", () => {
     await expect(escalas.porNaVaga({ eventoId, escalaId: staff.id, pessoaId: pessoas["Caio Sem Funcao"]! }, quem())).rejects.toThrow(/já estão preenchidas/);
 
     const dj = await linhaDa("DJ");
-    await expect(escalas.porNaVaga({ eventoId, escalaId: dj.id, pessoaId: pessoas["Ana Perto"]! }, quem())).rejects.toThrow(/outra função/);
 
     expect(await um(`select status, criado_por, sugestao_score from eventos.convocacao where id = $1`, [ana.convocacaoId])).toEqual({
       status: "SUGERIDA",
       criado_por: usuarioId,
       sugestao_score: "90.00",
     });
+
+    // Deslocamento, montagem e observação: um campo por vez, sem mexer nos outros.
+    const daAna = { eventoId, convocacaoId: ana.convocacaoId };
+    await escalas.atualizarConvocacao({ ...daAna, mudanca: { campo: "deslocamento", deslocamento: "MOTO" } }, quem());
+    await escalas.atualizarConvocacao({ ...daAna, mudanca: { campo: "montagem", montagem: true } }, quem());
+    await escalas.atualizarConvocacao({ ...daAna, mudanca: { campo: "observacao", observacao: "Ida de ônibus, volta de carona" } }, quem());
+    expect(await um(`select deslocamento, montagem, observacao from eventos.convocacao where id = $1`, [ana.convocacaoId])).toEqual({
+      deslocamento: "MOTO",
+      montagem: true,
+      observacao: "Ida de ônibus, volta de carona",
+    });
+    // O histórico leva o valor da logística, nunca o texto da observação.
+    const historico = await banco.sql(`select dados from eventos.registro_acao where entidade_id = $1 and acao = 'CONVOCACAO_ATUALIZADA' order by criado_em, id`, [ana.convocacaoId]);
+    expect(historico.map((linha) => (linha as { dados: unknown }).dados)).toEqual([
+      { campos: ["deslocamento"], deslocamento: "MOTO" },
+      { campos: ["montagem"], montagem: true },
+      { campos: ["observacao"] },
+    ]);
+    const naTela = (await escalas.carregarMontagem(eventoId))!.linhas.flatMap((linha) => linha.convocacoes).find((convocacao) => convocacao.id === ana.convocacaoId);
+    expect(naTela).toMatchObject({ deslocamento: "MOTO", montagem: true, observacao: "Ida de ônibus, volta de carona" });
+
+    // Segunda função no mesmo evento: Ana, que é Staff, também entra como DJ. A primeira convocação é a principal.
+    const naVaga = async (convocacaoId: string) => um(`select principal, deslocamento from eventos.convocacao where id = $1`, [convocacaoId]);
+    const candidataAoDj = (await escalas.sugerirPessoas(eventoId, dj.id, agora))!;
+    expect([...candidataAoDj.sugeridos, ...candidataAoDj.naoPodem].find((candidato) => candidato.pessoaId === pessoas["Ana Perto"])).toMatchObject({ funcoesNoEvento: ["Staff"] });
+    const anaDj = await escalas.porNaVaga({ eventoId, escalaId: dj.id, pessoaId: pessoas["Ana Perto"]! }, quem());
+    expect(await naVaga(ana.convocacaoId)).toEqual({ principal: true, deslocamento: "MOTO" });
+    expect(await naVaga(anaDj.convocacaoId)).toEqual({ principal: false, deslocamento: null });
+    await expect(escalas.porNaVaga({ eventoId, escalaId: dj.id, pessoaId: pessoas["Ana Perto"]! }, quem())).rejects.toThrow(/já está/);
+    // O deslocamento é da pessoa no evento: pedido pela linha do DJ, grava na principal e aparece nas duas linhas.
+    await escalas.atualizarConvocacao({ eventoId, convocacaoId: anaDj.convocacaoId, mudanca: { campo: "deslocamento", deslocamento: "CARONA" } }, quem());
+    expect(await naVaga(ana.convocacaoId)).toEqual({ principal: true, deslocamento: "CARONA" });
+    expect(await naVaga(anaDj.convocacaoId)).toEqual({ principal: false, deslocamento: null });
+    const linhasDaAna = (await escalas.carregarMontagem(eventoId))!.linhas.flatMap((linha) => linha.convocacoes).filter((convocacao) => convocacao.pessoaId === pessoas["Ana Perto"]);
+    expect(linhasDaAna.map(({ id, principal, outrasFuncoes, deslocamento }) => ({ id, principal, outrasFuncoes, deslocamento })).sort((a, b) => Number(b.principal) - Number(a.principal))).toEqual([
+      { id: ana.convocacaoId, principal: true, outrasFuncoes: ["DJ"], deslocamento: "CARONA" },
+      { id: anaDj.convocacaoId, principal: false, outrasFuncoes: ["Staff"], deslocamento: "CARONA" },
+    ]);
+    // Ana sai de Staff e continua DJ: o DJ herda a principal, com o deslocamento, o quarto e a solicitação de custo.
+    const { id: hotelId } = await um(`insert into eventos.local (nome, tipo, cidade, uf) values ('Hotel da Ana', 'HOTEL', 'Porto Alegre', 'RS') returning id`);
+    const { id: hospedagemId } = await um(`insert into eventos.hospedagem (evento_id, local_id, check_in, check_out) values ($1, $2, '2026-11-11', '2026-11-16') returning id`, [eventoId, hotelId]);
+    const { id: quartoId } = await um(`insert into eventos.quarto (hospedagem_id, nome, capacidade) values ($1, 'Quarto 1', 2) returning id`, [hospedagemId]);
+    await banco.sql(`insert into eventos.quarto_ocupante (quarto_id, convocacao_id) values ($1, $2)`, [quartoId, ana.convocacaoId]);
+    await escalas.tirarDaVaga({ eventoId, convocacaoId: ana.convocacaoId }, quem());
+    expect(await naVaga(anaDj.convocacaoId)).toEqual({ principal: true, deslocamento: "CARONA" });
+    expect(await banco.sql(`select convocacao_id from eventos.quarto_ocupante where quarto_id = $1`, [quartoId])).toEqual([{ convocacao_id: anaDj.convocacaoId }]);
+    expect(await um(`select dados from eventos.registro_acao where entidade_id = $1 and dados->'campos' ? 'principal'`, [anaDj.convocacaoId])).toEqual({
+      dados: { campos: ["principal"], herdouDe: ana.convocacaoId },
+    });
+    // Volta ao cenário dos próximos testes: Ana só como Staff, sem hospedagem.
+    await banco.sql(`delete from eventos.hospedagem where id = $1`, [hospedagemId]).catch(async () => {
+      await banco.sql(`delete from eventos.quarto_ocupante where quarto_id = $1`, [quartoId]);
+      await banco.sql(`delete from eventos.quarto where id = $1`, [quartoId]);
+      await banco.sql(`delete from eventos.hospedagem where id = $1`, [hospedagemId]);
+    });
+    await escalas.tirarDaVaga({ eventoId, convocacaoId: anaDj.convocacaoId }, quem());
+    await escalas.porNaVaga({ eventoId, escalaId: staff.id, pessoaId: pessoas["Ana Perto"]!, sugestaoScore: 90 }, quem());
+
     await escalas.tirarDaVaga({ eventoId, convocacaoId: bia.convocacaoId }, quem());
     expect(await banco.sql(`select 1 from eventos.convocacao where id = $1`, [bia.convocacaoId])).toEqual([]);
     await escalas.porNaVaga({ eventoId, escalaId: staff.id, pessoaId: pessoas["Bia Longe"]! }, quem());

@@ -12,13 +12,15 @@ type Vaga = { funcao: string; quantidade: number; data: string; hora_inicio: str
 
 describe.skipIf(!TEST_DATABASE_URL)("sincronização de turmas no Postgres (GH + Eventos)", () => {
   let banco: BancoDeTeste;
+  // Toda a sincronização roda com o papel app_eventos_worker (0009): os grants e as políticas dele têm de bastar.
+  let worker: ReturnType<BancoDeTeste["dbComoPapel"]>;
   let turmas: TurmaRecebida[] = [];
 
   const sincronizar = (agora = "2026-10-26T15:00:00Z") =>
     sincronizarTurmas({
       iamControl: { listarTurmas: async () => ({ a_partir_de: "2026-09-26", ate: null, total: turmas.length, turmas }) },
-      eventos: criarRepositorioSincronizacao(banco.db),
-      vagas: criarRepositorioVagas(banco.db, { origem: "SISTEMA" }),
+      eventos: criarRepositorioSincronizacao(worker.db),
+      vagas: criarRepositorioVagas(worker.db, { origem: "SISTEMA" }),
       agora: new Date(agora),
     });
 
@@ -52,11 +54,29 @@ describe.skipIf(!TEST_DATABASE_URL)("sincronização de turmas no Postgres (GH +
 
   beforeAll(async () => {
     banco = await criarBancoDeTeste();
+    worker = banco.dbComoPapel("app_eventos_worker");
     await banco.sql(`insert into core.polo (codigo, nome) values ('AM', 'Manaus')`);
   }, 60_000);
 
   afterAll(async () => {
+    await worker?.encerrar();
     await banco?.encerrar();
+  });
+
+  it("o papel do worker só alcança o que a sincronização usa", async () => {
+    const negado = /permission denied/;
+    const comoWorker = (texto: string) => banco.comoPapel("app_eventos_worker", texto);
+    await comoWorker("select sigla from eventos.tipo_evento");
+    await comoWorker("select codigo from core.polo");
+    await expect(comoWorker("delete from eventos.evento")).rejects.toThrow(negado);
+    await expect(comoWorker("delete from eventos.escala")).rejects.toThrow(negado);
+    await expect(comoWorker("update eventos.convocacao set status = 'CANCELADA'")).rejects.toThrow(negado);
+    await expect(comoWorker("update eventos.tipo_evento set regra_vagas = '{}'")).rejects.toThrow(negado);
+    await expect(comoWorker("select * from eventos.registro_acao")).rejects.toThrow(negado);
+    await expect(comoWorker("select * from eventos.solicitacao_custo")).rejects.toThrow(negado);
+    await expect(comoWorker("select * from eventos.pessoa_evento")).rejects.toThrow(negado);
+    await expect(comoWorker("select nome_completo from core.pessoa")).rejects.toThrow(negado);
+    await expect(comoWorker("select * from sensivel.pessoa_dado_sensivel")).rejects.toThrow(negado);
   });
 
   it("cria o evento, o local e as vagas da regra em rascunho", async () => {

@@ -28,7 +28,7 @@ export const salvarPerfilDoStaffSchema = z.object({
   pessoaId: z.uuid(),
   sexo: opcional(z.enum(["F", "M"] satisfies Sexo[])),
   camisetaModelo: opcional(z.enum(["CAMISETA", "BABY_LOOK"] satisfies ModeloDeCamiseta[])),
-  camisetaTamanho: opcional(z.enum(["PP", "P", "M", "G", "GG", "XG"] satisfies TamanhoDeCamiseta[])),
+  camisetaTamanho: opcional(z.enum(["PP", "P", "M", "G", "GG", "XG", "G1"] satisfies TamanhoDeCamiseta[])),
   possuiCamiseta: simOuNao,
   fezConfronto: simOuNao,
   temCnpj: simOuNao,

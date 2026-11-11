@@ -1,5 +1,8 @@
+import type { Executor } from "@/core/db/database";
 import type { AtorDaEscrita } from "@/fluxos/_base";
+import { transferirSolicitacaoDaConvocacao } from "@/modules/custos";
 import * as escala from "@/modules/escala";
+import { transferirLogisticaDaConvocacao } from "@/modules/logistica";
 
 import { escrever } from "./comum";
 
@@ -8,6 +11,14 @@ import { escrever } from "./comum";
 type Quem = { ator: AtorDaEscrita; agora: Date };
 
 const montagem = escala.criarRepositorioMontagem;
+
+/** A pessoa saiu de uma função e ficou em outra do evento: quarto, pedidos à SDC e solicitação de custo seguem a pessoa. */
+const levarVinculos =
+  (tx: Executor): escala.AoTrocarPrincipal =>
+  async (troca) => {
+    await transferirLogisticaDaConvocacao(tx, troca);
+    await transferirSolicitacaoDaConvocacao(tx, troca);
+  };
 
 export function confirmarVagas(entrada: { eventoId: string; linhas: { escalaId: string; quantidade: number }[] }, { ator, agora }: Quem) {
   return escrever(ator, (tx) => escala.confirmarVagas(montagem(tx), { ...entrada, usuarioId: ator.usuarioId, instante: agora }));
@@ -36,13 +47,11 @@ export function porNaVaga(entrada: { eventoId: string; escalaId: string; pessoaI
 }
 
 export function tirarDaVaga(entrada: { eventoId: string; convocacaoId: string }, { ator, agora }: Quem) {
-  return escrever(ator, (tx) => escala.tirarDaVaga(montagem(tx), { ...entrada, usuarioId: ator.usuarioId, instante: agora }));
+  return escrever(ator, (tx) => escala.tirarDaVaga(montagem(tx), { ...entrada, usuarioId: ator.usuarioId, instante: agora, aoTrocarPrincipal: levarVinculos(tx) }));
 }
 
-export function atualizarConvocacao(entrada: { eventoId: string; convocacaoId: string; deslocamento?: escala.Deslocamento }, { ator, agora }: Quem) {
-  return escrever(ator, (tx) =>
-    escala.definirDeslocamento(montagem(tx), { ...entrada, deslocamento: entrada.deslocamento ?? null, usuarioId: ator.usuarioId, instante: agora }),
-  );
+export function atualizarConvocacao(entrada: { eventoId: string; convocacaoId: string; mudanca: escala.MudancaDaConvocacao }, { ator, agora }: Quem) {
+  return escrever(ator, (tx) => escala.atualizarConvocacao(montagem(tx), { ...entrada, usuarioId: ator.usuarioId, instante: agora }));
 }
 
 export function registrarRespostaDoStaff(
@@ -50,7 +59,13 @@ export function registrarRespostaDoStaff(
   { ator, agora }: Quem,
 ) {
   return escrever(ator, (tx) =>
-    escala.registrarRespostaDoStaff(montagem(tx), { ...entrada, motivoRecusa: entrada.motivoRecusa ?? null, usuarioId: ator.usuarioId, instante: agora }),
+    escala.registrarRespostaDoStaff(montagem(tx), {
+      ...entrada,
+      motivoRecusa: entrada.motivoRecusa ?? null,
+      usuarioId: ator.usuarioId,
+      instante: agora,
+      aoTrocarPrincipal: levarVinculos(tx),
+    }),
   );
 }
 

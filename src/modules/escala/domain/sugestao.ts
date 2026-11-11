@@ -14,8 +14,10 @@ export type Candidato = {
   convocacoesUltimos90Dias: number;
   /** Nulo = nunca trabalhou ou faz mais de 90 dias. */
   diasDesdeUltima: number | null;
-  /** Já ativa em outra linha deste evento: não entra na lista. */
-  jaNoEvento: boolean;
+  /** Já ativa nesta mesma função: não entra na lista. */
+  jaNaLinha: boolean;
+  /** Outras funções em que a pessoa já está neste evento. Aparece, com aviso: ela pode acumular. */
+  funcoesNoEvento: string[];
   /** Ativa num evento com datas sobrepostas (código do evento). Aparece, com aviso. */
   conflitos: string[];
 };
@@ -91,9 +93,9 @@ export function pontuacaoDaSugestao(candidato: Candidato): number {
 
 export type Sugestoes = { sugeridos: Candidato[]; naoPodem: Candidato[] };
 
-/** Tira quem já está no evento; "não pode" vai para um grupo à parte (pede confirmação para adicionar). */
+/** Tira quem já está nesta função; "não pode" vai para um grupo à parte (pede confirmação para adicionar). */
 export function ordenarSugestoes(candidatos: readonly Candidato[]): Sugestoes {
-  const ordenados = candidatos.filter((candidato) => !candidato.jaNoEvento).sort(compararCandidatos);
+  const ordenados = candidatos.filter((candidato) => !candidato.jaNaLinha).sort(compararCandidatos);
   return {
     sugeridos: ordenados.filter((candidato) => candidato.disponibilidade !== "NAO_PODE"),
     naoPodem: ordenados.filter((candidato) => candidato.disponibilidade === "NAO_PODE"),

@@ -4,12 +4,14 @@ import {
   type AlterarHospedagem,
   type CriarHospedagem,
   criarRepositorioHospedagem,
+  type DefinirPeriodoDoOcupante,
   criarRepositorioPedidos,
   dataEmSaoPaulo,
   type EventoDaLogistica,
   type HospedagemDoEvento,
   type LocalDeHospedagem,
   misturaSexos,
+  nomeComPeriodo,
   type PessoaDaEquipe,
   type PorNoQuarto,
   type RegistrarPedidoDeHospedagem,
@@ -61,7 +63,7 @@ export async function carregarHospedagem(eventoId: string | null, agora: Date): 
     semQuarto,
     sugestaoAloca: sugerirRooming(semQuarto, quartos).alocacoes.length,
     hospedagens: hospedagens.map((hospedagem) => {
-      const quartosEmTexto = hospedagem.quartos.map((quarto) => ({ nome: quarto.nome, capacidade: quarto.capacidade, ocupantes: quarto.ocupantes.map((ocupante) => ocupante.nome) }));
+      const quartosEmTexto = hospedagem.quartos.map((quarto) => ({ nome: quarto.nome, capacidade: quarto.capacidade, ocupantes: quarto.ocupantes.map((ocupante) => nomeComPeriodo(ocupante.nome, ocupante)) }));
       return {
         ...hospedagem,
         quartosComSexosMisturados: hospedagem.quartos.filter((quarto) => misturaSexos(quarto.ocupantes)).map((quarto) => quarto.id),
@@ -113,6 +115,11 @@ export function porNoQuarto(entrada: PorNoQuarto, ator: AtorDaEscrita, agora: Da
 
 export function tirarDoQuarto(entrada: PorNoQuarto, ator: AtorDaEscrita, agora: Date) {
   return traduzirErros(() => transacao(ator, (tx) => servicoDeHospedagem.tirarDoQuarto(criarRepositorioHospedagem(tx), entrada, contexto(ator.usuarioId, agora))));
+}
+
+/** Período próprio de quem chega depois ou sai antes. */
+export function definirPeriodoDoOcupante(entrada: DefinirPeriodoDoOcupante, ator: AtorDaEscrita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDeHospedagem.definirPeriodoDoOcupante(criarRepositorioHospedagem(tx), entrada, contexto(ator.usuarioId, agora))));
 }
 
 /** Rooming sugerido por sexo para quem está sem quarto. */

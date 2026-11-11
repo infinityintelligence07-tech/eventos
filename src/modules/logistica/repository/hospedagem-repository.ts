@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lt, gt, or, sql } from "drizzle-orm";
 
 import { pessoa } from "@/core/db/schema/core";
 import type { Executor } from "@/core/db/database";
@@ -8,11 +8,12 @@ import { convocacao, escala, evento, funcao, hospedagem, local, pedidoSdc, pesso
 import type { Sexo } from "../domain/rooming";
 import type { SituacaoDoPedido } from "../domain/pedido";
 import type { QuartoTravado, RepositorioHospedagem } from "../service/hospedagem";
-import { CONVOCACAO_ATIVA, mesmaVersao, nomeDaPessoa, travarLinha } from "./comum";
+import { CONVOCACAO_ATIVA, convocacaoPrincipal, mesmaVersao, nomeDaPessoa, travarLinha } from "./comum";
 
 export type LocalDeHospedagem = { id: string; nome: string; tipo: "HOTEL" | "APARTAMENTO"; cidade: string; uf: string };
 
-export type OcupanteDoQuarto = { convocacaoId: string; pessoaId: string; nome: string; sexo: Sexo | null };
+/** checkIn/checkOut só vêm preenchidos quando a pessoa tem período próprio (nulo = o da hospedagem). */
+export type OcupanteDoQuarto = { convocacaoId: string; pessoaId: string; nome: string; sexo: Sexo | null; checkIn: string | null; checkOut: string | null };
 
 export type QuartoDaHospedagem = {
   id: string;
@@ -45,7 +46,7 @@ export type PessoaDaEquipe = {
   quartoId: string | null;
 };
 
-const ativaNaEscala = and(isNull(escala.deletedAt), inArray(convocacao.status, CONVOCACAO_ATIVA));
+const ativaNaEscala = and(isNull(escala.deletedAt), inArray(convocacao.status, CONVOCACAO_ATIVA), convocacaoPrincipal);
 
 export function criarRepositorioHospedagem(executor: Executor): RepositorioHospedagem & {
   locaisDeHospedagem(): Promise<LocalDeHospedagem[]>;
@@ -132,7 +133,15 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
         .orderBy(asc(quarto.nome));
       const ocupantes = quartos.length
         ? await executor
-            .select({ quartoId: quartoOcupante.quartoId, convocacaoId: convocacao.id, pessoaId: pessoa.id, nome: nomeDaPessoa, sexo: pessoaEvento.sexo })
+            .select({
+              quartoId: quartoOcupante.quartoId,
+              convocacaoId: convocacao.id,
+              pessoaId: pessoa.id,
+              nome: nomeDaPessoa,
+              sexo: pessoaEvento.sexo,
+              checkIn: quartoOcupante.checkIn,
+              checkOut: quartoOcupante.checkOut,
+            })
             .from(quartoOcupante)
             .innerJoin(convocacao, eq(convocacao.id, quartoOcupante.convocacaoId))
             .innerJoin(pessoa, eq(pessoa.id, convocacao.pessoaId))
@@ -175,7 +184,14 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
             valorDiariaCentavos: item.valorDiariaCentavos,
             ocupantes: ocupantes
               .filter((ocupante) => ocupante.quartoId === item.id)
-              .map((ocupante) => ({ convocacaoId: ocupante.convocacaoId, pessoaId: ocupante.pessoaId, nome: ocupante.nome, sexo: ocupante.sexo as Sexo | null })),
+              .map((ocupante) => ({
+                convocacaoId: ocupante.convocacaoId,
+                pessoaId: ocupante.pessoaId,
+                nome: ocupante.nome,
+                sexo: ocupante.sexo as Sexo | null,
+                checkIn: ocupante.checkIn,
+                checkOut: ocupante.checkOut,
+              })),
           })),
       }));
     },
@@ -221,8 +237,21 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
     },
 
     async travarHospedagem(hospedagemId) {
-      const [linha] = await executor.select({ id: hospedagem.id, eventoId: hospedagem.eventoId }).from(hospedagem).where(eq(hospedagem.id, hospedagemId)).for("update");
+      const [linha] = await executor
+        .select({ id: hospedagem.id, eventoId: hospedagem.eventoId, checkIn: hospedagem.checkIn, checkOut: hospedagem.checkOut })
+        .from(hospedagem)
+        .where(eq(hospedagem.id, hospedagemId))
+        .for("update");
       return linha ?? null;
+    },
+
+    async periodosForaDe(hospedagemId, { checkIn, checkOut }) {
+      const linhas = await executor
+        .select({ convocacaoId: quartoOcupante.convocacaoId })
+        .from(quartoOcupante)
+        .innerJoin(quarto, eq(quarto.id, quartoOcupante.quartoId))
+        .where(and(eq(quarto.hospedagemId, hospedagemId), or(lt(quartoOcupante.checkIn, checkIn), gt(quartoOcupante.checkOut, checkOut))));
+      return linhas.length;
     },
 
     async atualizarHospedagem({ hospedagemId, localId, checkIn, checkOut, observacao, atualizadoEm }, instante) {
@@ -266,7 +295,7 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
     async travarConvocacao(convocacaoId) {
       if (!(await travarLinha(executor, convocacao, convocacaoId))) return null;
       const [linha] = await executor
-        .select({ convocacaoId: convocacao.id, eventoId: escala.eventoId, status: convocacao.status, escalaApagada: escala.deletedAt, sexo: pessoaEvento.sexo })
+        .select({ convocacaoId: convocacao.id, eventoId: escala.eventoId, status: convocacao.status, principal: convocacao.principal, escalaApagada: escala.deletedAt, sexo: pessoaEvento.sexo })
         .from(convocacao)
         .innerJoin(escala, eq(escala.id, convocacao.escalaId))
         .leftJoin(pessoaEvento, eq(pessoaEvento.pessoaId, convocacao.pessoaId))
@@ -276,7 +305,7 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
       return {
         convocacaoId: linha.convocacaoId,
         eventoId: linha.eventoId,
-        ativa: linha.escalaApagada === null && CONVOCACAO_ATIVA.includes(linha.status),
+        ativa: linha.escalaApagada === null && CONVOCACAO_ATIVA.includes(linha.status) && linha.principal,
         sexo: linha.sexo as Sexo | null,
         quartoId: ocupante?.quartoId ?? null,
       };
@@ -296,8 +325,25 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
     },
 
     async porOcupante(quartoId, convocacaoId) {
+      // Mudar de quarto na mesma hospedagem mantém o período próprio da pessoa; em outra hospedagem ele não vale mais.
+      const [anterior] = await executor
+        .select({ checkIn: quartoOcupante.checkIn, checkOut: quartoOcupante.checkOut, hospedagemId: quarto.hospedagemId })
+        .from(quartoOcupante)
+        .innerJoin(quarto, eq(quarto.id, quartoOcupante.quartoId))
+        .where(eq(quartoOcupante.convocacaoId, convocacaoId));
+      const [destino] = await executor.select({ hospedagemId: quarto.hospedagemId }).from(quarto).where(eq(quarto.id, quartoId));
+      const mantem = anterior !== undefined && destino !== undefined && anterior.hospedagemId === destino.hospedagemId;
       await executor.delete(quartoOcupante).where(eq(quartoOcupante.convocacaoId, convocacaoId));
-      await executor.insert(quartoOcupante).values({ quartoId, convocacaoId });
+      await executor.insert(quartoOcupante).values({ quartoId, convocacaoId, checkIn: mantem ? anterior.checkIn : null, checkOut: mantem ? anterior.checkOut : null });
+    },
+
+    async definirPeriodoDoOcupante(quartoId, convocacaoId, periodo) {
+      const alterados = await executor
+        .update(quartoOcupante)
+        .set({ checkIn: periodo?.checkIn ?? null, checkOut: periodo?.checkOut ?? null })
+        .where(and(eq(quartoOcupante.quartoId, quartoId), eq(quartoOcupante.convocacaoId, convocacaoId)))
+        .returning({ convocacaoId: quartoOcupante.convocacaoId });
+      return alterados.length === 1;
     },
 
     async tirarOcupante(quartoId, convocacaoId) {

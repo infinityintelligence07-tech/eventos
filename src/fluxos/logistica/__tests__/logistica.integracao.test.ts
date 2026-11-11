@@ -6,6 +6,7 @@ import { type BancoDeTeste, criarBancoDeTeste, TEST_DATABASE_URL } from "@/test/
 
 import {
   adicionarQuarto,
+  alterarHospedagem,
   alterarPedido,
   aplicarRoomingSugerido,
   cancelarPedido,
@@ -16,6 +17,7 @@ import {
   criarCarona,
   criarHospedagem,
   definirCarona,
+  definirPeriodoDoOcupante,
   porNoQuarto,
   registrarPedidoDeHospedagem,
   registrarPedidoDeVoo,
@@ -187,6 +189,33 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
     const movida = await porNoQuarto({ quartoId: quarto2!.id, convocacaoId: bia.convocacaoId }, ator(), agora);
     expect(movida.mudou).toBe(true);
     expect(await teste.sql(`select quarto_id from eventos.quarto_ocupante where convocacao_id = $1`, [bia.convocacaoId])).toEqual([{ quarto_id: quarto2!.id }]);
+
+    // Período próprio (planilha GESTÃO HOSP): Bia chega um dia depois e sai um dia antes.
+    const periodoDaBia = () => um(`select check_in::text, check_out::text from eventos.quarto_ocupante where convocacao_id = $1`, [bia.convocacaoId]);
+    await definirPeriodoDoOcupante({ quartoId: quarto2!.id, convocacaoId: bia.convocacaoId, checkIn: "2026-12-15", checkOut: "2026-12-17" }, ator(), agora);
+    expect(await periodoDaBia()).toEqual({ check_in: "2026-12-15", check_out: "2026-12-17" });
+    await expect(
+      definirPeriodoDoOcupante({ quartoId: quarto2!.id, convocacaoId: bia.convocacaoId, checkIn: "2026-12-13", checkOut: "2026-12-17" }, ator(), agora),
+    ).rejects.toThrow(/dentro da hospedagem/);
+    await expect(
+      definirPeriodoDoOcupante({ quartoId: quarto1!.id, convocacaoId: bia.convocacaoId, checkIn: "2026-12-15", checkOut: "2026-12-17" }, ator(), agora),
+    ).rejects.toBeInstanceOf(ConflitoDeVersaoError);
+    const comPeriodo = await carregarHospedagem(eventoId, agora);
+    expect(comPeriodo.hospedagens[0]!.textoDoRooming).toContain("Bia Quarto (15/12 a 17/12)");
+    // Mudar de quarto na mesma hospedagem mantém o período.
+    await porNoQuarto({ quartoId: quarto1!.id, convocacaoId: bia.convocacaoId }, ator(), agora);
+    expect(await periodoDaBia()).toEqual({ check_in: "2026-12-15", check_out: "2026-12-17" });
+    await porNoQuarto({ quartoId: quarto2!.id, convocacaoId: bia.convocacaoId }, ator(), agora);
+    // Encurtar a hospedagem deixando o período de alguém de fora é recusado.
+    const versao = comPeriodo.hospedagens[0]!.atualizadoEm;
+    await expect(alterarHospedagem({ hospedagemId, localId: hotelId!, checkIn: "2026-12-16", checkOut: "2026-12-18", atualizadoEm: versao }, ator(), agora)).rejects.toThrow(
+      /período próprio fora das novas datas/,
+    );
+    // Com as datas da hospedagem, volta a segui-la.
+    await definirPeriodoDoOcupante({ quartoId: quarto2!.id, convocacaoId: bia.convocacaoId, checkIn: "2026-12-14", checkOut: "2026-12-18" }, ator(), agora);
+    expect(await periodoDaBia()).toEqual({ check_in: null, check_out: null });
+    expect(await um(`select count(*)::int as n from eventos.registro_acao where entidade_id = $1 and acao = 'PERIODO_DO_OCUPANTE_DEFINIDO'`, [hospedagemId])).toEqual({ n: 2 });
+
     await tirarDoQuarto({ quartoId: quarto2!.id, convocacaoId: bia.convocacaoId }, ator(), agora);
     await expect(tirarDoQuarto({ quartoId: quarto2!.id, convocacaoId: bia.convocacaoId }, ator(), agora)).rejects.toBeInstanceOf(ConflitoDeVersaoError);
 
@@ -224,5 +253,28 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
       { acao: "CARONA_DEFINIDA", convocacao_id: semCarro.convocacaoId },
     ]);
     expect(await um(`select count(*)::int as n from eventos.registro_acao where entidade = 'CONVOCACAO' and acao like '%CARONA%'`)).toEqual({ n: 0 });
+  });
+
+  it("quem tem duas funções no evento aparece uma vez só, pela convocação principal", async () => {
+    const iara = await convocar("Iara Duas", { sexo: "F", deslocamento: "VOO", lugares: 4 });
+    const { id: outraLinha } = await um(
+      `insert into eventos.escala (evento_id, data, hora_inicio, hora_fim, quantidade_vagas, status) values ($1, '2026-12-16', '08:00', '18:00', 2, 'ABERTA') returning id`,
+      [eventoId],
+    );
+    const { id: segunda } = await um(`insert into eventos.convocacao (escala_id, pessoa_id, status, principal) values ($1, $2, 'ACEITA', false) returning id`, [outraLinha, iara.pessoaId]);
+
+    const daIara = <T extends { pessoaId: string }>(lista: T[]) => lista.filter((pessoa) => pessoa.pessoaId === iara.pessoaId);
+    const hospedagem = await carregarHospedagem(eventoId, agora);
+    expect(daIara(hospedagem.equipe).map((pessoa) => pessoa.convocacaoId)).toEqual([iara.convocacaoId]);
+    const caronas = await carregarCaronas(eventoId, agora);
+    expect(daIara([...caronas.semCarona, ...caronas.candidatosAMotorista, ...caronas.candidatosAPassageiro]).every((pessoa) => pessoa.convocacaoId === iara.convocacaoId)).toBe(true);
+    const voos = await carregarVoos({ eventoId }, agora);
+    expect(voos.linhas.filter((linha) => linha.passageiro.pessoaId === iara.pessoaId)).toHaveLength(1);
+
+    // Quarto, carona e voo só pela principal.
+    const quarto = hospedagem.hospedagens[0]!.quartos.find((item) => item.nome === "Quarto 2")!;
+    await expect(porNoQuarto({ quartoId: quarto.id, convocacaoId: segunda! }, ator(), agora)).rejects.toBeInstanceOf(RegraDeNegocioError);
+    await expect(criarCarona({ eventoId, motoristaConvocacaoId: segunda! }, ator(), agora)).rejects.toBeInstanceOf(RegraDeNegocioError);
+    await expect(registrarPedidoDeVoo({ convocacaoId: segunda!, trechos: [ida] }, ator(), agora)).rejects.toBeInstanceOf(RegraDeNegocioError);
   });
 });
