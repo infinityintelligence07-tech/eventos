@@ -11,7 +11,7 @@ INSERT INTO core.perfil (codigo, nome) VALUES
   ('EVENTOS_LIDER', 'Eventos: líder')
 ON CONFLICT (codigo) DO NOTHING;
 
-GRANT USAGE ON SCHEMA core TO app_eventos, app_eventos_leitura, app_eventos_copia;
+GRANT USAGE ON SCHEMA core TO app_eventos, app_eventos_leitura, app_eventos_copia, app_eventos_worker;
 
 GRANT SELECT (id, usuario_id, nome_completo, nome_social, email, telefone, ativo, deleted_at)
   ON core.pessoa TO app_eventos, app_eventos_leitura;
@@ -21,7 +21,8 @@ GRANT SELECT (id, pessoa_id, tipo, polo_id, status, data_inicio, data_fim, delet
   ON core.vinculo TO app_eventos, app_eventos_leitura;
 -- cargo: nome da função em escalas antigas do GH (escala.cargo_id).
 GRANT SELECT (id, nome) ON core.cargo TO app_eventos, app_eventos_leitura;
-GRANT SELECT ON core.polo TO app_eventos, app_eventos_leitura, app_eventos_copia;
+-- app_eventos_worker (sincronização de turmas, 0009 do Eventos): só os polos, para ligar a turma ao polo.
+GRANT SELECT ON core.polo TO app_eventos, app_eventos_leitura, app_eventos_copia, app_eventos_worker;
 GRANT SELECT ON core.perfil, core.usuario_perfil TO app_eventos, app_eventos_leitura;
 
 -- RLS ligada sem políticas no core: política explícita de SELECT por papel.
@@ -34,6 +35,8 @@ BEGIN
   END LOOP;
   DROP POLICY IF EXISTS eventos_copia_select ON core.polo;
   CREATE POLICY eventos_copia_select ON core.polo FOR SELECT TO app_eventos_copia USING (true);
+  DROP POLICY IF EXISTS eventos_worker_select ON core.polo;
+  CREATE POLICY eventos_worker_select ON core.polo FOR SELECT TO app_eventos_worker USING (true);
 END $$;
 
 -- core.pessoa: só as pessoas ligadas ao Eventos (revisão M3), não o quadro inteiro da IAM com telefone e e-mail.

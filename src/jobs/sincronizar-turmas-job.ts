@@ -1,6 +1,6 @@
 import type { Job, PgBoss, Queue } from "pg-boss";
 
-import { db } from "@/core/db/client";
+import { worker } from "@/core/db/client";
 import { iamControlDoAmbiente } from "@/core/integrations/iam-control";
 import { logger, withCorrelationId } from "@/core/logging";
 import { criarRepositorioVagas } from "@/modules/escala";
@@ -30,8 +30,8 @@ export async function executarSincronizacaoCom(filtros: { aPartirDe?: string; at
   const resumo = await sincronizarTurmas(
     {
       iamControl: iamControlDoAmbiente(),
-      eventos: criarRepositorioSincronizacao(db),
-      vagas: criarRepositorioVagas(db, { origem: "SISTEMA" }),
+      eventos: criarRepositorioSincronizacao(worker.db),
+      vagas: criarRepositorioVagas(worker.db, { origem: "SISTEMA" }),
       agora: new Date(),
     },
     filtros,
