@@ -27,6 +27,7 @@ TEST_DATABASE_URL=local npm test   # inclui integração, no Postgres do banco:l
 
 ```bash
 npm run banco:local           # recria do zero o banco eventos_local (Postgres 15 em .banco-local/, 127.0.0.1:55432)
+                              # monta o novo à parte e só troca no fim: se a leitura da produção falhar, o atual fica
 npm run dev:local             # next dev com esse banco (EVENTOS_MODO=local); outra porta: npm run dev:local -- -p 3001
 ```
 

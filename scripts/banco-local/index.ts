@@ -1,6 +1,8 @@
 // npm run banco:local
 // Recria do zero o banco eventos_local (Postgres em .banco-local/, porta 55432): estrutura do GH + migrations,
 // cópia somente leitura da produção (polos, locais, eventos, escalas e cadastros) e staff fictício.
+// O banco novo é montado à parte e só toma o lugar do anterior quando fica pronto: se a leitura da produção falhar
+// (senha, rede), o banco local que já existia continua como estava.
 // Origem: ORIGEM_DATABASE_URL ou, se vazia, a DATABASE_URL do .env. Nada é escrito na origem.
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Client } from "pg";
@@ -56,15 +58,20 @@ async function admin(credenciais: CredenciaisLocais, sql: string): Promise<void>
   }
 }
 
+/** Banco em montagem. Só vira o eventos_local depois de pronto. */
+const NOME_EM_MONTAGEM = `${NOME_BANCO}_novo`;
+
 async function principal(urlOrigem: string): Promise<void> {
   const credenciais = garantirPostgres();
-  const urlDoBanco = urlAdmin(credenciais, NOME_BANCO);
+  const urlDoBanco = urlAdmin(credenciais, NOME_EM_MONTAGEM);
 
-  console.log(`Recriando o banco ${NOME_BANCO} do zero (os dados locais anteriores serão apagados) ...`);
-  await admin(credenciais, `DROP DATABASE IF EXISTS ${NOME_BANCO} WITH (FORCE)`);
-  await admin(credenciais, `CREATE DATABASE ${NOME_BANCO}`);
+  console.log(`Montando o novo ${NOME_BANCO} (o atual só é substituído quando o novo estiver pronto) ...`);
+  // Sobra de uma execução interrompida.
+  await admin(credenciais, `DROP DATABASE IF EXISTS ${NOME_EM_MONTAGEM} WITH (FORCE)`);
+  await admin(credenciais, `CREATE DATABASE ${NOME_EM_MONTAGEM}`);
   // Trava 3 da escrita (doc 07 §3.1): o app só escreve num banco com este marcador. A produção nunca o tem.
-  await admin(credenciais, `ALTER DATABASE ${NOME_BANCO} SET eventos.ambiente = 'local'`);
+  // A configuração é do banco (pelo oid): continua valendo depois de ele ser renomeado.
+  await admin(credenciais, `ALTER DATABASE ${NOME_EM_MONTAGEM} SET eventos.ambiente = 'local'`);
 
   const { db, pool } = criarDb(urlDoBanco, "eventos-banco-local");
   try {
@@ -108,9 +115,18 @@ async function principal(urlOrigem: string): Promise<void> {
     } finally {
       local.release();
     }
-  } finally {
+  } catch (erro) {
     await pool.end();
+    await admin(credenciais, `DROP DATABASE IF EXISTS ${NOME_EM_MONTAGEM} WITH (FORCE)`).catch(() => undefined);
+    console.error(`\nO banco ${NOME_BANCO} que já existia foi mantido como estava.`);
+    throw erro;
   }
+  await pool.end();
+
+  // Troca: só agora o banco anterior sai (derruba as conexões abertas, como o dev:local) e o novo assume o nome.
+  console.log(`\nSubstituindo o ${NOME_BANCO} anterior pelo novo ...`);
+  await admin(credenciais, `DROP DATABASE IF EXISTS ${NOME_BANCO} WITH (FORCE)`);
+  await admin(credenciais, `ALTER DATABASE ${NOME_EM_MONTAGEM} RENAME TO ${NOME_BANCO}`);
 
   console.log(`\nPronto: ${urlLocalParaExibir("app_eventos", NOME_BANCO)} (senhas em .banco-local/credenciais.json)`);
   console.log("Usuários locais (Entrar como):");
