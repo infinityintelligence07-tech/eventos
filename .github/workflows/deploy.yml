@@ -1,0 +1,36 @@
+name: Deploy
+
+# Publica o site e o worker no Easypanel quando o CI da main passa. Os gatilhos de deploy do Easypanel ficam nos
+# segredos EASYPANEL_DEPLOY_WEB_URL e EASYPANEL_DEPLOY_WORKER_URL (valem como senha: nunca no código nem no log).
+# Migration nova não é aplicada aqui: aplique no banco ANTES do merge, senão o código novo sobe sem a estrutura.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar o deploy no Easypanel
+        env:
+          WEB_URL: ${{ secrets.EASYPANEL_DEPLOY_WEB_URL }}
+          WORKER_URL: ${{ secrets.EASYPANEL_DEPLOY_WORKER_URL }}
+        run: |
+          falhou=0
+          for servico in web worker; do
+            if [ "$servico" = web ]; then url="$WEB_URL"; else url="$WORKER_URL"; fi
+            if [ -z "$url" ]; then echo "::error::Falta o segredo do gatilho do $servico"; falhou=1; continue; fi
+            # -o /dev/null e sem -v: a resposta e o endereço não vão para o log.
+            codigo=$(curl -sS -o /dev/null -w '%{http_code}' -X POST --max-time 60 "$url" || echo 000)
+            echo "$servico: HTTP $codigo"
+            case "$codigo" in 2*) ;; *) echo "::error::O gatilho do $servico respondeu $codigo"; falhou=1 ;; esac
+          done
+          exit $falhou
