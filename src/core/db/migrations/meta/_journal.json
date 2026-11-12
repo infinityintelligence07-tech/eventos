@@ -78,6 +78,13 @@
       "when": 1794491028800,
       "tag": "0010_alunos-confirmados",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794509268530,
+      "tag": "0011_versao-dos-processos",
+      "breakpoints": true
     }
   ]
 }

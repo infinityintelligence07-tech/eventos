@@ -1,8 +1,12 @@
 name: Deploy
 
-# Publica o site e o worker no Easypanel quando o CI da main passa. Os gatilhos de deploy do Easypanel ficam nos
-# segredos EASYPANEL_DEPLOY_WEB_URL e EASYPANEL_DEPLOY_WORKER_URL (valem como senha: nunca no código nem no log).
-# Migration nova não é aplicada aqui: aplique no banco ANTES do merge, senão o código novo sobe sem a estrutura.
+# Publica o site e o worker no Easypanel quando o CI da main passa, nesta ordem:
+#   1. aplica as migrations pendentes no banco (antes do código novo subir);
+#   2. chama os gatilhos de deploy do Easypanel;
+#   3. espera o site e o worker responderem com a impressão digital deste commit (GET /api/versao).
+# Segredos: EASYPANEL_DEPLOY_WEB_URL e EASYPANEL_DEPLOY_WORKER_URL (gatilhos; valem como senha) e
+# MIGRATION_DATABASE_URL (conexão do dono das tabelas, a mesma usada no `npm run db:migrate`).
+# Migration tem de ser compatível com o código anterior (só acrescentar): ele fica no ar até o passo 3 terminar.
 on:
   workflow_run:
     workflows: [CI]
@@ -14,11 +18,55 @@ concurrency:
   group: deploy-main
   cancel-in-progress: false
 
+env:
+  EVENTOS_URL: https://eventos.iamcontrol.com.br
+
 jobs:
   deploy:
     if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 2
+
+      - name: Impressão digital deste commit
+        id: codigo
+        run: echo "versao=$(sh scripts/impressao-do-codigo.sh)" >> "$GITHUB_OUTPUT"
+
+      - name: Há segredo para migrar?
+        id: migracao
+        env:
+          MIGRATION_DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
+        run: |
+          if [ -n "$MIGRATION_DATABASE_URL" ]; then
+            echo "aplicar=sim" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "::warning::Sem MIGRATION_DATABASE_URL: rodando à mão, você garante que as migrations já foram aplicadas."
+          elif git diff --quiet HEAD^1 HEAD -- src/core/db/migrations; then
+            echo "::notice::Sem MIGRATION_DATABASE_URL, mas este commit não traz migration: seguindo."
+          else
+            echo "::error::Este commit traz migration e falta o segredo MIGRATION_DATABASE_URL. Aplique a migration e rode o Deploy à mão."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.migracao.outputs.aplicar == 'sim'
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Aplicar migrations pendentes
+        if: steps.migracao.outputs.aplicar == 'sim'
+        env:
+          DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
+          EVENTOS_CONFIRMO_MIGRAR_REMOTO: sim
+        run: |
+          npm ci
+          npm run db:migrate
+
       - name: Disparar o deploy no Easypanel
         env:
           WEB_URL: ${{ secrets.EASYPANEL_DEPLOY_WEB_URL }}
@@ -34,3 +82,22 @@ jobs:
             case "$codigo" in 2*) ;; *) echo "::error::O gatilho do $servico respondeu $codigo"; falhou=1 ;; esac
           done
           exit $falhou
+
+      - name: Conferir que o site e o worker subiram com este commit
+        env:
+          ESPERADO: ${{ steps.codigo.outputs.versao }}
+        run: |
+          echo "esperado: $ESPERADO"
+          web=""; worker=""
+          for tentativa in $(seq 1 60); do
+            resposta=$(curl -sS --max-time 15 "$EVENTOS_URL/api/versao" || true)
+            web=$(printf '%s' "$resposta" | jq -r '.web // empty' 2>/dev/null || true)
+            worker=$(printf '%s' "$resposta" | jq -r '.worker.versao // empty' 2>/dev/null || true)
+            if [ "$web" = "$ESPERADO" ] && [ "$worker" = "$ESPERADO" ]; then
+              echo "site e worker no ar com $ESPERADO (tentativa $tentativa)"
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "::error::Depois de 20 minutos: site='${web:-sem resposta}', worker='${worker:-sem registro}', esperado='$ESPERADO'. Veja o build no Easypanel."
+          exit 1

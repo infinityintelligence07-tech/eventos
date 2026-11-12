@@ -6,4 +6,5 @@ export * from "./disponibilidade";
 export * from "./evento";
 export * from "./logistica";
 export * from "./pessoa";
+export * from "./processo";
 export * from "./registro-acao";

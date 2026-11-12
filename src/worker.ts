@@ -3,6 +3,7 @@ import { logger, withCorrelationId } from "@/core/logging";
 
 import { registrarSincronizacaoDeColaboradores } from "./jobs/sincronizar-colaboradores-job";
 import { registrarSincronizacaoDeTurmas } from "./jobs/sincronizar-turmas-job";
+import { anotarVersaoDoWorker } from "./jobs/versao-do-worker";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -35,8 +36,10 @@ async function runWorkerOnce(): Promise<void> {
   await registrarSincronizacaoDeColaboradores(boss);
   // Próximos jobs: rotas do Google Maps, envio de mensagens.
 
+  const versao = await anotarVersaoDoWorker();
+
   withCorrelationId("worker-startup", () => {
-    logger.info({ componente: "worker" }, "worker iniciado");
+    logger.info({ componente: "worker", versao }, "worker iniciado");
   });
 
   await new Promise<void>((resolve) => {

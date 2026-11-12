@@ -52,6 +52,17 @@ describe.skipIf(!TEST_DATABASE_URL)("papéis do app e histórico protegido", () 
     await expect(banco.comoPapel("app_eventos", "truncate eventos.registro_acao")).rejects.toThrow(PERMISSAO_NEGADA);
   });
 
+  it("versão dos processos (0011): o worker grava, o site só lê", async () => {
+    const gravar = `insert into eventos.processo (nome, versao) values ('worker', '0123456789abcdef')
+                    on conflict (nome) do update set versao = excluded.versao, iniciado_em = now() returning versao`;
+    expect(await banco.comoPapel("app_eventos_worker", gravar)).toHaveLength(1);
+    await banco.sql(gravar);
+    expect(await banco.comoPapel("app_eventos", "select versao from eventos.processo")).toHaveLength(1);
+    expect(await banco.comoPapel("app_eventos_leitura", "select versao from eventos.processo")).toHaveLength(1);
+    await expect(banco.comoPapel("app_eventos", gravar)).rejects.toThrow(PERMISSAO_NEGADA);
+    await expect(banco.comoPapel("app_eventos_worker", "delete from eventos.processo")).rejects.toThrow(PERMISSAO_NEGADA);
+  });
+
   it("app_eventos grava nas tabelas do app e só apaga onde o código apaga", async () => {
     await banco.comoPapel("app_eventos", "update eventos.evento set expectativa_publico = 10 where id = $1", [eventoId]);
     await banco.comoPapel("app_eventos", "select referencia from eventos.pedido_sdc");
