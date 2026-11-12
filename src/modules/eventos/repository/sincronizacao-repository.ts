@@ -114,6 +114,7 @@ export function criarRepositorioSincronizacao(db: Db): RepositorioSincronizacao 
           edicao: dados.edicao,
           poloId,
           localId,
+          alunosConfirmados: dados.alunosConfirmados,
           sincronizadoEm: agora,
           atualizadoEm: agora,
         };

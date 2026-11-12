@@ -15,6 +15,8 @@ const turmaSchema = z.object({
   meta: z.number().int().nullable(),
   capacidade: z.number().int().nullable(),
   inscritos_ativos: z.number().int().min(0),
+  // Alunos que confirmaram presença (aguardando check-in ou com check-in feito). Opcional: versões da rota anteriores a 11/2026 não mandam.
+  confirmados: z.number().int().min(0).nullish(),
   treinamento: z.object({
     id: z.number().int(),
     nome: texto,

@@ -71,6 +71,13 @@
       "when": 1794401684011,
       "tag": "0009_papel-do-worker",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794491028800,
+      "tag": "0010_alunos-confirmados",
+      "breakpoints": true
     }
   ]
 }

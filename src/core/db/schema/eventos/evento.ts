@@ -38,6 +38,8 @@ export const evento = eventosSchema.table(
     iamControlTurmaId: bigint("iam_control_turma_id", { mode: "number" }).unique(),
     localId: uuid("local_id").references(() => local.id, { onDelete: "set null" }),
     expectativaPublico: integer("expectativa_publico"),
+    // Alunos confirmados na turma, contados pelo IAM Control. Nulo enquanto ele não informa.
+    alunosConfirmados: integer("alunos_confirmados"),
     // Confronto: base do cálculo de pai/mãe (fila ÷ 15).
     pessoasNaFila: integer("pessoas_na_fila"),
     statusEscala: text("status_escala").notNull().default("SEM_ESCALA"),

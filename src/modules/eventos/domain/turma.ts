@@ -12,6 +12,7 @@ export type TurmaIamControl = {
   meta: number | null;
   capacidade: number | null;
   inscritos_ativos: number;
+  confirmados?: number | null;
   treinamento: { nome: string | null; sigla: string | null; tipo_palestra: boolean };
   polo: { sigla: string; nome: string; cidade: string; estado: string } | null;
   local: {
@@ -54,6 +55,8 @@ export type EventoDaTurma = {
   status: StatusEvento;
   /** Sugestão de público: o maior entre a meta e os inscritos ativos. O time pode ajustar. */
   expectativaPublico: number | null;
+  /** Alunos confirmados na turma. Nulo quando o IAM Control não informa. */
+  alunosConfirmados: number | null;
   poloSigla: string | null;
   local: LocalDaTurma | null;
 };
@@ -242,6 +245,7 @@ export function eventoDaTurma(
       dataFim,
       status: statusDoEvento(turma, dataInicio, dataFim, hoje),
       expectativaPublico: publico > 0 ? publico : null,
+      alunosConfirmados: turma.confirmados ?? null,
       poloSigla,
       local,
     },

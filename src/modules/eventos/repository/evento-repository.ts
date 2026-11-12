@@ -15,7 +15,7 @@ export type EventoDoResumo = {
   nome: string;
   codigo: string | null;
   edicao: string | null;
-  iamControlTurmaId: number | null;
+  alunosConfirmados: number | null;
   tipoSigla: string | null;
   tipoNome: string | null;
   poloCodigo: string | null;
@@ -47,7 +47,7 @@ export function criarRepositorioEvento(executor: Executor) {
           nome: evento.nome,
           codigo: evento.codigo,
           edicao: evento.edicao,
-          iamControlTurmaId: evento.iamControlTurmaId,
+          alunosConfirmados: evento.alunosConfirmados,
           tipoSigla: tipoEvento.sigla,
           tipoNome: tipoEvento.nome,
           poloCodigo: polo.codigo,
