@@ -1,0 +1,1 @@
+ALTER TABLE "eventos"."evento" ADD COLUMN "alunos_confirmados" integer;

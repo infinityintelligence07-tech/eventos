@@ -93,6 +93,15 @@ describe("evento a partir da turma", () => {
     expect(vazio.ok && vazio.evento.expectativaPublico).toBeNull();
   });
 
+  it("alunos confirmados vêm do IAM Control e ficam vazios quando ele não informa", () => {
+    const informado = eventoDaTurma(turmaDeExemplo({ confirmados: 87 }), "2026-10-26");
+    expect(informado.ok && informado.evento.alunosConfirmados).toBe(87);
+    const zero = eventoDaTurma(turmaDeExemplo({ confirmados: 0 }), "2026-10-26");
+    expect(zero.ok && zero.evento.alunosConfirmados).toBe(0);
+    const semCampo = eventoDaTurma(turmaDeExemplo(), "2026-10-26");
+    expect(semCampo.ok && semCampo.evento.alunosConfirmados).toBeNull();
+  });
+
   it("sem edição numérica ou polo fica sem código, mas o evento é criado", () => {
     const semEdicao = eventoDaTurma(turmaDeExemplo({ edicao: null }), "2026-10-26");
     expect(semEdicao.ok && semEdicao.evento.codigo).toBeNull();

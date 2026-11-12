@@ -164,7 +164,7 @@ export default async function PaginaResumoDoEvento({ params }: { params: Promise
           <Dado rotulo="Datas">{periodo(evento.dataInicio, evento.dataFim)}</Dado>
           <Dado rotulo="Local">{evento.local ? `${evento.local.nome} · ${evento.local.cidade} (${evento.local.uf})` : "A definir"}</Dado>
           <Dado rotulo="Situação no IAM Control">{STATUS_DO_EVENTO[evento.status]}</Dado>
-          <Dado rotulo="Turma no IAM Control">{evento.iamControlTurmaId ?? "Sem vínculo"}</Dado>
+          <Dado rotulo="Alunos confirmados">{evento.alunosConfirmados ?? "Ainda não informado"}</Dado>
         </dl>
       </Cartao>
 
