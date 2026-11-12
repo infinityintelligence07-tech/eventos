@@ -55,6 +55,8 @@ jobs:
           context: .
           target: web
           push: false
+          load: true
+          tags: eventos-web:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Build worker
@@ -70,4 +72,15 @@ jobs:
           context: .
           file: Dockerfile.worker
           push: false
+          load: true
+          tags: eventos-worker:ci
           cache-from: type=gha
+      # O fluxo Deploy compara a impressão digital do commit com a que a imagem carrega: as duas contas têm de bater.
+      - name: Impressão digital das imagens
+        run: |
+          esperado=$(sh scripts/impressao-do-codigo.sh)
+          for imagem in eventos-web:ci eventos-worker:ci; do
+            na_imagem=$(docker run --rm --entrypoint cat "$imagem" .versao)
+            echo "$imagem: $na_imagem (esperado $esperado)"
+            [ "$na_imagem" = "$esperado" ]
+          done

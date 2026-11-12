@@ -17,5 +17,8 @@ RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 worker
 COPY --from=worker-deps /app/node_modules ./node_modules
 COPY package.json tsconfig.json ./
 COPY src ./src
+# Impressão digital do código, lida por src/core/versao.ts (o deploy confere pelo /api/versao).
+COPY scripts/impressao-do-codigo.sh /tmp/impressao-do-codigo.sh
+RUN sh /tmp/impressao-do-codigo.sh > .versao && rm /tmp/impressao-do-codigo.sh
 USER worker
 CMD ["node", "--import", "tsx", "src/worker.ts"]

@@ -56,5 +56,5 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
 
 export const config = {
   // Tudo, menos a entrada, o callback, a saúde e os arquivos estáticos.
-  matcher: ["/((?!login(?:/|$)|auth/callback(?:/|$)|api/health(?:/|$)|_next/|images/|favicon).*)"],
+  matcher: ["/((?!login(?:/|$)|auth/callback(?:/|$)|api/health(?:/|$)|api/versao(?:/|$)|_next/|images/|favicon).*)"],
 };

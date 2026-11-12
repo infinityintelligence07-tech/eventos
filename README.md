@@ -112,6 +112,11 @@ as tabelas de evento. `TEST_DATABASE_URL=local` usa o Postgres do `banco:local`;
 
 ## Deploy (EasyPanel)
 
+Merge na `main` publica sozinho: quando o CI passa, o fluxo `Deploy` (`.github/workflows/deploy.yml`) aplica as
+migrations pendentes, chama os gatilhos do Easypanel (site e worker) e espera os dois responderem em `/api/versao` com a
+impressão digital do commit (`scripts/impressao-do-codigo.sh`). Se um serviço não subir com o código novo, o fluxo fica
+vermelho. Migration tem de ser compatível com o código anterior (só acrescentar), porque ele fica no ar durante o deploy.
+
 Demo somente leitura em `eventos.iamcontrol.com.br` (Easypanel + Cloudflare Access): [docs/10-publicar-demo.md](docs/10-publicar-demo.md).
 
 Um `Dockerfile`, duas imagens:

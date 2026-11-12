@@ -13,6 +13,8 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
+# Impressão digital do código (antes do build, que não mexe em src/): vai para a imagem final como /app/.versao.
+RUN sh scripts/impressao-do-codigo.sh > .versao
 # O next.config.ts lê EVENTOS_URL_PUBLICA no build (origens das server actions). O EasyPanel passa as variáveis
 # do serviço como build args; sem este ARG ela não chega ao build e as actions recusam o domínio público.
 ARG EVENTOS_URL_PUBLICA
@@ -33,6 +35,9 @@ RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 worker
 COPY --from=worker-deps /app/node_modules ./node_modules
 COPY package.json tsconfig.json ./
 COPY src ./src
+# Impressão digital do código, lida por src/core/versao.ts (o deploy confere pelo /api/versao).
+COPY scripts/impressao-do-codigo.sh /tmp/impressao-do-codigo.sh
+RUN sh /tmp/impressao-do-codigo.sh > .versao && rm /tmp/impressao-do-codigo.sh
 USER worker
 CMD ["node", "--import", "tsx", "src/worker.ts"]
 
@@ -45,6 +50,7 @@ RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.versao ./.versao
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000
