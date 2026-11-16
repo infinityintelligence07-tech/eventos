@@ -135,10 +135,12 @@ function AlternarTema() {
 function SeloDoAmbiente({ ambiente }: { ambiente: AmbienteDoPainel }) {
   const local = ambiente.usuario?.origem === "LOCAL";
   if (ambiente.escritaLiberada) {
+    // Na produção com escrita liberada é o funcionamento normal: o time não precisa de selo. Só o ambiente local avisa.
+    if (!local) return null;
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--ds-green-soft)] px-3 py-1 text-[12px] font-medium text-[var(--ds-green-deep)]">
         <Database size={14} aria-hidden />
-        {local ? "Versão local" : "Escrita liberada"}
+        Versão local
       </span>
     );
   }
