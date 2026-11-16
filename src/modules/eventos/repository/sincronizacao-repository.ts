@@ -6,7 +6,8 @@ import { evento, local, tipoEvento } from "@/core/db/schema/eventos";
 
 import type { EventoDaTurma } from "../domain/turma";
 
-export type AcaoSincronizacao = "CRIADO" | "ATUALIZADO" | "IGNORADO_EXCLUIDO";
+/** SEM_MUDANCA: a turma chegou igual ao que o evento já tinha; só a hora da sincronização foi anotada. */
+export type AcaoSincronizacao = "CRIADO" | "ATUALIZADO" | "SEM_MUDANCA" | "IGNORADO_EXCLUIDO";
 
 export type EventoSalvo = {
   acao: AcaoSincronizacao;
@@ -34,7 +35,21 @@ export function criarRepositorioSincronizacao(db: Db): RepositorioSincronizacao 
     salvarEventoDaTurma(dados, tipoEventoId, agora) {
       return db.transaction(async (tx) => {
         const [existente] = await tx
-          .select({ id: evento.id, deletedAt: evento.deletedAt })
+          .select({
+            id: evento.id,
+            deletedAt: evento.deletedAt,
+            nome: evento.nome,
+            inicio: evento.inicio,
+            fim: evento.fim,
+            status: evento.status,
+            tipoEventoId: evento.tipoEventoId,
+            codigo: evento.codigo,
+            edicao: evento.edicao,
+            poloId: evento.poloId,
+            localId: evento.localId,
+            expectativaPublico: evento.expectativaPublico,
+            alunosConfirmados: evento.alunosConfirmados,
+          })
           .from(evento)
           .where(eq(evento.iamControlTurmaId, dados.iamControlTurmaId))
           .for("update");
@@ -114,26 +129,55 @@ export function criarRepositorioSincronizacao(db: Db): RepositorioSincronizacao 
           edicao: dados.edicao,
           poloId,
           localId,
-          alunosConfirmados: dados.alunosConfirmados,
-          sincronizadoEm: agora,
-          atualizadoEm: agora,
         };
 
         if (existente) {
+          // atualizado_em é a versão que a tela usa para detectar edição simultânea (Público e fila). A sincronização
+          // roda a cada 30 minutos: se renovasse a versão sempre, quem estivesse com a tela aberta perderia o que
+          // digitou sem ninguém ter mexido. Só renova quando um dado do evento mudou de verdade.
+          const mudou =
+            existente.nome !== campos.nome ||
+            existente.inicio.getTime() !== campos.inicio.getTime() ||
+            existente.fim.getTime() !== campos.fim.getTime() ||
+            existente.status !== campos.status ||
+            existente.tipoEventoId !== campos.tipoEventoId ||
+            existente.codigo !== campos.codigo ||
+            existente.edicao !== campos.edicao ||
+            existente.poloId !== campos.poloId ||
+            existente.localId !== campos.localId ||
+            (existente.expectativaPublico === null && dados.expectativaPublico !== null);
+          // Os confirmados mudam a toda hora na semana do evento e são só informativos: gravam sem renovar a versão.
+          const confirmadosMudaram = existente.alunosConfirmados !== dados.alunosConfirmados;
+
           await tx
             .update(evento)
-            .set({
-              ...campos,
-              expectativaPublico: sql`coalesce(${evento.expectativaPublico}, ${dados.expectativaPublico})`,
-            })
+            .set(
+              mudou
+                ? {
+                    ...campos,
+                    alunosConfirmados: dados.alunosConfirmados,
+                    expectativaPublico: sql`coalesce(${evento.expectativaPublico}, ${dados.expectativaPublico})`,
+                    sincronizadoEm: agora,
+                    atualizadoEm: agora,
+                  }
+                : { alunosConfirmados: dados.alunosConfirmados, sincronizadoEm: agora },
+            )
             .where(eq(evento.id, existente.id));
-          return { acao: "ATUALIZADO", eventoId: existente.id, codigoEmConflito, poloNaoEncontrado: !!dados.poloSigla && !poloId };
+          return {
+            acao: mudou || confirmadosMudaram ? "ATUALIZADO" : "SEM_MUDANCA",
+            eventoId: existente.id,
+            codigoEmConflito,
+            poloNaoEncontrado: !!dados.poloSigla && !poloId,
+          };
         }
 
         const [criado] = await tx
           .insert(evento)
           .values({
             ...campos,
+            alunosConfirmados: dados.alunosConfirmados,
+            sincronizadoEm: agora,
+            atualizadoEm: agora,
             iamControlTurmaId: dados.iamControlTurmaId,
             expectativaPublico: dados.expectativaPublico,
           })

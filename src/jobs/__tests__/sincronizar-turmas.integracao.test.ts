@@ -37,6 +37,15 @@ describe.skipIf(!TEST_DATABASE_URL)("sincronização de turmas no Postgres (GH +
       )) as Record<string, unknown>[]
     )[0]!;
 
+  const versoes = async (turmaId: number) =>
+    (
+      (await banco.sql(
+        `select atualizado_em::text as atualizado_em, sincronizado_em::text as sincronizado_em, alunos_confirmados
+           from eventos.evento where iam_control_turma_id = $1`,
+        [turmaId],
+      )) as { atualizado_em: string; sincronizado_em: string; alunos_confirmados: number | null }[]
+    )[0]!;
+
   const vagas = async (turmaId: number) =>
     (await banco.sql(
       `select f.codigo as funcao, s.quantidade_vagas as quantidade, s.data::text as data,
@@ -107,12 +116,32 @@ describe.skipIf(!TEST_DATABASE_URL)("sincronização de turmas no Postgres (GH +
     });
   });
 
-  it("rodar de novo não duplica nada", async () => {
-    const resumo = await sincronizar();
-    expect(resumo).toMatchObject({ criados: 0, atualizados: 1 });
+  it("rodar de novo não duplica nada nem renova a versão do evento", async () => {
+    const antes = await versoes(501);
+    const resumo = await sincronizar("2026-10-26T15:30:00Z");
+    expect(resumo).toMatchObject({ criados: 0, atualizados: 0, semMudanca: 1 });
+    const depois = await versoes(501);
+    // A tela compara atualizado_em para aceitar o que o time salvou: sem mudança na turma, ele não pode andar.
+    expect(depois.atualizado_em).toBe(antes.atualizado_em);
+    expect(depois.sincronizado_em).not.toBe(antes.sincronizado_em);
     expect(resumo.vagas.SEM_MUDANCA).toBe(1);
     expect(await banco.sql(`select count(*)::int as n from eventos.local`)).toEqual([{ n: 1 }]);
     expect(Object.keys(await quantidades(501))).toHaveLength(5);
+  });
+
+  it("confirmados novos são gravados sem renovar a versão; mudança de data renova", async () => {
+    const antes = await versoes(501);
+    turmas = [turmaDeExemplo({ confirmados: 87 })];
+    expect(await sincronizar("2026-10-26T16:00:00Z")).toMatchObject({ atualizados: 1, semMudanca: 0 });
+    const comConfirmados = await versoes(501);
+    expect(comConfirmados.alunos_confirmados).toBe(87);
+    expect(comConfirmados.atualizado_em).toBe(antes.atualizado_em);
+
+    turmas = [turmaDeExemplo({ confirmados: 87, data_final: "2026-12-14" })];
+    expect(await sincronizar("2026-10-26T16:30:00Z")).toMatchObject({ atualizados: 1, semMudanca: 0 });
+    expect((await versoes(501)).atualizado_em).not.toBe(antes.atualizado_em);
+    turmas = [turmaDeExemplo()];
+    await sincronizar("2026-10-26T17:00:00Z");
   });
 
   it("respeita o que o time editou e recalcula as vagas da regra", async () => {
