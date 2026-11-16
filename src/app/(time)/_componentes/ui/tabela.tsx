@@ -1,25 +1,32 @@
 import type { ReactNode, TdHTMLAttributes, ThHTMLAttributes } from "react";
 
 import { CARTAO } from "./classes";
+import { RotulosDasCelulas } from "./rotulos-das-celulas";
 
 // doc 08 §3.5. A linha que abre algo tem o link no texto da primeira coluna (nada de onClick no <tr>).
 
-/** Tabela dentro de cartão; rola na horizontal dentro do cartão, nunca a página. */
+/**
+ * Tabela dentro de cartão. No computador rola na horizontal dentro do cartão, nunca a página. No celular (até 639 px)
+ * cada linha vira um cartão com o nome da coluna ao lado do valor; `noCelular="rolagem"` mantém a tabela (matrizes).
+ */
 export function Tabela({
   legenda,
   larguraMinima = "min-w-[880px]",
+  noCelular = "cartoes",
   rodape,
   children,
 }: {
   /** Vai no <caption> (só leitor de tela). */
   legenda: string;
   larguraMinima?: string;
+  noCelular?: "cartoes" | "rolagem";
   /** Ex.: `<RodapeDaTabela … />`, fora da rolagem. */
   rodape?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <section className={`${CARTAO} min-w-0 p-0`}>
+    <section className={`${CARTAO} min-w-0 p-0 ${noCelular === "cartoes" ? "tabela-em-cartoes" : ""}`}>
+      {noCelular === "cartoes" && <RotulosDasCelulas />}
       {/* relative: sem ele, o caption e os textos sr-only (position: absolute) escapam da rolagem e alargam a página. */}
       <div className="relative overflow-x-auto">
         <table className={`w-full ${larguraMinima} border-collapse text-[14px]`}>

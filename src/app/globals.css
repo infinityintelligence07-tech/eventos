@@ -450,3 +450,93 @@ a[class*="situacao-"]:hover {
   .login-brand-copy > p { margin-bottom: 0; }
   .login-panel { padding: 8px 20px 40px; }
 }
+
+/* ---------- Celular (até 639 px) ---------- */
+@media (max-width: 639px) {
+  /* Campo com letra menor que 16 px faz o iPhone dar zoom na tela ao tocar nele. */
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  /* Abas que não cabem: a borda direita esmaece para mostrar que dá para arrastar. */
+  .abas-da-pagina {
+    scrollbar-width: none;
+    mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+  }
+  .abas-da-pagina::-webkit-scrollbar {
+    display: none;
+  }
+  .abas-da-pagina > ul {
+    width: max-content;
+    min-width: 100%;
+    padding-right: 28px;
+  }
+
+  /* Tabela vira lista de cartões: uma linha por cartão, nome da coluna à esquerda e valor à direita. */
+  .tabela-em-cartoes table,
+  .tabela-em-cartoes tbody,
+  .tabela-em-cartoes tfoot,
+  .tabela-em-cartoes tr {
+    display: block;
+  }
+  .tabela-em-cartoes table {
+    min-width: 0 !important;
+  }
+  .tabela-em-cartoes thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .tabela-em-cartoes tr {
+    padding: 12px 16px;
+  }
+  .tabela-em-cartoes tbody > tr:first-child {
+    border-top: 0;
+  }
+  .tabela-em-cartoes td,
+  .tabela-em-cartoes tbody th {
+    position: static;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 3px 0;
+    background: none;
+    text-align: right;
+  }
+  .tabela-em-cartoes td::before,
+  .tabela-em-cartoes tbody th::before {
+    content: attr(data-rotulo);
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--ds-label-2);
+    text-align: left;
+  }
+  /* A primeira célula é o nome da linha: em destaque, sem rótulo, à esquerda. */
+  .tabela-em-cartoes tr > :first-child {
+    display: block;
+    padding-bottom: 6px;
+    font-size: 15px;
+    font-weight: 600;
+    text-align: left;
+  }
+  .tabela-em-cartoes tr > :first-child::before,
+  .tabela-em-cartoes [data-rotulo=""]::before,
+  .tabela-em-cartoes [colspan]::before {
+    content: none;
+  }
+  .tabela-em-cartoes [data-rotulo=""],
+  .tabela-em-cartoes [colspan] {
+    justify-content: flex-start;
+    text-align: left;
+  }
+  .tabela-em-cartoes td:empty {
+    display: none;
+  }
+}

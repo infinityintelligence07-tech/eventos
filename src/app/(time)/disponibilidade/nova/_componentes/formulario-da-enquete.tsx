@@ -22,7 +22,7 @@ const ROTULOS = { titulo: "Título", fechaEm: "Fecha em", eventoIds: "Eventos" }
 
 function ListaDeEventos({ eventos, marcados, alternar }: { eventos: EventoParaEscolher[]; marcados: Set<string>; alternar: (id: string) => void }) {
   return (
-    <ul className="grid gap-1 md:grid-cols-2">
+    <ul className="grid grid-cols-1 gap-1 md:grid-cols-2">
       {eventos.map((evento) => (
         <li key={evento.id}>
           <CaixaDeMarcar

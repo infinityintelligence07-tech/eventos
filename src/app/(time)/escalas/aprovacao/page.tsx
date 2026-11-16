@@ -49,7 +49,7 @@ export default async function PaginaAprovacao() {
           </EstadoVazio>
         </Cartao>
       ) : (
-        <div className="grid gap-3">
+        <div className="grid grid-cols-1 gap-3">
           {fila.map((escala) => {
             const codigo = escala.codigo ?? escala.nome;
             const idDoTitulo = `fila-${escala.id}`;

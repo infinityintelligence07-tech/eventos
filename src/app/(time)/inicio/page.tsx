@@ -105,7 +105,7 @@ export default async function PaginaInicio() {
         <h2 id="precisa-de-acao" className={`${TITULO_DE_SECAO} mb-2`}>
           Precisa de ação
         </h2>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {inicio.cartoes.map((cartao) =>
             cartao.tipo === "erro" ? (
               <section key={`erro-${cartao.origem}`} role="alert" className={`${CARTAO} p-5`}>

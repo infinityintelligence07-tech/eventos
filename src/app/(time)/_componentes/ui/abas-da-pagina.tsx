@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef } from "react";
 
 import { type ItemDaMigalha, Migalha } from "./cabecalho";
 
@@ -23,9 +24,22 @@ export function abaAtiva(abas: AbaDaPagina[], caminho: string): AbaDaPagina | un
 
 /** Abas como links para rotas (não role="tablist"), logo abaixo do cabeçalho (doc 08 §3.8). */
 export function AbasDaPagina({ rotulo, abas }: { rotulo: string; abas: AbaDaPagina[] }) {
-  const ativa = abaAtiva(abas, usePathname());
+  const caminho = usePathname();
+  const ativa = abaAtiva(abas, caminho);
+  const navegacao = useRef<HTMLElement>(null);
+
+  // No celular as abas não cabem: a atual vem para a vista e a borda esmaecida (.abas-da-pagina) mostra que há mais.
+  useEffect(() => {
+    const nav = navegacao.current;
+    const atual = nav?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!nav || !atual) return;
+    const sobra = atual.offsetLeft + atual.offsetWidth - (nav.scrollLeft + nav.clientWidth);
+    if (sobra > 0) nav.scrollLeft += sobra + 24;
+    else if (atual.offsetLeft < nav.scrollLeft) nav.scrollLeft = Math.max(0, atual.offsetLeft - 24);
+  }, [caminho]);
+
   return (
-    <nav aria-label={rotulo} className="mb-5 overflow-x-auto">
+    <nav ref={navegacao} aria-label={rotulo} className="abas-da-pagina mb-5 overflow-x-auto">
       <ul className="flex gap-1 border-b border-[var(--ds-separator)]">
         {abas.map((aba) => {
           const atual = aba === ativa;

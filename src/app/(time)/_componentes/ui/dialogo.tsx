@@ -110,7 +110,8 @@ export function PainelLateral({
           </div>
           <Botao variante="icone" aria-label="Fechar" onClick={pedirParaFechar} icone={<X size={18} aria-hidden />} />
         </div>
-        <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        {/* Fechado, o conteúdo não fica na página: vários painéis com o mesmo formulário repetiam os ids dos campos. */}
+        <div className="flex-1 overflow-y-auto px-5 py-4">{aberto && children}</div>
         {rodape && (
           <div className="sticky bottom-0 flex justify-end gap-2 border-t border-[var(--ds-separator)] bg-[var(--ds-surface)] px-5 py-3">{rodape}</div>
         )}

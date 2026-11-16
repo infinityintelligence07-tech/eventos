@@ -169,7 +169,7 @@ export function EditorDeRegra({
           </>
         }
       >
-        <form id={idDoFormulario} action={salvar.despachar} className="grid gap-4">
+        <form id={idDoFormulario} action={salvar.despachar} className="grid grid-cols-1 gap-4">
           <input type="hidden" name="tipoEventoId" value={tipoEventoId} />
           {erroGeral && (
             <p role="alert" className="rounded-[var(--ds-radius-md)] bg-[var(--ds-red-soft)] px-3 py-2 text-[13px] text-[var(--ds-red-deep)]">
@@ -186,7 +186,7 @@ export function EditorDeRegra({
                 <legend className="px-1 text-[13px] font-medium">{nomes.get(linha.funcao) ?? "Nova função"}</legend>
                 <input type="hidden" name={`${prefixo}.modo`} value={linha.modo} />
                 <div className="flex flex-wrap items-end gap-3">
-                  <label className="grid gap-1 text-[13px]">
+                  <label className="grid grid-cols-1 gap-1 text-[13px]">
                     Função
                     <select name={`${prefixo}.funcao`} value={linha.funcao} onChange={(evento) => mudar(linha.chave, { funcao: evento.target.value })} className={`${CAMPO} pr-8`}>
                       <option value="">Escolha a função</option>

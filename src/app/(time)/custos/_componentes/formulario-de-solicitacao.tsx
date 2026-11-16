@@ -95,7 +95,7 @@ export function FormularioDeSolicitacao({
   });
 
   return (
-    <form action={despachar} aria-label={correcao ? "Corrigir solicitação de custo" : "Registrar solicitação de custo"} className="grid gap-5 xl:grid-cols-[1fr_320px]">
+    <form action={despachar} aria-label={correcao ? "Corrigir solicitação de custo" : "Registrar solicitação de custo"} className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_320px]">
       <div className="min-w-0">
         <ResumoDeErros campos={estado.ok ? undefined : estado.campos} rotulos={rotulos} />
         <ErroDoFormulario estado={estado} />
@@ -123,7 +123,7 @@ export function FormularioDeSolicitacao({
             return (
               <fieldset key={linha.chave} className="mb-4 rounded-[var(--ds-radius-md)] border border-[var(--ds-separator)] p-4">
                 <legend className="px-1 text-[13px] font-semibold">Deslocamento {indice + 1}</legend>
-                <div className="grid gap-3 md:grid-cols-2">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <CampoDeTexto nome={nome("origem")} rotulo="Origem" obrigatorio value={linha.origem} onChange={(evento) => mudarDeslocamento(linha.chave, { origem: evento.target.value })} erros={erro("origem")} />
                   <CampoDeTexto nome={nome("destino")} rotulo="Destino" obrigatorio value={linha.destino} onChange={(evento) => mudarDeslocamento(linha.chave, { destino: evento.target.value })} erros={erro("destino")} />
                 </div>

@@ -46,7 +46,7 @@ export function PainelDeResposta({
       }
     >
       <FaixaEmNomeDe nome={nome} />
-      <form id={idDoFormulario} onSubmit={enviar} className="grid gap-3">
+      <form id={idDoFormulario} onSubmit={enviar} className="grid grid-cols-1 gap-3">
         <input type="hidden" name="eventoId" value={eventoId} />
         <input type="hidden" name="convocacaoId" value={convocacaoId} />
         <fieldset>

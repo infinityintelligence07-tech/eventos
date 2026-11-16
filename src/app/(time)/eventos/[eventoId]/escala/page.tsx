@@ -213,7 +213,7 @@ export default async function PaginaEscalaDoEvento({ params, searchParams }: Par
           <h2 id="equipe" className={`${TITULO_DE_SECAO} mb-2`}>
             Equipe
           </h2>
-          <div className="grid gap-3">
+          <div className="grid grid-cols-1 gap-3">
             {montagem.linhas.map((linha) => (
               <EquipeDaFuncao
                 key={linha.id}
@@ -245,7 +245,7 @@ export default async function PaginaEscalaDoEvento({ params, searchParams }: Par
 
       {montagem.historico.length > 0 && (
         <Cartao id="historico" titulo="Histórico da escala">
-          <ol className="grid gap-1 text-[13px]">
+          <ol className="grid grid-cols-1 gap-1 text-[13px]">
             {montagem.historico.map((registro) => (
               <li key={`${registro.acao}-${registro.criadoEm.toISOString()}`}>
                 <span className="font-medium">{ROTULO_DO_HISTORICO[registro.acao] ?? registro.acao}</span> em {dataEHora(registro.criadoEm)}

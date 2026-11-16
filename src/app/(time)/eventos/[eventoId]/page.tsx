@@ -92,7 +92,7 @@ export default async function PaginaResumoDoEvento({ params }: { params: Promise
   const editavel = escrita.liberada && evento.status !== "CANCELADO";
 
   return (
-    <div className="grid gap-3 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
       <Cartao
         id="andamento"
         titulo="Andamento"
@@ -103,7 +103,7 @@ export default async function PaginaResumoDoEvento({ params }: { params: Promise
           </BotaoLink>
         }
       >
-        <ol className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <ol className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {andamento.map((etapa) => {
             const conteudo = (
               <>
