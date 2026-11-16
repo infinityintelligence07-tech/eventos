@@ -17,6 +17,8 @@ export type ResumoSincronizacao = {
   turmasLidas: number;
   criados: number;
   atualizados: number;
+  /** Turmas que chegaram iguais ao evento já gravado. */
+  semMudanca: number;
   ignoradosExcluidos: number;
   ignoradas: { iamControlTurmaId: number; motivo: MotivoTurmaIgnorada | "TIPO_INATIVO"; treinamento: string | null }[];
   codigosEmConflito: { iamControlTurmaId: number; codigo: string }[];
@@ -51,6 +53,7 @@ export async function sincronizarTurmas(
     turmasLidas: resposta.turmas.length,
     criados: 0,
     atualizados: 0,
+    semMudanca: 0,
     ignoradosExcluidos: 0,
     ignoradas: [],
     codigosEmConflito: [],
@@ -91,7 +94,7 @@ export async function sincronizarTurmas(
         resumo.ignoradosExcluidos += 1;
         continue;
       }
-      resumo[salvo.acao === "CRIADO" ? "criados" : "atualizados"] += 1;
+      resumo[salvo.acao === "CRIADO" ? "criados" : salvo.acao === "ATUALIZADO" ? "atualizados" : "semMudanca"] += 1;
       if (salvo.codigoEmConflito) {
         resumo.codigosEmConflito.push({ iamControlTurmaId: turma.id, codigo: salvo.codigoEmConflito });
       }
