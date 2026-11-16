@@ -90,7 +90,7 @@ function EsqueletoDeNumeros() {
 
 function EsqueletoDeCartoes({ quantidade }: { quantidade: number }) {
   return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
       {Array.from({ length: quantidade }, (_, indice) => (
         <div key={indice} className={`${CARTAO} flex flex-col gap-2 p-5`}>
           <Esqueleto className="h-4 w-40" />

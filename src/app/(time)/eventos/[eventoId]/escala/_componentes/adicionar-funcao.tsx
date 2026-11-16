@@ -45,7 +45,7 @@ export function AdicionarFuncao({
           </>
         }
       >
-        <form id={idDoFormulario} onSubmit={enviar} className="grid gap-4">
+        <form id={idDoFormulario} onSubmit={enviar} className="grid grid-cols-1 gap-4">
           <input type="hidden" name="eventoId" value={eventoId} />
           <CampoDeSelecao
             nome="funcaoId"

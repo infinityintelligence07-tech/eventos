@@ -86,7 +86,7 @@ export default async function PaginaPessoa({ params }: { params: Promise<{ pesso
       />
       {somenteLeitura && <FaixaSomenteLeitura />}
 
-      <div className="grid gap-3 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
         <Cartao id="contato" titulo="Contato" explicacao={<SomenteLeitura origem="Vem do cadastro de pessoas (GH)" />}>
           <dl className="flex flex-col gap-3">
             {pessoa.nomeSocial && <DadoSomenteLeitura rotulo="Nome completo">{pessoa.nomeCompleto}</DadoSomenteLeitura>}

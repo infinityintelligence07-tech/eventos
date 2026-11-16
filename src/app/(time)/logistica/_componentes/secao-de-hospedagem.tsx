@@ -207,7 +207,7 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
             </dl>
           </Cartao>
 
-          <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {hospedagem.quartos.map((quarto) => (
               <li key={quarto.id}>
                 <Cartao

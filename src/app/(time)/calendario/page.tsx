@@ -134,7 +134,7 @@ export default async function PaginaCalendario({ searchParams }: { searchParams:
         <h2 id="precisa-de-acao" className="mb-3 text-[17px] font-semibold tracking-[-0.01em]">
           Precisa de ação
         </h2>
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <CartaoDePendencia
             titulo="Escalas a montar"
             explicacao={`Eventos nos próximos ${DIAS_PARA_MONTAR_ESCALA} dias com a escala ainda não aprovada.`}
@@ -185,7 +185,8 @@ export default async function PaginaCalendario({ searchParams }: { searchParams:
           ))}
         </ul>
 
-        <div className="overflow-x-auto">
+        {/* relative: sem ele, os textos sr-only (position: absolute) escapam da rolagem e alargam a página no celular. */}
+        <div className="relative overflow-x-auto">
           <table className="w-full min-w-[840px] table-fixed border-collapse">
             <thead>
               <tr>

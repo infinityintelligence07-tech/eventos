@@ -9,6 +9,7 @@ import type { Deslocamento, LIMITE_DA_OBSERVACAO as LimiteDaObservacao, StatusCo
 import { useAcao } from "@/app/(time)/_componentes/ui";
 import { BotaoLink } from "../../../../_componentes/ui/botao-link";
 import { Confirmacao } from "../../../../_componentes/ui/dialogo";
+import { RotulosDasCelulas } from "../../../../_componentes/ui/rotulos-das-celulas";
 import { distancia } from "../../../../_componentes/ui/formatos";
 import { SeloRegistradoPeloTime } from "../../../../_componentes/ui/selo";
 import { Chip, type TomDoChip } from "../../../../_componentes/ui/situacao";
@@ -281,7 +282,8 @@ export function EquipeDaFuncao({
       <h3 id={idDoTitulo} className="px-5 pt-4 pb-2 text-[15px] font-semibold">
         {titulo} · {Math.min(ativas, quantidade)} de {quantidade}
       </h3>
-      <div className="relative overflow-x-auto">
+      <div className="tabela-em-cartoes relative overflow-x-auto">
+        <RotulosDasCelulas />
         <table className="w-full min-w-[900px] border-collapse text-[14px]">
           <caption className="sr-only">
             Equipe de {titulo}: {Math.min(ativas, quantidade)} de {quantidade} vagas preenchidas

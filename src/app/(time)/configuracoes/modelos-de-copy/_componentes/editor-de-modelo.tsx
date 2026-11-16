@@ -110,7 +110,7 @@ export function EditorDoModelo({
   const somenteLeitura = escritaLiberada ? undefined : "Somente leitura neste ambiente.";
 
   return (
-    <div className="grid gap-3 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
       <section aria-labelledby="texto-do-modelo" className={`${CARTAO} min-w-0 p-5`}>
         <h3 id="texto-do-modelo" className={`${TITULO_DE_CARTAO} mb-3`}>
           Texto do modelo
@@ -118,7 +118,7 @@ export function EditorDoModelo({
         <form onSubmit={(evento) => enviarSemLimpar(evento, salvar)} className="flex flex-col gap-4">
           {!resultado.ok && resultado.campos && <ResumoDeErros campos={resultado.campos} rotulos={ROTULOS} />}
           {modelo && <input type="hidden" name="modeloId" value={modelo.id} />}
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <CampoDeTexto nome="nome" rotulo="Nome" obrigatorio defaultValue={modelo?.nome ?? ""} erros={campoComErro("nome")} />
             <CampoDeSelecao nome="tipo" rotulo="Tipo" obrigatorio opcoes={tipos} defaultValue={modelo?.tipo ?? "ESCALACAO"} erros={campoComErro("tipo")} />
           </div>

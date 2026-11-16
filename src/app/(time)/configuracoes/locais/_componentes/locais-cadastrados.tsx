@@ -68,16 +68,16 @@ function FormularioDoLocal({ local, tipos, aoSalvar }: { local: LocalNaTela | nu
       {local && <input type="hidden" name="localId" value={local.id} />}
       <CampoDeTexto nome="nome" rotulo="Nome" obrigatorio defaultValue={local?.nome ?? ""} erros={erros("nome")} />
       <CampoDeSelecao nome="tipo" rotulo="Tipo" obrigatorio opcoes={tipos} defaultValue={local?.tipo ?? "HOTEL"} erros={erros("tipo")} />
-      <div className="grid gap-3 sm:grid-cols-[160px_1fr]">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[160px_1fr]">
         <CampoDeTexto nome="cep" rotulo="CEP" inputMode="numeric" placeholder="00000-000" defaultValue={local?.cep ?? ""} erros={erros("cep")} />
         <CampoDeTexto nome="logradouro" rotulo="Logradouro" defaultValue={local?.logradouro ?? ""} erros={erros("logradouro")} />
       </div>
-      <div className="grid gap-3 sm:grid-cols-[120px_1fr]">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[120px_1fr]">
         <CampoDeTexto nome="numero" rotulo="Número" defaultValue={local?.numero ?? ""} erros={erros("numero")} />
         <CampoDeTexto nome="complemento" rotulo="Complemento" defaultValue={local?.complemento ?? ""} erros={erros("complemento")} />
       </div>
       <CampoDeTexto nome="bairro" rotulo="Bairro" defaultValue={local?.bairro ?? ""} erros={erros("bairro")} />
-      <div className="grid gap-3 sm:grid-cols-[1fr_96px]">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_96px]">
         <CampoDeTexto nome="cidade" rotulo="Cidade" obrigatorio defaultValue={local?.cidade ?? ""} erros={erros("cidade")} />
         <CampoDeTexto nome="uf" rotulo="UF" obrigatorio maxLength={2} defaultValue={local?.uf ?? ""} erros={erros("uf")} />
       </div>
@@ -95,7 +95,7 @@ function FormularioDoLocal({ local, tipos, aoSalvar }: { local: LocalNaTela | nu
           A busca automática pelo endereço entra numa próxima versão. Por enquanto, copie do Google Maps (botão direito no ponto → os
           dois números do topo). Sem isso, a distância até o local não é calculada.
         </p>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <CampoDeTexto nome="lat" rotulo="Latitude" inputMode="decimal" placeholder="-3,1190" defaultValue={decimal(local?.lat ?? null)} erros={erros("lat")} />
           <CampoDeTexto nome="lng" rotulo="Longitude" inputMode="decimal" placeholder="-60,0217" defaultValue={decimal(local?.lng ?? null)} erros={erros("lng")} />
         </div>

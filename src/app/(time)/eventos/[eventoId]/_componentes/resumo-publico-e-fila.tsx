@@ -67,7 +67,7 @@ export function PublicoEFila({
   const erros = estado.ok ? {} : (estado.campos ?? {});
   if (!editavel) {
     return (
-      <dl className="grid gap-3 text-[14px]">
+      <dl className="grid grid-cols-1 gap-3 text-[14px]">
         <div>
           <dt className="text-[12px] text-[var(--ds-label-2)]">Expectativa de público</dt>
           <dd className="tabular-nums">{expectativaPublico ?? "Não informada"}</dd>
@@ -83,7 +83,7 @@ export function PublicoEFila({
   }
 
   return (
-    <form ref={formulario} action={despachar} className="grid gap-4" onSubmit={() => setSalvamento({ situacao: "salvando" })}>
+    <form ref={formulario} action={despachar} className="grid grid-cols-1 gap-4" onSubmit={() => setSalvamento({ situacao: "salvando" })}>
       <input type="hidden" name="eventoId" value={eventoId} />
       <input type="hidden" name="atualizadoEm" value={atualizadoEm} />
       <CampoDeTexto

@@ -7,6 +7,7 @@ import { FormularioDeAcao, useAcao } from "@/app/(time)/_componentes/ui";
 import { Botao, BotaoDeEnvio } from "../../../../_componentes/ui/botao";
 import { Chip } from "../../../../_componentes/ui/situacao";
 import { Confirmacao } from "../../../../_componentes/ui/dialogo";
+import { RotulosDasCelulas } from "../../../../_componentes/ui/rotulos-das-celulas";
 import { dataCurta, horario } from "../../../../_componentes/ui/formatos";
 import { alterarVagas, confirmarVagas, definirVagaDigitada, removerVagaManual } from "../acoes";
 import { MenuMaisAcoes } from "./menu-mais-acoes";
@@ -209,7 +210,8 @@ export function VagasPorFuncao({
           <BotaoDeEnvio variante="secundario">Confirmar todas as sugestões ({sugestoesParaConfirmar.length})</BotaoDeEnvio>
         </FormularioDeAcao>
       )}
-      <div className="relative overflow-x-auto">
+      <div className="tabela-em-cartoes relative overflow-x-auto">
+        <RotulosDasCelulas />
         <table className="w-full min-w-[760px] border-collapse text-[14px]">
           <caption className="sr-only">Vagas por função: sugerido pela regra, número de vagas, confirmação e preenchidas</caption>
           <thead className="bg-[var(--ds-surface-1)]">

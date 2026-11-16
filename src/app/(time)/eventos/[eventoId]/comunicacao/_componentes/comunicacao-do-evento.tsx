@@ -174,7 +174,7 @@ export function ComunicacaoDoEvento({
         : undefined;
 
   return (
-    <div className="grid gap-3 lg:grid-cols-[minmax(320px,2fr)_3fr]">
+    <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(320px,2fr)_3fr]">
       <section aria-labelledby="pessoas-da-escala" className={`${CARTAO} min-w-0 p-0`}>
         <h2 id="pessoas-da-escala" className="sr-only">
           Pessoas da escala

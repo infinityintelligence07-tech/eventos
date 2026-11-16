@@ -178,7 +178,7 @@ export default async function PaginaEnquete({ params, searchParams }: { params: 
               </EstadoVazio>
             </section>
           ) : (
-            <Tabela legenda={`Respostas de cada pessoa por evento — ${enquete.titulo}`} larguraMinima="min-w-[720px]">
+            <Tabela legenda={`Respostas de cada pessoa por evento — ${enquete.titulo}`} larguraMinima="min-w-[720px]" noCelular="rolagem">
               <CabecaDaTabela>
                 <ColunaDaTabela className="sticky left-0 z-10 bg-[var(--ds-surface-1)]">Pessoa</ColunaDaTabela>
                 {enquete.eventos.map((evento) => (

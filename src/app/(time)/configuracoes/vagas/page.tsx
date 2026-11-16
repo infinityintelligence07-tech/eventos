@@ -22,7 +22,7 @@ export default async function PaginaRegrasDeVagas() {
   return (
     <>
       {!escrita.liberada ? <FaixaSomenteLeitura /> : !edita && <FaixaSemPermissao permissao="config.regras_vagas" />}
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {tipos.map((tipo) => (
           <Cartao
             key={tipo.id}
@@ -50,7 +50,7 @@ export default async function PaginaRegrasDeVagas() {
               <Aviso tom="atencao">Sem regra: estes eventos não recebem vagas sugeridas.</Aviso>
             ) : (
               <>
-                <ul className="grid gap-1 text-[14px]">
+                <ul className="grid grid-cols-1 gap-1 text-[14px]">
                   {tipo.linhas.map((linha) => (
                     <li key={linha.funcao}>
                       <span className="font-medium">{linha.nomeDaFuncao}:</span> {linha.descricao}
