@@ -72,3 +72,18 @@ export {
   type RepositorioColaboradores,
 } from "./repository/colaboradores-repository";
 export { type ConsultaPessoas, criarConsultaPessoas, type FichaDaPessoa, type OpcoesDePessoas } from "./repository/consulta-repository";
+export {
+  acaoDoHistorico,
+  type AlvoDoAcesso,
+  type DefinirAcesso,
+  definirAcessoSchema,
+  MENSAGEM_PROPRIO_ACESSO,
+  motivoParaNaoAlterar,
+  NIVEIS_DE_ACESSO,
+  type NivelDeAcesso,
+  nivelDosPerfis,
+  perfisDoNivel,
+  type PessoaComAcesso,
+  rotuloDoNivel as rotuloDoNivelDeAcesso,
+} from "./domain/acesso";
+export { criarRepositorioAcesso } from "./repository/acesso-repository";

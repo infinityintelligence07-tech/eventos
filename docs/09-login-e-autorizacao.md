@@ -675,3 +675,19 @@ líder, registrar e auditar um custo) e conferência do `registro_acao`. Revisã
 | ADR | Extrair L2, L6, L8, L9 e L11 para `docs/adr/0003-login-autorizacao-e-papeis-de-banco.md`. |
 | Textos livres no histórico | Só textos escritos pelo time ficam no `registro_acao` (comentário de devolução, motivo de reabrir a escala, motivo de reprovação e parecer de custo). Textos do staff ou da SDC (motivo de recusa, localizador, reserva, motivo de alterar/cancelar pedido) ficam só na tabela de origem, com um indicador no registro. |
 | Proteção das páginas (C1) | `exigirAtor()` em toda página, layout e `generateMetadata` sob `(time)`, com teste de varredura. Leitura que exige ator dentro dos fluxos fica como dívida. |
+
+## 14. Acesso do time pela tela (17/11/2026)
+
+Até aqui os perfis `EVENTOS_TIME` e `EVENTOS_LIDER` eram gravados à mão em `core.usuario_perfil` (§11.0, passo 9).
+Agora a líder faz isso em **Configurações › Acesso do time**.
+
+- **Permissão:** `config.acesso_do_time`, só da líder. O time vê a lista, sem controles.
+- **Níveis:** Sem acesso (nenhum perfil), Time (`EVENTOS_TIME`) e Líder (os dois perfis).
+- **Regras:** ninguém altera o próprio acesso (não se tranca para fora nem deixa o sistema sem líder); conta inativa
+  não recebe acesso, mas pode perder; cada mudança grava `registro_acao` (`CONFIGURACAO`, ação `ACESSO_CONCEDIDO`,
+  `ACESSO_ALTERADO` ou `ACESSO_RETIRADO`, só com os níveis, sem dado pessoal).
+- **Banco:** `app_eventos` continua **sem** `INSERT`/`DELETE` em `core.usuario_perfil`. A escrita passa pela função
+  `eventos.definir_perfis_do_eventos` (migration `0012`, `SECURITY DEFINER`, `search_path` vazio, `EXECUTE` só para
+  `app_eventos`), que só mexe nos dois perfis do Eventos com escopo `GLOBAL` e confere de novo que quem pede é líder.
+- **Para o GH (Lucas):** a função escreve numa tabela do `core`. Ela fica no schema `eventos` e não toca em perfis de
+  outros sistemas (teste: `src/fluxos/pessoas/__tests__/acesso.integracao.test.ts`).

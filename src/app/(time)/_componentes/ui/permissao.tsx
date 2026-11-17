@@ -22,6 +22,8 @@ export function motivoSemPermissao(permissao: Permissao): string {
       return "Só a líder pode mudar as regras de vagas.";
     case "config.regras_custo":
       return "Só a líder pode mudar as regras de custo.";
+    case "config.acesso_do_time":
+      return "Só a líder pode liberar ou retirar o acesso ao sistema.";
     case "evento.editar":
     case "escala.montar":
     case "escala.registrar_resposta":

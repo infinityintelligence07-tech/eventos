@@ -24,6 +24,7 @@ export const PERMISSOES = [
   "config.link_custos",
   "config.regras_vagas",
   "config.regras_custo",
+  "config.acesso_do_time",
 ] as const;
 
 export type Permissao = (typeof PERMISSOES)[number];
@@ -35,6 +36,7 @@ const SO_DA_LIDER = new Set<Permissao>([
   "config.link_custos",
   "config.regras_vagas",
   "config.regras_custo",
+  "config.acesso_do_time",
 ]);
 
 /** A líder tem tudo o que o time tem, mais aprovar, reabrir e as configurações que mexem em dinheiro e copys. */
