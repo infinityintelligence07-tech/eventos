@@ -85,6 +85,13 @@
       "when": 1794509268530,
       "tag": "0011_versao-dos-processos",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794924253933,
+      "tag": "0012_acesso-do-time",
+      "breakpoints": true
     }
   ]
 }

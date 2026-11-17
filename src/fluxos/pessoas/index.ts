@@ -1,3 +1,4 @@
+export { type AcessoDoTime, definirAcessoDoTime, listarAcessoDoTime } from "./acesso";
 export { carregarPessoa, type ListaDePessoas, listarPessoas, type PessoaCarregada } from "./consultas";
 export { definirFuncoes, salvarCoordenadas, salvarPerfilDoStaff, salvarVeiculo } from "./escrita";
 export {

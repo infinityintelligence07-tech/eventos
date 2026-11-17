@@ -23,6 +23,7 @@ const MATRIZ: Record<Permissao, { time: boolean; lider: boolean }> = {
   "config.link_custos": { time: false, lider: true },
   "config.regras_vagas": { time: false, lider: true },
   "config.regras_custo": { time: false, lider: true },
+  "config.acesso_do_time": { time: false, lider: true },
 };
 
 const comPerfis = (...perfis: PerfilDoEventos[]) => ({ perfis });
