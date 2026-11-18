@@ -36,7 +36,7 @@ const ICONES: Record<ItemDoMenu, LucideIcon> = {
   Comunicação: MessageCircle,
   Disponibilidade: CalendarCheck,
   Pessoas: Contact,
-  "Logística e SDC": Plane,
+  "Voos e Hospedagem": Plane,
   Custos: Receipt,
   Configurações: Settings,
 };

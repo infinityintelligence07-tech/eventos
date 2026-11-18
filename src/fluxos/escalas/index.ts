@@ -15,6 +15,7 @@ export {
   tirarDaVaga,
 } from "./edicao";
 export { resumoParaInicio } from "./inicio";
+export { pendenciasDasEscalas } from "./pendencias";
 export {
   carregarFilaDeAprovacao,
   type EscalaNaFila,

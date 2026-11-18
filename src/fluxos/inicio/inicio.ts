@@ -51,7 +51,7 @@ const FONTES: { origem: OrigemDoInicio; nome: string; carregar: (agora: Date) =>
   { origem: "escalas", nome: "Escalas", carregar: dasEscalas },
   { origem: "eventos", nome: "Eventos", carregar: dosEventos },
   { origem: "comunicacao", nome: "Comunicação", carregar: daComunicacao },
-  { origem: "logistica", nome: "Logística e SDC", carregar: daLogistica },
+  { origem: "logistica", nome: "Voos e Hospedagem", carregar: daLogistica },
   { origem: "custos", nome: "Custos", carregar: dosCustos },
   { origem: "disponibilidade", nome: "Disponibilidade", carregar: daDisponibilidade },
 ];

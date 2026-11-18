@@ -6,7 +6,7 @@ describe("item ativo do menu", () => {
   it("acende pela rota e pelas subrotas", () => {
     expect(itemAtivoDoMenu("/calendario")).toBe("Calendário");
     expect(itemAtivoDoMenu("/escalas/aprovacao")).toBe("Escalas");
-    expect(itemAtivoDoMenu("/logistica/hospedagem")).toBe("Logística e SDC");
+    expect(itemAtivoDoMenu("/logistica/hospedagem")).toBe("Voos e Hospedagem");
     expect(itemAtivoDoMenu("/configuracoes/vagas")).toBe("Configurações");
     expect(itemAtivoDoMenu("/disponibilidade/nova")).toBe("Disponibilidade");
   });
@@ -21,7 +21,7 @@ describe("item ativo do menu", () => {
     expect(itemAtivoDoMenu(id)).toBe("Calendário");
     expect(itemAtivoDoMenu(`${id}/escala`)).toBe("Escalas");
     expect(itemAtivoDoMenu(`${id}/comunicacao`)).toBe("Comunicação");
-    expect(itemAtivoDoMenu(`${id}/logistica`)).toBe("Logística e SDC");
+    expect(itemAtivoDoMenu(`${id}/logistica`)).toBe("Voos e Hospedagem");
     expect(itemAtivoDoMenu(`${id}/custos`)).toBe("Custos");
   });
 });
