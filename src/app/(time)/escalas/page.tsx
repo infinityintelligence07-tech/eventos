@@ -2,16 +2,18 @@ import { CircleCheck, CircleX, Clock, Hourglass } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { listarEscalas, PERIODOS_DA_LISTA } from "@/fluxos/escalas";
+import { listarEscalas, pendenciasDasEscalas, PERIODOS_DA_LISTA } from "@/fluxos/escalas";
+import { DIAS_PARA_MONTAR_ESCALA, type EventoNoCalendario } from "@/modules/eventos";
 
 import { AtalhosDeFiltro, BarraDeFiltros, BuscaDeFiltro, SeletorDeFiltro } from "../_componentes/ui/barra-de-filtros";
 import { BotaoLink } from "../_componentes/ui/botao-link";
 import { CabecalhoDaPagina } from "../_componentes/ui/cabecalho";
-import { Cartao } from "../_componentes/ui/cartao";
+import { Cartao, CartaoDePendencia, type ExemploDePendencia } from "../_componentes/ui/cartao";
 import { EstadoVazio } from "../_componentes/ui/estados";
 import { nomeCurtoDoEvento as nomeCurto, periodo } from "../_componentes/ui/formatos";
 import { ChipDaEscala } from "../_componentes/ui/situacao";
 import { CabecaDaTabela, CelulaDaTabela, ColunaDaTabela, LinhaDaTabela, Tabela } from "../_componentes/ui/tabela";
+import { diaEMes, rotuloCurto } from "../calendario/_componentes/cartao-do-evento";
 import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 export const dynamic = "force-dynamic";
@@ -28,9 +30,24 @@ function acaoDaLinha(statusEscala: string, status: string): string {
   return "Ver";
 }
 
+function exemplosDaPendencia(eventos: EventoNoCalendario[], destino: "" | "/escala" = ""): ExemploDePendencia[] {
+  return eventos.map((evento) => ({
+    chave: evento.id,
+    href: `/eventos/${evento.id}${destino}`,
+    rotulo: (
+      <>
+        {rotuloCurto(evento)}
+        {evento.poloCodigo && <span className="text-[var(--ds-label-2)]"> · {evento.poloCodigo}</span>}
+      </>
+    ),
+    detalhe: diaEMes(evento.dataInicio),
+  }));
+}
+
 export default async function PaginaEscalas({ searchParams }: Parametros) {
   await exigirAtor();
-  const lista = await listarEscalas(await searchParams, new Date());
+  const agora = new Date();
+  const [lista, pendencias] = await Promise.all([listarEscalas(await searchParams, agora), pendenciasDasEscalas(agora)]);
   const { contagem, filtros } = lista;
   const algumFiltro = Boolean(filtros.situacao || filtros.polo || filtros.tipo || filtros.busca || !filtros.esconderMasterclasses);
 
@@ -46,6 +63,29 @@ export default async function PaginaEscalas({ searchParams }: Parametros) {
           </BotaoLink>
         }
       />
+
+      <section className="mb-5" aria-labelledby="precisa-de-acao">
+        <h2 id="precisa-de-acao" className="mb-3 text-[17px] font-semibold tracking-[-0.01em]">
+          Precisa de ação
+        </h2>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <CartaoDePendencia
+            titulo="Escalas a montar"
+            explicacao={`Eventos nos próximos ${DIAS_PARA_MONTAR_ESCALA} dias com a escala ainda não aprovada.`}
+            exemplos={exemplosDaPendencia(pendencias.escalasAMontar, "/escala")}
+          />
+          <CartaoDePendencia
+            titulo="Confronto sem fila"
+            explicacao="Sem o número de pessoas na fila, as vagas de pai e mãe não são calculadas."
+            exemplos={exemplosDaPendencia(pendencias.confrontoSemFila)}
+          />
+          <CartaoDePendencia
+            titulo="Eventos sem código"
+            explicacao="Falta a edição ou o polo no IAM Control, ou outro evento ativo usa o mesmo código."
+            exemplos={exemplosDaPendencia(pendencias.semCodigo)}
+          />
+        </div>
+      </section>
 
       <BarraDeFiltros nomes={FILTROS} resultado={lista.eventos.length === 1 ? "1 evento encontrado" : `${lista.eventos.length} eventos encontrados`}>
         <BuscaDeFiltro rotulo="Buscar por código ou nome" placeholder="Buscar por código ou nome" />

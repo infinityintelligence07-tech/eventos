@@ -15,8 +15,8 @@ export function CabecalhoDaLogistica({ acoes }: { acoes?: ReactNode }) {
   return (
     <>
       <CabecalhoDaPagina
-        migalha={<MigalhaDaSecao itens={[{ rotulo: "Logística e SDC", href: "/logistica/voos" }]} abas={ABAS} />}
-        titulo="Logística e SDC"
+        migalha={<MigalhaDaSecao itens={[{ rotulo: "Voos e Hospedagem", href: "/logistica/voos" }]} abas={ABAS} />}
+        titulo="Voos e Hospedagem"
         subtitulo="Voos, hospedagem e caronas do staff."
         acoes={acoes}
       />

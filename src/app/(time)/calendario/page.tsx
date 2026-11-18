@@ -6,17 +6,15 @@ import {
   type Calendario,
   carregarCalendario,
   type DiaDoCalendario,
-  DIAS_PARA_MONTAR_ESCALA,
-  type EventoNoCalendario,
   repositorioCalendario,
   type SituacaoNoCalendario,
 } from "@/modules/eventos";
 
 import { CabecalhoDaPagina } from "../_componentes/ui/cabecalho";
 import { CARTAO, classesDoBotao } from "../_componentes/ui/classes";
-import { CartaoDeNumero, CartaoDePendencia, type ExemploDePendencia } from "../_componentes/ui/cartao";
+import { CartaoDeNumero } from "../_componentes/ui/cartao";
 import { ChipDaEscala } from "../_componentes/ui/situacao";
-import { CartaoDoEvento, diaEMes, rotuloCurto } from "./_componentes/cartao-do-evento";
+import { CartaoDoEvento } from "./_componentes/cartao-do-evento";
 import { Filtros } from "./_componentes/filtros";
 import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
@@ -96,20 +94,6 @@ function Dia({ dia }: { dia: DiaDoCalendario }) {
   );
 }
 
-function exemplosDaPendencia(eventos: EventoNoCalendario[]): ExemploDePendencia[] {
-  return eventos.map((evento) => ({
-    chave: evento.id,
-    href: `/eventos/${evento.id}`,
-    rotulo: (
-      <>
-        {rotuloCurto(evento)}
-        {evento.poloCodigo && <span className="text-[var(--ds-label-2)]"> · {evento.poloCodigo}</span>}
-      </>
-    ),
-    detalhe: diaEMes(evento.dataInicio),
-  }));
-}
-
 export default async function PaginaCalendario({ searchParams }: { searchParams: Promise<Parametros> }) {
   await exigirAtor();
   const parametros = await searchParams;
@@ -117,41 +101,17 @@ export default async function PaginaCalendario({ searchParams }: { searchParams:
     ...parametros,
     agora: new Date(),
   });
-  const { filtros, resumo, pendencias } = calendario;
+  const { filtros, resumo } = calendario;
 
   return (
     <>
       <CabecalhoDaPagina titulo="Calendário" subtitulo={quandoSincronizou(calendario.ultimaSincronizacao)} />
 
-      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-3">
         <CartaoDeNumero rotulo="Eventos no mês" valor={resumo.eventos} />
         <CartaoDeNumero rotulo="Masterclasses no mês" valor={resumo.masterclasses} />
         <CartaoDeNumero rotulo="Vagas sugeridas" valor={resumo.vagas} />
-        <CartaoDeNumero rotulo="Escalas aprovadas" valor={resumo.escalasAprovadas} de={resumo.eventos} />
       </div>
-
-      <section className="mb-5" aria-labelledby="precisa-de-acao">
-        <h2 id="precisa-de-acao" className="mb-3 text-[17px] font-semibold tracking-[-0.01em]">
-          Precisa de ação
-        </h2>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <CartaoDePendencia
-            titulo="Escalas a montar"
-            explicacao={`Eventos nos próximos ${DIAS_PARA_MONTAR_ESCALA} dias com a escala ainda não aprovada.`}
-            exemplos={exemplosDaPendencia(pendencias.escalasAMontar)}
-          />
-          <CartaoDePendencia
-            titulo="Confronto sem fila"
-            explicacao="Sem o número de pessoas na fila, as vagas de pai e mãe não são calculadas."
-            exemplos={exemplosDaPendencia(pendencias.confrontoSemFila)}
-          />
-          <CartaoDePendencia
-            titulo="Eventos sem código"
-            explicacao="Falta a edição ou o polo no IAM Control, ou outro evento ativo usa o mesmo código."
-            exemplos={exemplosDaPendencia(pendencias.semCodigo)}
-          />
-        </div>
-      </section>
 
       <section className={`${CARTAO} min-w-0 p-4 md:p-5`} aria-label={`Calendário de ${calendario.nomeDoMes}`}>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

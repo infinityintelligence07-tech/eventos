@@ -20,7 +20,7 @@ Especificação das 8 abas que faltam no app do time de eventos, no mesmo visual
 7. Comunicação
 8. Disponibilidade
 9. Pessoas
-10. Logística e SDC
+10. Voos e Hospedagem
 11. Custos
 12. Configurações
 13. Tabela de situações (rótulo, tom e ícone)
@@ -85,7 +85,7 @@ O logo passa a levar para `/inicio` quando a tela Início existir.
 | Comunicação | `/comunicacao` | — |
 | Disponibilidade | `/disponibilidade` | `/disponibilidade/nova`, `/disponibilidade/[enqueteId]` |
 | Pessoas | `/pessoas` | `/pessoas/[pessoaId]` |
-| Logística e SDC | `/logistica/voos` | `/logistica/hospedagem`, `/logistica/caronas`, `/logistica/creditos` |
+| Voos e Hospedagem | `/logistica/voos` | `/logistica/hospedagem`, `/logistica/caronas`, `/logistica/creditos` |
 | Custos | `/custos` | `/custos/nova`; detalhe em painel lateral com `?protocolo=STF-…` |
 | Configurações | `/configuracoes/regras-de-custo` | `/configuracoes/vagas`, `/configuracoes/modelos-de-copy`, `/configuracoes/locais` |
 | (sem item no menu) | `/eventos/[eventoId]` | `/eventos/[eventoId]/escala`, `/comunicacao`, `/logistica`, `/custos` |
@@ -819,7 +819,7 @@ Atalhos: "Abertas | Encerradas | Todas".
 
 ---
 
-## 10. Logística e SDC
+## 10. Voos e Hospedagem
 
 **Objetivo:** organizar como cada pessoa chega e onde dorme: pedidos de voo à SDC (D-90), rooming list, caronas e créditos de hotel.
 A SDC ainda não tem portal: o time registra o pedido, envia pelo canal de sempre e **registra o voo emitido** quando a SDC responder.
@@ -830,7 +830,7 @@ A SDC ainda não tem portal: o time registra o pedido, envia pelo canal de sempr
 **Rotas:** `/logistica/voos` (padrão), `/logistica/hospedagem`, `/logistica/caronas`, `/logistica/creditos`. No evento:
 `/eventos/[id]/logistica` mostra as mesmas seções filtradas pelo evento, uma abaixo da outra.
 
-**Cabeçalho comum:** "Logística e SDC" / "Voos, hospedagem e caronas do staff." + abas **Voos (SDC) | Hospedagem | Caronas | Créditos de hotel** + seletor de evento (padrão "Próximos 90 dias").
+**Cabeçalho comum:** "Voos e Hospedagem" / "Voos, hospedagem e caronas do staff." + abas **Voos (SDC) | Hospedagem | Caronas | Créditos de hotel** + seletor de evento (padrão "Próximos 90 dias").
 
 ### 10.1 Voos (pedidos à SDC)
 

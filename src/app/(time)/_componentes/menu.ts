@@ -7,7 +7,7 @@ export type ItemDoMenu =
   | "Comunicação"
   | "Disponibilidade"
   | "Pessoas"
-  | "Logística e SDC"
+  | "Voos e Hospedagem"
   | "Custos"
   | "Configurações";
 
@@ -19,7 +19,7 @@ export const ROTAS_DO_MENU: { nome: ItemDoMenu; href: string; raiz: string }[] =
   { nome: "Comunicação", href: "/comunicacao", raiz: "/comunicacao" },
   { nome: "Disponibilidade", href: "/disponibilidade", raiz: "/disponibilidade" },
   { nome: "Pessoas", href: "/pessoas", raiz: "/pessoas" },
-  { nome: "Logística e SDC", href: "/logistica/voos", raiz: "/logistica" },
+  { nome: "Voos e Hospedagem", href: "/logistica/voos", raiz: "/logistica" },
   { nome: "Custos", href: "/custos", raiz: "/custos" },
   { nome: "Configurações", href: "/configuracoes/regras-de-custo", raiz: "/configuracoes" },
 ];
@@ -40,7 +40,7 @@ export function rotasDoMenu(ator: Pick<Ator, "perfis">): typeof ROTAS_DO_MENU {
 const ABA_DO_EVENTO: Record<string, ItemDoMenu> = {
   escala: "Escalas",
   comunicacao: "Comunicação",
-  logistica: "Logística e SDC",
+  logistica: "Voos e Hospedagem",
   custos: "Custos",
 };
 
