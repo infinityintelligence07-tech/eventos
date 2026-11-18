@@ -160,7 +160,7 @@ export default async function PaginaPessoa({ params }: { params: Promise<{ pesso
         </h2>
         {pessoa.historico.length === 0 ? (
           <Cartao espacamento="nenhum">
-            <EstadoVazio icone={<History size={32} aria-hidden />} titulo="Ainda não trabalhou em nenhum evento pelo sistema." />
+            <EstadoVazio icone={<History size={32} aria-hidden />} titulo="Ainda não serviu em nenhum evento pelo sistema." />
           </Cartao>
         ) : (
           <Tabela legenda={`Eventos em que ${pessoa.nome} foi escalada, do mais recente para o mais antigo`}>

@@ -61,7 +61,7 @@ export function textoDoConvite({ titulo, fechaEm, eventos }: { titulo: string; f
   });
   return [
     `*${titulo}*`,
-    "Em quais destes eventos você pode trabalhar?",
+    "Em quais destes eventos você pode servir?",
     "",
     ...linhas,
     "",

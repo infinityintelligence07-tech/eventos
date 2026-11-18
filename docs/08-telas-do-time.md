@@ -576,7 +576,7 @@ stateDiagram-v2
 
 **Painel lateral "Adicionar pessoa"** (520 px):
 - Título: "Adicionar pessoa" / subtítulo "Staff líder · 12/11 a 14/11 · 2 vagas abertas".
-- Linha de explicação: "Ordem: quem disse que pode, função habilitada, mais perto do evento e quem trabalhou há mais tempo."
+- Linha de explicação: "Ordem: quem disse que pode, função habilitada, mais perto do evento e quem serviu há mais tempo."
 - Busca por nome + filtros em chips: "Só quem disse que pode" (ligado por padrão quando há enquete), "Só habilitados nesta função".
 - Lista (cartões compactos em `ul`, não tabela — cada item tem várias informações e uma ação):
   ```
@@ -713,18 +713,18 @@ WhatsApp entra numa próxima versão (espaço previsto, sem botão ativo).
 
 ## 8. Disponibilidade
 
-**Objetivo:** perguntar ao staff em quais eventos de um período cada pessoa pode trabalhar e guardar as respostas, que
+**Objetivo:** perguntar ao staff em quais eventos de um período cada pessoa pode servir e guardar as respostas, que
 alimentam a ordem das sugestões na Montar escala. Sem portal do staff, a enquete é divulgada pelo WhatsApp e o time registra as respostas.
 
 ### 8.1 Lista de enquetes
 
 **Rota:** `/disponibilidade`.
 
-**Layout:** cabeçalho "Disponibilidade" / "Pergunte ao staff em quais eventos pode trabalhar." + primário **"Nova enquete"**.
+**Layout:** cabeçalho "Disponibilidade" / "Pergunte ao staff em quais eventos pode servir." + primário **"Nova enquete"**.
 Tabela: Título (link) | Eventos ("6 eventos") | Fecha em ("15/11 às 23:59") | Respostas ("38 de 120 pessoas") | Situação (chip "Aberta" informação / "Encerrada" neutro).
 Atalhos: "Abertas | Encerradas | Todas".
 
-**Estados:** vazio — "Nenhuma enquete ainda." / "Crie uma enquete para saber quem pode trabalhar nos próximos eventos." + "Nova enquete".
+**Estados:** vazio — "Nenhuma enquete ainda." / "Crie uma enquete para saber quem pode servir nos próximos eventos." + "Nova enquete".
 
 ### 8.2 Nova enquete
 
@@ -811,7 +811,7 @@ Atalhos: "Abertas | Encerradas | Todas".
 - **Camiseta e experiência** (editável): Modelo (Camiseta / Baby look), Tamanho (PP a XG), "Já tem a camiseta do staff", "Fez o Confronto", "Tem CNPJ".
 - **Endereço** (somente leitura): cidade/UF e mapa estático com o ponto; rua e número escondidos por padrão com o botão "Mostrar endereço completo" (privacidade). Sem localização: "Endereço sem localização no mapa. A distância até os eventos não é calculada."
 - **Pagamento** (somente leitura): "PIX cadastrado" (sucesso) ou "Sem PIX: os custos desta pessoa ficam travados no financeiro." (atenção). Nunca mostrar a chave PIX inteira nem o CPF.
-- **Histórico** (largura total, tabela): Data | Evento (link) | Função | Situação na escala | Presença. Ordem: mais recente primeiro. Vazio: "Ainda não trabalhou em nenhum evento pelo sistema."
+- **Histórico** (largura total, tabela): Data | Evento (link) | Função | Situação na escala | Presença. Ordem: mais recente primeiro. Vazio: "Ainda não serviu em nenhum evento pelo sistema."
 
 **Estados:** carregando (esqueleto dos cartões); não encontrada ("Pessoa não encontrada." + "Voltar para Pessoas"); erro ao salvar um campo (mensagem no campo, valor mantido).
 

@@ -32,12 +32,12 @@ export default async function PaginaDisponibilidade({ searchParams }: { searchPa
 
   return (
     <>
-      <CabecalhoDaPagina titulo="Disponibilidade" subtitulo="Pergunte ao staff em quais eventos pode trabalhar." acoes={NOVA_ENQUETE} />
+      <CabecalhoDaPagina titulo="Disponibilidade" subtitulo="Pergunte ao staff em quais eventos pode servir." acoes={NOVA_ENQUETE} />
 
       {quantidade.todas === 0 ? (
         <section className="rounded-[var(--ds-radius-lg)] bg-[var(--ds-surface)] shadow-[var(--ds-shadow-1)]">
           <EstadoVazio icone={<CalendarCheck size={32} aria-hidden />} titulo="Nenhuma enquete ainda." nivel="h2" acao={NOVA_ENQUETE}>
-            Crie uma enquete para saber quem pode trabalhar nos próximos eventos.
+            Crie uma enquete para saber quem pode servir nos próximos eventos.
           </EstadoVazio>
         </section>
       ) : (
