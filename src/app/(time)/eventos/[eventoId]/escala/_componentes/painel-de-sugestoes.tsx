@@ -196,7 +196,7 @@ export function PainelDeSugestoes({
       subtitulo={`${sugestoes.nomeDaFuncao} · ${periodoDoEvento} · ${abertas === 1 ? "1 vaga aberta" : `${abertas} vagas abertas`}`}
     >
       <p className="mb-3 text-[13px] text-[var(--ds-label-2)]">
-        Ordem: quem disse que pode, função habilitada, mais perto do evento e quem trabalhou há mais tempo.
+        Ordem: quem disse que pode, função habilitada, mais perto do evento e quem serviu há mais tempo.
       </p>
       <label data-ds-field="" className="mb-2 flex h-10 items-center gap-2 rounded-[10px] border border-[var(--ds-separator)] bg-[var(--ds-surface)] px-3">
         <Search size={18} aria-hidden className="shrink-0 text-[var(--ds-label-2)]" />

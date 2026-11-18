@@ -86,7 +86,7 @@ describe("convite para o WhatsApp", () => {
     expect(texto).toBe(
       [
         "*Eventos de novembro*",
-        "Em quais destes eventos você pode trabalhar?",
+        "Em quais destes eventos você pode servir?",
         "",
         "• CONF_AM_60 · Confronto ed. 60 · 12/11 a 14/11",
         "• Masterclass · 20/11",
