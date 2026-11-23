@@ -33,6 +33,7 @@ export {
   type RespostaGravada,
   rotuloDaResposta,
   type TotalDoEvento,
+  ordenarPorQuemPode,
   podeEmAlgumEvento,
   type RecorteDasRespostas,
 } from "./domain/respostas";
