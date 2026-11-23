@@ -1,5 +1,6 @@
 import { bancoParaLeitura } from "@/fluxos/_base";
 import {
+  caminhoDeResposta,
   criarConsultaDisponibilidade,
   descricaoDoFechamento,
   DIAS_PARA_AVISAR_FECHAMENTO,
@@ -56,6 +57,8 @@ export type EnqueteCarregada = {
   situacao: SituacaoDaEnquete;
   descricaoDoFechamento: string;
   convite: string;
+  /** Endereço em que o próprio staff responde; nulo sem o endereço do site. */
+  linkDeResposta: string | null;
   eventos: EventoDaEnquete[];
   totais: TotalDoEvento[];
   totalDeStaff: number;
@@ -69,7 +72,7 @@ export type EnqueteCarregada = {
 };
 
 /** Nulo = enquete não encontrada. */
-export async function carregarEnquete(enqueteId: string, filtros: FiltrosDaMatriz, agora: Date): Promise<EnqueteCarregada | null> {
+export async function carregarEnquete(enqueteId: string, filtros: FiltrosDaMatriz, agora: Date, enderecoDoSite: string | null = null): Promise<EnqueteCarregada | null> {
   if (!FORMATO_UUID.test(enqueteId)) return null;
   const consulta = criarConsultaDisponibilidade(await bancoParaLeitura());
   const enquete = await consulta.enquete(enqueteId);
@@ -78,6 +81,7 @@ export async function carregarEnquete(enqueteId: string, filtros: FiltrosDaMatri
   const eventoIds = enquete.eventos.map((evento) => evento.id);
   const [staff, respostas, opcoes] = await Promise.all([consulta.staffAtivo(), consulta.respostasDosEventos(eventoIds), consulta.opcoesDeFiltro()]);
   const matriz = montarMatriz(staff, eventoIds, respostas);
+  const linkDeResposta = enderecoDoSite ? `${enderecoDoSite.replace(/\/+$/, "")}${caminhoDeResposta(enquete.id)}` : null;
 
   return {
     id: enquete.id,
@@ -87,7 +91,8 @@ export async function carregarEnquete(enqueteId: string, filtros: FiltrosDaMatri
     reabrirAte: fechaEmPadrao(agora),
     situacao: situacaoDaEnquete(enquete.fechaEm, agora),
     descricaoDoFechamento: descricaoDoFechamento(enquete.fechaEm, agora),
-    convite: textoDoConvite({ titulo: enquete.titulo, fechaEm: enquete.fechaEm, eventos: enquete.eventos }),
+    convite: textoDoConvite({ titulo: enquete.titulo, fechaEm: enquete.fechaEm, eventos: enquete.eventos, link: linkDeResposta }),
+    linkDeResposta,
     eventos: enquete.eventos,
     totais: matriz.totais,
     totalDeStaff: staff.length,

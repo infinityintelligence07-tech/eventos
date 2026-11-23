@@ -1,6 +1,8 @@
 export {
+  caminhoDeResposta,
   descricaoDoFechamento,
   DIAS_PARA_AVISAR_FECHAMENTO,
+  EnqueteFechadaParaRespostaError,
   EnqueteJaEncerradaError,
   EnqueteNaoEncontradaError,
   type EventoDoConvite,
@@ -41,6 +43,8 @@ export {
   encerrarEnqueteSchema,
   type RegistrarDisponibilidade,
   registrarDisponibilidadeSchema,
+  type ResponderEnquete,
+  responderEnqueteSchema,
 } from "./domain/schemas";
 export { diaEHora, diaEmSaoPaulo, periodoCurto } from "./domain/tempo";
 export {
@@ -49,6 +53,8 @@ export {
   encerrarEnquete,
   registrarDisponibilidade,
   type RepositorioEnquete,
+  responderEnquete,
+  type ResultadoDaResposta,
   type ResultadoDoRegistro,
 } from "./service/enquete";
 export { criarRepositorioEnquete } from "./repository/enquete-repository";

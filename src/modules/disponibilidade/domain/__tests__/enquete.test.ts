@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  caminhoDeResposta,
   descricaoDoFechamento,
   fechaEmBreve,
   fechaEmNoCampo,
@@ -12,7 +13,7 @@ import {
   textoDoConvite,
   tituloSugerido,
 } from "../enquete";
-import { abrirEnqueteSchema, alterarEnqueteSchema, registrarDisponibilidadeSchema } from "../schemas";
+import { abrirEnqueteSchema, alterarEnqueteSchema, registrarDisponibilidadeSchema, responderEnqueteSchema } from "../schemas";
 import { instanteDeSaoPaulo } from "../tempo";
 
 const agora = new Date("2026-10-28T15:00:00Z"); // 12:00 em São Paulo
@@ -94,6 +95,24 @@ describe("convite para o WhatsApp", () => {
         "Responda com os eventos em que você pode até 15/11 às 23:59.",
       ].join("\n"),
     );
+  });
+
+  it("com o link, manda responder por ele", () => {
+    const link = `https://eventos.exemplo.test${caminhoDeResposta(ID)}`;
+    const linhas = textoDoConvite({
+      titulo: "Eventos de novembro",
+      fechaEm: new Date("2026-11-16T02:59:00Z"),
+      eventos: [{ codigo: null, nome: "Masterclass", dataInicio: "2026-11-20", dataFim: "2026-11-20" }],
+      link,
+    }).split("\n");
+    expect(linhas.slice(-2)).toEqual(["Responda pelo link até 15/11 às 23:59:", `https://eventos.exemplo.test/responder/${ID}`]);
+  });
+
+  it("resposta da própria pessoa: nenhum evento marcado é resposta válida; repetidos saem", () => {
+    expect(responderEnqueteSchema.parse({ enqueteId: ID })).toEqual({ enqueteId: ID, eventoIds: [] });
+    expect(responderEnqueteSchema.parse({ enqueteId: ID, eventoIds: [OUTRO_ID, OUTRO_ID] }).eventoIds).toEqual([OUTRO_ID]);
+    expect(responderEnqueteSchema.safeParse({ enqueteId: ID, eventoIds: ["x"] }).success).toBe(false);
+    expect(responderEnqueteSchema.safeParse({ enqueteId: "x", eventoIds: [] }).success).toBe(false);
   });
 });
 

@@ -54,7 +54,13 @@ export function periodoPadrao(agora: Date): { de: string; ate: string } {
 export type EventoDoConvite = { codigo: string | null; nome: string; dataInicio: string; dataFim: string };
 
 /** Texto pronto para colar no grupo do staff (só copiar; o WhatsApp fica para depois). */
-export function textoDoConvite({ titulo, fechaEm, eventos }: { titulo: string; fechaEm: Date; eventos: EventoDoConvite[] }): string {
+/** Endereço em que o próprio staff responde a enquete (um por enquete; pede login). */
+export function caminhoDeResposta(enqueteId: string): string {
+  return `/responder/${enqueteId}`;
+}
+
+/** Com `link`, o convite manda responder por ele; sem, pede a resposta na conversa (o time registra). */
+export function textoDoConvite({ titulo, fechaEm, eventos, link }: { titulo: string; fechaEm: Date; eventos: EventoDoConvite[]; link?: string | null }): string {
   const linhas = eventos.map((evento) => {
     const nome = evento.codigo ? `${evento.codigo} · ${evento.nome}` : evento.nome;
     return `• ${nome} · ${periodoCurto(evento.dataInicio, evento.dataFim)}`;
@@ -65,7 +71,7 @@ export function textoDoConvite({ titulo, fechaEm, eventos }: { titulo: string; f
     "",
     ...linhas,
     "",
-    `Responda com os eventos em que você pode até ${diaEHora(fechaEm)}.`,
+    ...(link ? [`Responda pelo link até ${diaEHora(fechaEm)}:`, link] : [`Responda com os eventos em que você pode até ${diaEHora(fechaEm)}.`]),
   ].join("\n");
 }
 
@@ -87,6 +93,14 @@ export class EnqueteJaEncerradaError extends Error {
   constructor(readonly enqueteId: string) {
     super(`enquete ${enqueteId} já encerrada`);
     this.name = "EnqueteJaEncerradaError";
+  }
+}
+
+/** A própria pessoa tentou responder depois do prazo (o time ainda pode registrar por ela). */
+export class EnqueteFechadaParaRespostaError extends Error {
+  constructor(readonly enqueteId: string) {
+    super(`enquete ${enqueteId} fechada para resposta`);
+    this.name = "EnqueteFechadaParaRespostaError";
   }
 }
 

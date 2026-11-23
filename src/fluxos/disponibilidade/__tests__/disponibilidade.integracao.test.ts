@@ -8,10 +8,12 @@ import {
   abrirEnquete,
   alterarEnquete,
   carregarEnquete,
+  carregarEnqueteParaResponder,
   carregarNovaEnquete,
   encerrarEnquete,
   listarEnquetes,
   registrarDisponibilidade,
+  responderEnquete,
   resumoParaInicio,
 } from "..";
 
@@ -203,5 +205,59 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da Disponibilidade no banco", () => 
       href: "/disponibilidade?situacao=abertas",
       exemplos: [{ rotulo: "Fecha logo", detalhe: "Fecha em 03/11 às 12:00", href: `/disponibilidade/${fechaLogo}` }],
     });
+  });
+
+  it("a própria pessoa responde pelo link: grava sem registrado_por, marca o registro e pode alterar até fechar", async () => {
+    const ipr = await evento("IPR ed. 90", "IPR_AM_90", "2026-12-05T03:00:00Z");
+    const trainer = await evento("Trainer ed. 30", "TRN_AM_30", "2026-12-12T03:00:00Z");
+    const enqueteId = await abrirEnquete({ titulo: "Dezembro", fechaEm: new Date("2026-11-20T02:59:00Z"), eventoIds: [ipr, trainer] }, ator(), agora);
+    const { id: usuarioDaAna } = await um(`insert into core.usuario (email) values ('ana@exemplo.test') returning id`);
+    const daAna = { usuarioId: usuarioDaAna!, pessoaId: ana, origem: "LOCAL" as const };
+
+    const antes = (await carregarEnqueteParaResponder(enqueteId, ana, agora))!;
+    expect(antes.respondeu).toBe(false);
+    expect(antes.eventos.map((item) => [item.codigo, item.resposta])).toEqual([
+      ["IPR_AM_90", "SEM_RESPOSTA"],
+      ["TRN_AM_30", "SEM_RESPOSTA"],
+    ]);
+
+    expect(await responderEnquete({ enqueteId, eventoIds: [ipr] }, daAna, agora)).toEqual({ podem: 1, total: 2, mudou: true });
+    const gravadas = (await teste.banco!.sql(
+      `select e.codigo, d.disponivel, d.registrado_por from eventos.disponibilidade d join eventos.evento e on e.id = d.evento_id where d.enquete_id = $1 and d.pessoa_id = $2 order by e.codigo`,
+      [enqueteId, ana],
+    )) as Record<string, unknown>[];
+    expect(gravadas).toEqual([
+      { codigo: "IPR_AM_90", disponivel: true, registrado_por: null },
+      { codigo: "TRN_AM_30", disponivel: false, registrado_por: null },
+    ]);
+    const registros = (await teste.banco!.sql(`select acao, usuario_id, dados from eventos.registro_acao where entidade_id = $1 and em_nome_de_pessoa_id = $2`, [enqueteId, ana])) as Record<string, unknown>[];
+    expect(registros).toHaveLength(2);
+    expect(registros.every((registro) => registro.acao === "RESPOSTA_REGISTRADA" && registro.usuario_id === usuarioDaAna)).toBe(true);
+    expect(registros[0]!.dados).toEqual({ foraDoPrazo: false, propria: true });
+
+    // Na tela do time, a resposta aparece sem o selo de "registrada pelo time".
+    const doTime = (await carregarEnquete(enqueteId, {}, agora))!;
+    expect(doTime.responderam).toBe(1);
+    expect(doTime.respostasPorPessoa[ana]).toEqual({ [ipr]: "PODE", [trainer]: "NAO_PODE" });
+
+    // Volta ao link e troca a resposta.
+    expect(await responderEnquete({ enqueteId, eventoIds: [trainer] }, daAna, agora)).toEqual({ podem: 1, total: 2, mudou: true });
+    const depois = (await carregarEnqueteParaResponder(enqueteId, ana, agora))!;
+    expect(depois.respondeu).toBe(true);
+    expect(depois.eventos.map((item) => item.resposta)).toEqual(["NAO_PODE", "PODE"]);
+    expect(await responderEnquete({ enqueteId, eventoIds: [trainer] }, daAna, agora)).toEqual({ podem: 1, total: 2, mudou: false });
+
+    await expect(responderEnquete({ enqueteId, eventoIds: [asm] }, daAna, agora)).rejects.toEqual(
+      new RegraDeNegocioError("Algum evento não faz parte desta enquete. Recarregue a página."),
+    );
+    await expect(responderEnquete({ enqueteId, eventoIds: [ipr] }, { ...daAna, pessoaId: inativa }, agora)).rejects.toEqual(new RegraDeNegocioError("Seu usuário não está no staff ativo."));
+
+    // Depois do prazo, só o time registra.
+    const fechada = new Date("2026-11-21T00:00:00Z");
+    await expect(responderEnquete({ enqueteId, eventoIds: [ipr] }, daAna, fechada)).rejects.toEqual(
+      new RegraDeNegocioError("Esta enquete já encerrou. Fale com o time de eventos para registrar a sua resposta."),
+    );
+    expect((await carregarEnqueteParaResponder(enqueteId, ana, fechada))!.situacao).toBe("ENCERRADA");
+    expect(await carregarEnqueteParaResponder("nao-e-uuid", ana, agora)).toBeNull();
   });
 });

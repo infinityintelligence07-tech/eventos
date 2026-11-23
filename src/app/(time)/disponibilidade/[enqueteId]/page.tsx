@@ -11,6 +11,7 @@ import { diaEHora, type EventoDaEnquete, periodoCurto, type Resposta, RESPOSTAS,
 import { ChipDaEnquete } from "../_componentes/chip-da-enquete";
 import { AcoesDaEnquete } from "./_componentes/acoes-da-enquete";
 import { PainelDeResposta } from "./_componentes/painel-de-resposta";
+import { enderecoDoSite } from "@/app/(time)/_servidor/endereco-do-site";
 import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 export const dynamic = "force-dynamic";
@@ -72,6 +73,7 @@ export default async function PaginaEnquete({ params, searchParams }: { params: 
       enqueteId,
       { busca: parametros.busca, polo: parametros.polo, funcao: parametros.funcao, soSemResposta: parametros.respostas === "sem-resposta" },
       agora,
+      await enderecoDoSite(),
     ),
     situacaoDaEscrita(),
   ]);
@@ -102,6 +104,7 @@ export default async function PaginaEnquete({ params, searchParams }: { params: 
             enqueteId={enquete.id}
             titulo={enquete.titulo}
             convite={enquete.convite}
+            linkDeResposta={enquete.linkDeResposta}
             situacao={enquete.situacao}
             reabrirAte={enquete.reabrirAte}
             hrefRegistrar={endereco(base, semCriada, { registrar: "nova" })}
@@ -116,7 +119,7 @@ export default async function PaginaEnquete({ params, searchParams }: { params: 
           <Aviso tom="sucesso" className="mb-4">
             Enquete criada. Copie o convite e envie no grupo do staff.
           </Aviso>
-          <Cartao id="convite" titulo="Convite para o WhatsApp" explicacao="Texto pronto para colar no grupo. Só copia; o envio é pelo WhatsApp." acoes={botaoCopiar} className="mb-5">
+          <Cartao id="convite" titulo="Convite para o WhatsApp" explicacao="Texto pronto para colar no grupo, com o link em que cada pessoa responde. Só copia; o envio é pelo WhatsApp." acoes={botaoCopiar} className="mb-5">
             <pre className="overflow-x-auto whitespace-pre-wrap rounded-[var(--ds-radius-md)] bg-[var(--ds-surface-2)] p-4 text-[13px] leading-relaxed">{enquete.convite}</pre>
           </Cartao>
         </>
@@ -147,7 +150,7 @@ export default async function PaginaEnquete({ params, searchParams }: { params: 
       {enquete.responderam === 0 && !comFiltro ? (
         <section className={CARTAO}>
           <EstadoVazio icone={<Inbox size={32} aria-hidden />} titulo="Ninguém respondeu ainda." nivel="h2" acao={botaoCopiar}>
-            Copie o convite e envie no grupo do staff. Registre aqui as respostas que chegarem.
+            Copie o convite e envie no grupo do staff. Cada pessoa responde pelo link; registre aqui as respostas que chegarem por fora.
           </EstadoVazio>
         </section>
       ) : (

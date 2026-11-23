@@ -62,3 +62,17 @@ export const registrarDisponibilidadeSchema = z.object({
 });
 
 export type RegistrarDisponibilidade = z.output<typeof registrarDisponibilidadeSchema>;
+
+/** Resposta da própria pessoa: os eventos marcados são "pode"; os outros da enquete, "não pode". Quem é sai da sessão. */
+export const responderEnqueteSchema = z.object({
+  enqueteId: z.uuid(),
+  eventoIds: z.preprocess(
+    (valor) => (valor === undefined ? [] : Array.isArray(valor) ? valor : [valor]),
+    z
+      .array(z.uuid("Evento inválido."))
+      .max(100, "Até 100 eventos por resposta.")
+      .transform((ids) => [...new Set(ids)]),
+  ),
+});
+
+export type ResponderEnquete = z.output<typeof responderEnqueteSchema>;

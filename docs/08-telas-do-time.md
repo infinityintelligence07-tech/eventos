@@ -724,6 +724,8 @@ alimentam a ordem das sugestões na Montar escala. Sem portal do staff, a enquet
 Tabela: Título (link) | Eventos ("6 eventos") | Fecha em ("15/11 às 23:59") | Respostas ("38 de 120 pessoas") | Situação (chip "Aberta" informação / "Encerrada" neutro).
 Atalhos: "Abertas | Encerradas | Todas".
 
+**Resposta pelo próprio staff (`/responder/[enqueteId]`):** cada enquete tem um link, copiado pelo botão "Copiar link" e incluído no convite. Fora do `(time)`, como "Meu cadastro": pede login e que o usuário seja staff, sem perfil do Eventos. A pessoa marca os eventos em que pode servir (os sem marcar contam como "não posso") e pode alterar até a enquete fechar; depois do prazo, só o time registra. A resposta grava sem `registrado_por` e o `registro_acao` leva `propria: true`.
+
 **Estados:** vazio — "Nenhuma enquete ainda." / "Crie uma enquete para saber quem pode servir nos próximos eventos." + "Nova enquete".
 
 ### 8.2 Nova enquete
