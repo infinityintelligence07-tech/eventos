@@ -1,4 +1,5 @@
 import {
+  EnqueteFechadaParaRespostaError,
   EnqueteJaEncerradaError,
   EnqueteNaoEncontradaError,
   EventoInexistenteError,
@@ -6,6 +7,7 @@ import {
   situacaoDaEnquete,
 } from "../domain/enquete";
 import {
+  EventoForaDaEnqueteError,
   type MudancaDeResposta,
   PessoaForaDaEnqueteError,
   planoDoRegistro,
@@ -25,7 +27,8 @@ export type RepositorioEnquete = {
   /** Nome do staff ativo (pessoa_evento + core.pessoa ativa); nulo se não for. */
   staffAtivo(pessoaId: string): Promise<{ nome: string } | null>;
   respostasDaPessoa(pessoaId: string, eventoIds: string[]): Promise<Map<string, RespostaAtual>>;
-  gravarResposta(dados: { enqueteId: string; eventoId: string; pessoaId: string; disponivel: boolean; instante: Date; registradoPor: string }): Promise<void>;
+  /** `registradoPor` nulo = a própria pessoa respondeu. */
+  gravarResposta(dados: { enqueteId: string; eventoId: string; pessoaId: string; disponivel: boolean; instante: Date; registradoPor: string | null }): Promise<void>;
   apagarResposta(eventoId: string, pessoaId: string): Promise<void>;
   registrarMudanca(dados: {
     enqueteId: string;
@@ -34,9 +37,11 @@ export type RepositorioEnquete = {
     mudanca: MudancaDeResposta;
     para: Resposta;
     foraDoPrazo: boolean;
+    /** A própria pessoa respondeu pelo link. */
+    propria?: boolean;
   }): Promise<void>;
   /** O registro pedido não mudou nada: fica a trilha de quem conferiu (toda escrita registra, docs/09 §7.2). */
-  registrarSemMudanca(dados: { enqueteId: string; pessoaId: string; usuarioId: string }): Promise<void>;
+  registrarSemMudanca(dados: { enqueteId: string; pessoaId: string; usuarioId: string; propria?: boolean }): Promise<void>;
   registrarEnquete(dados: {
     enqueteId: string;
     acao: "ENQUETE_ABERTA" | "ENQUETE_ALTERADA" | "ENQUETE_REABERTA" | "ENQUETE_ENCERRADA";
@@ -113,23 +118,8 @@ export async function registrarDisponibilidade(
   const staff = await repo.staffAtivo(pessoaId);
   if (!staff) throw new PessoaForaDaEnqueteError(pessoaId);
 
-  const atuais = await repo.respostasDaPessoa(
-    pessoaId,
-    respostas.map((resposta) => resposta.eventoId),
-  );
-  const mudancas = planoDoRegistro({ enqueteId, eventosDaEnquete: enquete.eventoIds, atuais, pedidas: respostas });
   const foraDoPrazo = situacaoDaEnquete(enquete.fechaEm, agora) === "ENCERRADA";
-
-  for (const mudanca of mudancas) {
-    if (mudanca.tipo === "GRAVAR") {
-      await repo.gravarResposta({ enqueteId, eventoId: mudanca.eventoId, pessoaId, disponivel: mudanca.disponivel, instante: agora, registradoPor: usuarioId });
-    } else {
-      await repo.apagarResposta(mudanca.eventoId, pessoaId);
-    }
-    const para = mudanca.tipo === "GRAVAR" ? respostaDe(mudanca.disponivel) : "SEM_RESPOSTA";
-    await repo.registrarMudanca({ enqueteId, pessoaId, usuarioId, mudanca, para, foraDoPrazo });
-  }
-  if (mudancas.length === 0) await repo.registrarSemMudanca({ enqueteId, pessoaId, usuarioId });
+  const mudancas = await aplicarRespostas(repo, { enqueteId, eventosDaEnquete: enquete.eventoIds, pessoaId, respostas, usuarioId, agora, foraDoPrazo, propria: false });
 
   return {
     nome: staff.nome,
@@ -137,4 +127,71 @@ export async function registrarDisponibilidade(
     apagadas: mudancas.filter((mudanca) => mudanca.tipo === "APAGAR").length,
     foraDoPrazo,
   };
+}
+
+/** Grava o que mudou e registra cada mudança (ou a conferência sem mudança). Devolve as mudanças aplicadas. */
+async function aplicarRespostas(
+  repo: RepositorioEnquete,
+  {
+    enqueteId,
+    eventosDaEnquete,
+    pessoaId,
+    respostas,
+    usuarioId,
+    agora,
+    foraDoPrazo,
+    propria,
+  }: {
+    enqueteId: string;
+    eventosDaEnquete: string[];
+    pessoaId: string;
+    respostas: { eventoId: string; resposta: Resposta }[];
+    usuarioId: string;
+    agora: Date;
+    foraDoPrazo: boolean;
+    propria: boolean;
+  },
+): Promise<MudancaDeResposta[]> {
+  const atuais = await repo.respostasDaPessoa(
+    pessoaId,
+    respostas.map((resposta) => resposta.eventoId),
+  );
+  const mudancas = planoDoRegistro({ enqueteId, eventosDaEnquete, atuais, pedidas: respostas });
+
+  for (const mudanca of mudancas) {
+    if (mudanca.tipo === "GRAVAR") {
+      await repo.gravarResposta({ enqueteId, eventoId: mudanca.eventoId, pessoaId, disponivel: mudanca.disponivel, instante: agora, registradoPor: propria ? null : usuarioId });
+    } else {
+      await repo.apagarResposta(mudanca.eventoId, pessoaId);
+    }
+    const para = mudanca.tipo === "GRAVAR" ? respostaDe(mudanca.disponivel) : "SEM_RESPOSTA";
+    await repo.registrarMudanca({ enqueteId, pessoaId, usuarioId, mudanca, para, foraDoPrazo, ...(propria ? { propria } : {}) });
+  }
+  if (mudancas.length === 0) await repo.registrarSemMudanca({ enqueteId, pessoaId, usuarioId, ...(propria ? { propria } : {}) });
+  return mudancas;
+}
+
+export type ResultadoDaResposta = { podem: number; total: number; mudou: boolean };
+
+/**
+ * A própria pessoa responde pelo link: só com a enquete aberta. Os eventos marcados viram "pode" e os outros da
+ * enquete, "não pode"; `registrado_por` fica nulo.
+ */
+export async function responderEnquete(
+  repo: RepositorioEnquete,
+  { enqueteId, pessoaId, eventoIds, usuarioId, agora }: { enqueteId: string; pessoaId: string; eventoIds: string[]; usuarioId: string; agora: Date },
+): Promise<ResultadoDaResposta> {
+  const enquete = await repo.travarEnquete(enqueteId);
+  if (!enquete) throw new EnqueteNaoEncontradaError(enqueteId);
+  if (situacaoDaEnquete(enquete.fechaEm, agora) === "ENCERRADA") throw new EnqueteFechadaParaRespostaError(enqueteId);
+  if (!(await repo.staffAtivo(pessoaId))) throw new PessoaForaDaEnqueteError(pessoaId);
+
+  const daEnquete = new Set(enquete.eventoIds);
+  const fora = eventoIds.filter((eventoId) => !daEnquete.has(eventoId));
+  if (fora.length > 0) throw new EventoForaDaEnqueteError(fora);
+
+  const marcados = new Set(eventoIds);
+  const respostas = enquete.eventoIds.map((eventoId) => ({ eventoId, resposta: (marcados.has(eventoId) ? "PODE" : "NAO_PODE") as Resposta }));
+  const mudancas = await aplicarRespostas(repo, { enqueteId, eventosDaEnquete: enquete.eventoIds, pessoaId, respostas, usuarioId, agora, foraDoPrazo: false, propria: true });
+  return { podem: marcados.size, total: enquete.eventoIds.length, mudou: mudancas.length > 0 };
 }

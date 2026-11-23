@@ -19,6 +19,7 @@ export function AcoesDaEnquete({
   enqueteId,
   titulo,
   convite,
+  linkDeResposta,
   situacao,
   reabrirAte,
   hrefRegistrar,
@@ -27,6 +28,7 @@ export function AcoesDaEnquete({
   enqueteId: string;
   titulo: string;
   convite: string;
+  linkDeResposta: string | null;
   situacao: SituacaoDaEnquete;
   reabrirAte: string;
   hrefRegistrar: string;
@@ -41,6 +43,11 @@ export function AcoesDaEnquete({
       <BotaoCopiar texto={convite} mensagem="Convite copiado. Cole no grupo do staff.">
         Copiar convite
       </BotaoCopiar>
+      {linkDeResposta && (
+        <BotaoCopiar texto={linkDeResposta} mensagem="Link copiado. Quem abrir responde com a própria conta.">
+          Copiar link
+        </BotaoCopiar>
+      )}
       {!somenteLeitura && situacao === "ABERTA" && (
         <Botao icone={<CirclePause size={18} aria-hidden />} onClick={() => encerrar.setAberto(true)}>
           Encerrar agora

@@ -540,3 +540,9 @@ a[class*="situacao-"]:hover {
     display: none;
   }
 }
+
+/* Resposta da enquete pelo staff: evento em duas linhas (nome e data). */
+.resposta-evento { align-items: flex-start; height: auto; padding: 10px 12px; }
+.resposta-evento input { margin-top: 2px; }
+.resposta-evento span { display: grid; gap: 2px; min-width: 0; }
+.resposta-evento small { font-size: 12.5px; font-weight: 500; }

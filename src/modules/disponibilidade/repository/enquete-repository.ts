@@ -83,7 +83,7 @@ export function criarRepositorioEnquete(executor: Executor): RepositorioEnquete 
       await executor.delete(disponibilidade).where(and(eq(disponibilidade.eventoId, eventoId), eq(disponibilidade.pessoaId, pessoaId)));
     },
 
-    async registrarMudanca({ enqueteId, pessoaId, usuarioId, mudanca, para, foraDoPrazo }) {
+    async registrarMudanca({ enqueteId, pessoaId, usuarioId, mudanca, para, foraDoPrazo, propria }) {
       await registrarAcao(executor, {
         entidade: "DISPONIBILIDADE",
         entidadeId: enqueteId,
@@ -93,17 +93,18 @@ export function criarRepositorioEnquete(executor: Executor): RepositorioEnquete 
         statusPara: para,
         emNomeDePessoaId: pessoaId,
         usuarioId,
-        dados: { foraDoPrazo },
+        dados: { foraDoPrazo, ...(propria ? { propria: true } : {}) },
       });
     },
 
-    async registrarSemMudanca({ enqueteId, pessoaId, usuarioId }) {
+    async registrarSemMudanca({ enqueteId, pessoaId, usuarioId, propria }) {
       await registrarAcao(executor, {
         entidade: "DISPONIBILIDADE",
         entidadeId: enqueteId,
         acao: "RESPOSTAS_SEM_MUDANCA",
         emNomeDePessoaId: pessoaId,
         usuarioId,
+        ...(propria ? { dados: { propria: true } } : {}),
       });
     },
 
