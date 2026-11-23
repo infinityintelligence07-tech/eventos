@@ -110,6 +110,19 @@ export function normalizarBusca(texto: string): string {
     .trim();
 }
 
+/** Quem disse que pode vem primeiro (mais eventos antes), depois quem não pode, por último quem não respondeu. Empate mantém a ordem recebida. */
+export function ordenarPorQuemPode(linhas: LinhaDaMatriz[]): LinhaDaMatriz[] {
+  const peso = (linha: LinhaDaMatriz): number => {
+    const podem = Object.values(linha.respostas).filter((resposta) => resposta === "PODE").length;
+    if (podem > 0) return -podem;
+    return linha.respondeu ? 1 : 2;
+  };
+  return linhas
+    .map((linha, posicao) => ({ linha, posicao, peso: peso(linha) }))
+    .sort((a, b) => a.peso - b.peso || a.posicao - b.posicao)
+    .map((item) => item.linha);
+}
+
 export function filtrarLinhas(linhas: LinhaDaMatriz[], filtros: FiltrosDaMatriz): LinhaDaMatriz[] {
   const busca = filtros.busca ? normalizarBusca(filtros.busca) : "";
   return linhas.filter(

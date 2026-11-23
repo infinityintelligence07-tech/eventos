@@ -13,6 +13,7 @@ import {
   type LinhaDaMatriz,
   montarMatriz,
   type OpcoesDaDisponibilidade,
+  ordenarPorQuemPode,
   periodoPadrao,
   podeEmAlgumEvento,
   type Resposta,
@@ -66,7 +67,7 @@ export type EnqueteCarregada = {
   responderam: number;
   /** Pessoas que marcaram "posso" em pelo menos um evento da enquete. */
   podem: number;
-  /** Linhas depois dos filtros. */
+  /** Linhas depois dos filtros, com quem disse que pode primeiro. */
   linhas: LinhaDaMatriz[];
   /** Todo o staff, para o painel "Registrar resposta" (só nome e função, sem telefone). */
   pessoas: PessoaDoRegistro[];
@@ -101,7 +102,7 @@ export async function carregarEnquete(enqueteId: string, filtros: FiltrosDaMatri
     totalDeStaff: staff.length,
     responderam: matriz.responderam,
     podem: matriz.linhas.filter(podeEmAlgumEvento).length,
-    linhas: filtrarLinhas(matriz.linhas, filtros),
+    linhas: ordenarPorQuemPode(filtrarLinhas(matriz.linhas, filtros)),
     pessoas: staff.map((pessoa) => ({ pessoaId: pessoa.pessoaId, nome: pessoa.nome, funcoes: pessoa.funcoes.map((funcao) => funcao.nome).join(", ") })),
     respostasPorPessoa: Object.fromEntries(matriz.linhas.map((linha) => [linha.pessoa.pessoaId, linha.respostas])),
     opcoes: { polos: opcoes.polos, funcoes: opcoes.funcoes },

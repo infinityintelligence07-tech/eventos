@@ -750,7 +750,7 @@ Atalhos: "Abertas | Encerradas | Todas".
 **Layout:**
 1. Cabeçalho: título da enquete; subtítulo "Fecha em 15/11 às 23:59 · 38 de 120 pessoas responderam". Ações: secundário "Copiar convite", secundário "Encerrar agora" (ou "Reabrir" se encerrada), primário **"Registrar resposta"**.
 2. Cartões de número por evento (linha rolável se passar de 4): "CONF_AM_60 · 12/11 — 24 podem".
-3. Filtros: busca por nome, Polo/cidade, Função, atalhos "Quem pode (N) | Só quem não respondeu (N) | Todas (N)". A tela abre em "Quem pode": só aparece quem marcou que pode em pelo menos um evento da enquete.
+3. Filtros: busca por nome, Polo/cidade, Função, atalhos "Quem pode (N) | Só quem não respondeu (N) | Todas (N)". A tela abre em "Quem pode": só aparece quem marcou que pode em pelo menos um evento da enquete. Em qualquer atalho a lista vem com quem pode primeiro, depois quem não pode e por último quem não respondeu (nome só desempata).
 4. **Matriz** (tabela): linhas = pessoas, colunas = eventos. Célula: `Check` + "Pode" (sucesso), `X` + "Não pode" (perigo), "—" + `sr-only` "Sem resposta" (neutro). Primeira coluna fixa com nome + selo "Registrado pelo time" quando for o caso. Última coluna: "Registrar" (botão pequeno).
    Linha de totais no rodapé (`tfoot`): "24 podem · 6 não podem" por evento.
 

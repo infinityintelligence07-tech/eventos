@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   EventoForaDaEnqueteError,
   filtrarLinhas,
+  ordenarPorQuemPode,
   montarMatriz,
   type PessoaDaEnquete,
   planoDoRegistro,
@@ -67,6 +68,12 @@ describe("matriz pessoa × evento", () => {
 
   it("selo 'Registrado pelo time' com a data da última resposta registrada pelo time", () => {
     expect(matriz.linhas.map((linha) => linha.registradoPeloTimeEm?.toISOString() ?? null)).toEqual(["2026-10-21T12:00:00.000Z", null, null]);
+  });
+
+  it("quem pode vem primeiro, depois quem não pode, por último quem não respondeu", () => {
+    const outra = montarMatriz([ana, bruno, carla], ["e1", "e2"], [resposta("p1", "e1", false), resposta("p3", "e1", true), resposta("p3", "e2", true)]);
+    expect(ordenarPorQuemPode(outra.linhas).map((linha) => linha.pessoa.pessoaId)).toEqual(["p3", "p1", "p2"]);
+    expect(ordenarPorQuemPode(matriz.linhas).map((linha) => linha.pessoa.pessoaId)).toEqual(["p1", "p2", "p3"]);
   });
 
   it.each<[Parameters<typeof filtrarLinhas>[1], string[]]>([
