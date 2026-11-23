@@ -5,10 +5,12 @@ import Link from "next/link";
 import {
   AtalhosDeFiltro,
   BarraDeFiltros,
+  BotaoCopiar,
   BotaoLink,
   BuscaDeFiltro,
   CabecalhoDaPagina,
   CARTAO,
+  Cartao,
   Chip,
   EstadoVazio,
   formatar,
@@ -19,6 +21,7 @@ import { listarPessoas } from "@/fluxos/pessoas";
 import { lerFiltrosDaLista, limiteDaLista, PAGINA_DA_LISTA, rotuloDaCamiseta, rotuloDaFuncao, rotuloDoVeiculo, rotuloSimNao } from "@/modules/pessoas";
 
 import { ChipDoCadastro } from "./_componentes/chip-do-cadastro";
+import { enderecoDoSite } from "@/app/(time)/_servidor/endereco-do-site";
 import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 export const dynamic = "force-dynamic";
@@ -45,10 +48,27 @@ export default async function PaginaPessoas({ searchParams }: { searchParams: Pr
   const limite = limiteDaLista(parametros.limite);
   const { pessoas, totalDoStaff, opcoes } = await listarPessoas(filtros, new Date());
   const visiveis = pessoas.slice(0, limite);
+  const site = await enderecoDoSite();
+  const linkDoCadastro = site ? `${site}/meu-cadastro` : null;
 
   return (
     <>
       <CabecalhoDaPagina titulo="Pessoas" subtitulo="Staff que pode ser escalado nos eventos." />
+
+      {linkDoCadastro && (
+        <Cartao
+          titulo="Link do cadastro do staff"
+          explicacao="Envie para o staff. Cada pessoa entra com a própria conta e preenche polo, camiseta, funções, endereço e carro."
+          acoes={
+            <BotaoCopiar texto={linkDoCadastro} mensagem="Link copiado. Envie para o staff.">
+              Copiar link
+            </BotaoCopiar>
+          }
+          className="mb-5"
+        >
+          <p className="break-all rounded-[var(--ds-radius-md)] bg-[var(--ds-surface-2)] px-4 py-3 text-[13px]">{linkDoCadastro}</p>
+        </Cartao>
+      )}
 
       {totalDoStaff === 0 ? (
         <section className={CARTAO}>
