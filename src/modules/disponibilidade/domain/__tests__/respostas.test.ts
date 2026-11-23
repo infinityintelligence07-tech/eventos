@@ -74,8 +74,9 @@ describe("matriz pessoa × evento", () => {
     [{ busca: "ana luc" }, ["p1"]],
     [{ polo: "POA" }, ["p2"]],
     [{ funcao: "STAFF" }, ["p1"]],
-    [{ soSemResposta: true }, ["p3"]],
-    [{ busca: "c", soSemResposta: true }, ["p3"]],
+    [{ respostas: "sem-resposta" }, ["p3"]],
+    [{ busca: "c", respostas: "sem-resposta" }, ["p3"]],
+    [{ respostas: "podem" }, ["p1", "p2"]],
   ])("filtros %o", (filtros, esperadas) => {
     expect(filtrarLinhas(matriz.linhas, filtros).map((linha) => linha.pessoa.pessoaId)).toEqual(esperadas);
   });

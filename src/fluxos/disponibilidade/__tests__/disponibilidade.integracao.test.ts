@@ -139,7 +139,9 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da Disponibilidade no banco", () => 
       { eventoId: asm, podem: 0, naoPodem: 1, semResposta: 1 },
     ]);
     expect(carregada.convite).toContain("• CONF_AM_60 · Confronto ed. 60 · 12/11 a 13/11");
-    expect((await carregarEnquete(enqueteId, { soSemResposta: true }, agora))!.linhas.map((linha) => linha.pessoa.nome)).toEqual(["Bruno Teste"]);
+    expect((await carregarEnquete(enqueteId, { respostas: "sem-resposta" }, agora))!.linhas.map((linha) => linha.pessoa.nome)).toEqual(["Bruno Teste"]);
+    expect((await carregarEnquete(enqueteId, { respostas: "podem" }, agora))!.linhas.map((linha) => linha.pessoa.nome)).toEqual(["Ana Teste"]);
+    expect(carregada.podem).toBe(1);
 
     // Mesma resposta não grava de novo; "Sem resposta" apaga.
     const segunda = await registrarDisponibilidade(

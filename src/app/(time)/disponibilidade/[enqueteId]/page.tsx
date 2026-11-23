@@ -6,7 +6,7 @@ import { AtalhosDeFiltro, Aviso, BarraDeFiltros, BotaoCopiar, BotaoLink, BuscaDe
 import { CabecaDaTabela, CelulaDaTabela, ColunaDaTabela, LinhaDaTabela, Tabela } from "@/app/(time)/_componentes/ui/tabela";
 import { situacaoDaEscrita } from "@/fluxos/_base";
 import { carregarEnquete } from "@/fluxos/disponibilidade";
-import { diaEHora, type EventoDaEnquete, periodoCurto, type Resposta, RESPOSTAS, rotuloDaResposta } from "@/modules/disponibilidade";
+import { diaEHora, type EventoDaEnquete, periodoCurto, type RecorteDasRespostas, type Resposta, RESPOSTAS, rotuloDaResposta } from "@/modules/disponibilidade";
 
 import { ChipDaEnquete } from "../_componentes/chip-da-enquete";
 import { AcoesDaEnquete } from "./_componentes/acoes-da-enquete";
@@ -28,6 +28,12 @@ function endereco(base: string, parametros: Parametros, mudancas: Partial<Record
   }
   const texto = proximos.toString();
   return texto ? `${base}?${texto}` : base;
+}
+
+/** Sem nada no endereço a tela mostra só quem pode; "todas" abre o staff inteiro. */
+function recorteDasRespostas(valor: string | undefined): RecorteDasRespostas | null {
+  if (valor === "todas") return null;
+  return valor === "sem-resposta" ? "sem-resposta" : "podem";
 }
 
 function nomeDoEvento(evento: EventoDaEnquete): string {
@@ -68,10 +74,11 @@ export default async function PaginaEnquete({ params, searchParams }: { params: 
   await exigirAtor();
   const [{ enqueteId }, parametros] = await Promise.all([params, searchParams]);
   const agora = new Date();
+  const recorte = recorteDasRespostas(parametros.respostas);
   const [enquete, escrita] = await Promise.all([
     carregarEnquete(
       enqueteId,
-      { busca: parametros.busca, polo: parametros.polo, funcao: parametros.funcao, soSemResposta: parametros.respostas === "sem-resposta" },
+      { busca: parametros.busca, polo: parametros.polo, funcao: parametros.funcao, respostas: recorte },
       agora,
       await enderecoDoSite(),
     ),
@@ -166,19 +173,28 @@ export default async function PaginaEnquete({ params, searchParams }: { params: 
               nome="respostas"
               rotulo="Respostas"
               opcoes={[
-                { valor: null, rotulo: "Todas" },
+                { valor: null, rotulo: "Quem pode", quantidade: enquete.podem },
                 { valor: "sem-resposta", rotulo: "Só quem não respondeu", quantidade: enquete.totalDeStaff - enquete.responderam },
+                { valor: "todas", rotulo: "Todas", quantidade: enquete.totalDeStaff },
               ]}
             />
           </BarraDeFiltros>
 
           {enquete.linhas.length === 0 ? (
             <section className={CARTAO}>
-              <EstadoVazio titulo="Nenhuma pessoa com esses filtros.">
-                <BotaoLink href={base} variante="texto">
-                  Limpar filtros
-                </BotaoLink>
-              </EstadoVazio>
+              {comFiltro ? (
+                <EstadoVazio titulo="Nenhuma pessoa com esses filtros.">
+                  <BotaoLink href={base} variante="texto">
+                    Limpar filtros
+                  </BotaoLink>
+                </EstadoVazio>
+              ) : (
+                <EstadoVazio titulo="Ninguém marcou que pode ainda.">
+                  <BotaoLink href={endereco(base, semCriada, { respostas: "todas" })} variante="texto">
+                    Ver todas as respostas
+                  </BotaoLink>
+                </EstadoVazio>
+              )}
             </section>
           ) : (
             <Tabela legenda={`Respostas de cada pessoa por evento — ${enquete.titulo}`} larguraMinima="min-w-[720px]" noCelular="rolagem">

@@ -93,7 +93,14 @@ export function montarMatriz(pessoas: PessoaDaEnquete[], eventoIds: string[], re
   return { linhas, totais: [...totais.values()], responderam: linhas.filter((linha) => linha.respondeu).length };
 }
 
-export type FiltrosDaMatriz = { busca?: string | null; polo?: string | null; funcao?: string | null; soSemResposta?: boolean };
+/** "podem" = marcou "posso" em pelo menos um evento da enquete. Sem valor = todo o staff. */
+export type RecorteDasRespostas = "podem" | "sem-resposta";
+
+export type FiltrosDaMatriz = { busca?: string | null; polo?: string | null; funcao?: string | null; respostas?: RecorteDasRespostas | null };
+
+export function podeEmAlgumEvento(linha: LinhaDaMatriz): boolean {
+  return Object.values(linha.respostas).includes("PODE");
+}
 
 export function normalizarBusca(texto: string): string {
   return texto
@@ -110,7 +117,8 @@ export function filtrarLinhas(linhas: LinhaDaMatriz[], filtros: FiltrosDaMatriz)
       (!busca || normalizarBusca(linha.pessoa.nome).includes(busca)) &&
       (!filtros.polo || linha.pessoa.poloCodigo === filtros.polo) &&
       (!filtros.funcao || linha.pessoa.funcoes.some((funcao) => funcao.codigo === filtros.funcao)) &&
-      (!filtros.soSemResposta || !linha.respondeu),
+      (filtros.respostas !== "sem-resposta" || !linha.respondeu) &&
+      (filtros.respostas !== "podem" || podeEmAlgumEvento(linha)),
   );
 }
 
