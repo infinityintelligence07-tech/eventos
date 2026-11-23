@@ -33,6 +33,8 @@ export {
   type RespostaGravada,
   rotuloDaResposta,
   type TotalDoEvento,
+  podeEmAlgumEvento,
+  type RecorteDasRespostas,
 } from "./domain/respostas";
 export {
   type AbrirEnquete,
