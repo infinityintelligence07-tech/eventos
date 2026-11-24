@@ -120,7 +120,8 @@ export const convocacao = eventosSchema.table(
       .notNull()
       .references(() => pessoa.id, { onDelete: "cascade" }),
     // GH usa ACEITA/RECUSADA; o Eventos acrescenta SUGERIDA, CONVIDADA e CANCELADA.
-    // Ativa (ocupa a vaga): SUGERIDA, CONVIDADA, ACEITA.
+    // Ativa (ocupa a vaga): SUGERIDA, CONVIDADA, ACEITA. Desde a 0013 quem entra na escala já entra ACEITA (a tela não
+    // pede mais situação); SUGERIDA e CONVIDADA continuam aceitas pelo CHECK, mas o Eventos não grava mais.
     status: text("status").notNull(),
     respondidaEm: timestamp("respondida_em", { withTimezone: true }),
     convidadaEm: timestamp("convidada_em", { withTimezone: true }),
@@ -130,6 +131,9 @@ export const convocacao = eventosSchema.table(
     distanciaKm: numeric("distancia_km", { precision: 7, scale: 1 }),
     tempoTrajetoMin: integer("tempo_trajeto_min"),
     montagem: boolean("montagem").notNull().default(false),
+    // Marcado pelo time ao montar a escala: a pessoa vai precisar de hotel. É a lista de quem a Hospedagem aloca em quarto.
+    // Vale para a pessoa no evento: fica na convocação principal.
+    precisaHotel: boolean("precisa_hotel").notNull().default(false),
     // Uma pessoa pode ter mais de uma função no evento. A convocação principal é a única que carrega o que é da pessoa
     // no evento (deslocamento, carona, quarto, voo, custo, copy). Entre as ativas da pessoa no evento, só uma é principal.
     principal: boolean("principal").notNull().default(true),
@@ -152,7 +156,7 @@ export const convocacao = eventosSchema.table(
     index("convocacao_registrado_por_idx").on(table.registradoPor),
     check(
       "convocacao_deslocamento_check",
-      sql`${table.deslocamento} IS NULL OR ${table.deslocamento} IN ('CARRO_PROPRIO', 'CARONA', 'CARRO_IAM', 'UBER', 'ONIBUS', 'VOO', 'MOTO', 'A_PE', 'NAO_SE_APLICA')`,
+      sql`${table.deslocamento} IS NULL OR ${table.deslocamento} IN ('CARRO_PROPRIO', 'CARONA', 'CARRO_IAM', 'UBER', 'ONIBUS', 'VOO')`,
     ),
     check(
       "convocacao_status_check",

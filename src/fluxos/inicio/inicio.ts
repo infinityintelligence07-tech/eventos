@@ -62,7 +62,6 @@ const ORDEM_DOS_CARTOES = [
   "escalas-aguardando-aprovacao",
   "escalas-devolvidas",
   "escalas-a-montar",
-  "escalas-sem-resposta",
   "comunicacao-desatualizadas",
   "confronto-sem-fila",
   "eventos-sem-codigo",

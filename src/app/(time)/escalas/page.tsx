@@ -1,19 +1,18 @@
-import { CircleCheck, CircleX, Clock, Hourglass } from "lucide-react";
+import { Hourglass } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { listarEscalas, pendenciasDasEscalas, PERIODOS_DA_LISTA } from "@/fluxos/escalas";
-import { DIAS_PARA_MONTAR_ESCALA, type EventoNoCalendario } from "@/modules/eventos";
+import { type EscalaAMontar, escalasAMontar, listarEscalas, PERIODOS_DA_LISTA } from "@/fluxos/escalas";
+import { DIAS_PARA_MONTAR_ESCALA } from "@/modules/eventos";
 
 import { AtalhosDeFiltro, BarraDeFiltros, BuscaDeFiltro, SeletorDeFiltro } from "../_componentes/ui/barra-de-filtros";
 import { BotaoLink } from "../_componentes/ui/botao-link";
 import { CabecalhoDaPagina } from "../_componentes/ui/cabecalho";
-import { Cartao, CartaoDePendencia, type ExemploDePendencia } from "../_componentes/ui/cartao";
+import { Cartao } from "../_componentes/ui/cartao";
 import { EstadoVazio } from "../_componentes/ui/estados";
-import { nomeCurtoDoEvento as nomeCurto, periodo } from "../_componentes/ui/formatos";
+import { dataCurta, nomeCurtoDoEvento as nomeCurto, periodo, quantidadeDe } from "../_componentes/ui/formatos";
 import { ChipDaEscala } from "../_componentes/ui/situacao";
 import { CabecaDaTabela, CelulaDaTabela, ColunaDaTabela, LinhaDaTabela, Tabela } from "../_componentes/ui/tabela";
-import { diaEMes, rotuloCurto } from "../calendario/_componentes/cartao-do-evento";
 import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 export const dynamic = "force-dynamic";
@@ -30,24 +29,51 @@ function acaoDaLinha(statusEscala: string, status: string): string {
   return "Ver";
 }
 
-function exemplosDaPendencia(eventos: EventoNoCalendario[], destino: "" | "/escala" = ""): ExemploDePendencia[] {
-  return eventos.map((evento) => ({
-    chave: evento.id,
-    href: `/eventos/${evento.id}${destino}`,
-    rotulo: (
-      <>
-        {rotuloCurto(evento)}
-        {evento.poloCodigo && <span className="text-[var(--ds-label-2)]"> · {evento.poloCodigo}</span>}
-      </>
-    ),
-    detalhe: diaEMes(evento.dataInicio),
-  }));
+const ROTULO_DO_DADO = "text-[12px] text-[var(--ds-label-2)]";
+
+/** Um evento do cartão "Escalas a montar": nome, código, início, término, local (se houver) e vagas. */
+function EventoAMontar({ evento }: { evento: EscalaAMontar }) {
+  return (
+    <li className="min-w-0 rounded-[var(--ds-radius-md)] border border-[var(--ds-separator)] p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <p className="min-w-0">
+          <Link href={`/eventos/${evento.id}/escala`} className="font-medium text-[var(--ds-tint-text)] hover:underline">
+            {nomeCurto(evento)}
+          </Link>
+          <span className="block text-[12px] text-[var(--ds-label-2)] [font-family:var(--ds-font-mono)]">{evento.codigo ?? "sem código"}</span>
+        </p>
+        <ChipDaEscala situacao={evento.statusEscala} />
+      </div>
+      <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[13px]">
+        <div>
+          <dt className={ROTULO_DO_DADO}>Início</dt>
+          <dd className="tabular-nums">{dataCurta(evento.dataInicio)}</dd>
+        </div>
+        <div>
+          <dt className={ROTULO_DO_DADO}>Término</dt>
+          <dd className="tabular-nums">{dataCurta(evento.dataFim)}</dd>
+        </div>
+        {evento.local && (
+          <div className="col-span-2">
+            <dt className={ROTULO_DO_DADO}>Local</dt>
+            <dd>
+              {evento.local.nome} · {evento.local.cidade} ({evento.local.uf})
+            </dd>
+          </div>
+        )}
+        <div className="col-span-2">
+          <dt className={ROTULO_DO_DADO}>Vagas preenchidas</dt>
+          <dd className="tabular-nums">{evento.vagas > 0 ? quantidadeDe(evento.preenchidas, evento.vagas) : "Sem vagas ainda"}</dd>
+        </div>
+      </dl>
+    </li>
+  );
 }
 
 export default async function PaginaEscalas({ searchParams }: Parametros) {
   await exigirAtor();
   const agora = new Date();
-  const [lista, pendencias] = await Promise.all([listarEscalas(await searchParams, agora), pendenciasDasEscalas(agora)]);
+  const [lista, aMontar] = await Promise.all([listarEscalas(await searchParams, agora), escalasAMontar(agora)]);
   const { contagem, filtros } = lista;
   const algumFiltro = Boolean(filtros.situacao || filtros.polo || filtros.tipo || filtros.busca || !filtros.esconderMasterclasses);
 
@@ -68,23 +94,31 @@ export default async function PaginaEscalas({ searchParams }: Parametros) {
         <h2 id="precisa-de-acao" className="mb-3 text-[17px] font-semibold tracking-[-0.01em]">
           Precisa de ação
         </h2>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <CartaoDePendencia
-            titulo="Escalas a montar"
-            explicacao={`Eventos nos próximos ${DIAS_PARA_MONTAR_ESCALA} dias com a escala ainda não aprovada.`}
-            exemplos={exemplosDaPendencia(pendencias.escalasAMontar, "/escala")}
-          />
-          <CartaoDePendencia
-            titulo="Confronto sem fila"
-            explicacao="Sem o número de pessoas na fila, as vagas de pai e mãe não são calculadas."
-            exemplos={exemplosDaPendencia(pendencias.confrontoSemFila)}
-          />
-          <CartaoDePendencia
-            titulo="Eventos sem código"
-            explicacao="Falta a edição ou o polo no IAM Control, ou outro evento ativo usa o mesmo código."
-            exemplos={exemplosDaPendencia(pendencias.semCodigo)}
-          />
-        </div>
+        <Cartao
+          id="escalas-a-montar"
+          titulo="Escalas a montar"
+          explicacao={`Eventos nos próximos ${DIAS_PARA_MONTAR_ESCALA} dias com a escala ainda não aprovada.`}
+          acoes={
+            <span
+              className={`rounded-full px-2 py-0.5 text-[12px] font-semibold tabular-nums ${
+                aMontar.length > 0 ? "bg-[var(--ds-orange-soft)] text-[var(--ds-orange-deep)]" : "bg-[var(--ds-green-soft)] text-[var(--ds-green-deep)]"
+              }`}
+            >
+              {aMontar.length}
+              <span className="sr-only">{aMontar.length === 1 ? " escala a montar" : " escalas a montar"}</span>
+            </span>
+          }
+        >
+          {aMontar.length === 0 ? (
+            <p className="text-[13px] text-[var(--ds-label-2)]">Nenhuma escala a montar nos próximos {DIAS_PARA_MONTAR_ESCALA} dias.</p>
+          ) : (
+            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {aMontar.map((evento) => (
+                <EventoAMontar key={evento.id} evento={evento} />
+              ))}
+            </ul>
+          )}
+        </Cartao>
       </section>
 
       <BarraDeFiltros nomes={FILTROS} resultado={lista.eventos.length === 1 ? "1 evento encontrado" : `${lista.eventos.length} eventos encontrados`}>
@@ -147,7 +181,6 @@ export default async function PaginaEscalas({ searchParams }: Parametros) {
             <ColunaDaTabela>Datas</ColunaDaTabela>
             <ColunaDaTabela>Polo</ColunaDaTabela>
             <ColunaDaTabela>Vagas</ColunaDaTabela>
-            <ColunaDaTabela>Respostas</ColunaDaTabela>
             <ColunaDaTabela>Situação</ColunaDaTabela>
             <ColunaDaTabela numero>
               <span className="sr-only">Ação</span>
@@ -157,7 +190,6 @@ export default async function PaginaEscalas({ searchParams }: Parametros) {
             {lista.eventos.map((evento) => {
               const href = `/eventos/${evento.id}/escala`;
               const percentual = evento.vagas > 0 ? Math.round((evento.preenchidas / evento.vagas) * 100) : 0;
-              const respondeu = evento.confirmaram + evento.aguardando + evento.naoPodem > 0;
               return (
                 <LinhaDaTabela key={evento.id}>
                   <CelulaDaTabela>
@@ -175,26 +207,6 @@ export default async function PaginaEscalas({ searchParams }: Parametros) {
                     <span className="text-[13px] tabular-nums">
                       {evento.preenchidas} de {evento.vagas}
                     </span>
-                  </CelulaDaTabela>
-                  <CelulaDaTabela className="text-[13px]">
-                    {respondeu ? (
-                      <span className="inline-flex flex-wrap items-center gap-2 tabular-nums">
-                        <span className="inline-flex items-center gap-1">
-                          <CircleCheck size={14} aria-hidden className="text-[var(--ds-green-deep)]" />
-                          {evento.confirmaram} confirmaram
-                        </span>
-                        <span className="inline-flex items-center gap-1">
-                          <Clock size={14} aria-hidden className="text-[var(--ds-tint-text)]" />
-                          {evento.aguardando} aguardando
-                        </span>
-                        <span className="inline-flex items-center gap-1">
-                          <CircleX size={14} aria-hidden className="text-[var(--ds-red-deep)]" />
-                          {evento.naoPodem} não {evento.naoPodem === 1 ? "pode" : "podem"}
-                        </span>
-                      </span>
-                    ) : (
-                      <span className="text-[var(--ds-label-2)]">—</span>
-                    )}
                   </CelulaDaTabela>
                   <CelulaDaTabela>
                     <ChipDaEscala situacao={evento.situacao} />

@@ -1,6 +1,7 @@
 // Convite e comunicação da escala (docs/07 §4.1, §4.2 e contrato §7.2).
-// Marcar a copy de escalação como enviada convida a pessoa (SUGERIDA → CONVIDADA); quando a última pessoa
-// ativa recebe a copy, a escala passa de APROVADA para COMUNICADA.
+// Marcar a copy de escalação como enviada avisa a pessoa: quem já entrou confirmada (ACEITA, o caso de hoje) só ganha
+// a data do aviso; dado antigo ainda SUGERIDA passa a CONVIDADA. Quando a última pessoa ativa recebe a copy, a escala
+// passa de APROVADA para COMUNICADA.
 
 /** Valores do CHECK evento_status_escala_check. */
 export type StatusEscala = "SEM_ESCALA" | "RASCUNHO" | "AGUARDANDO_APROVACAO" | "DEVOLVIDA" | "APROVADA" | "COMUNICADA";

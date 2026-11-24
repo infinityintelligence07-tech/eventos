@@ -8,7 +8,7 @@ import type { EventoTravado, RepositorioMontagem } from "./portas";
 // Aprovar só registra (aprovado_por/em); nada é enviado às pessoas.
 
 const MENSAGEM_TRANSICAO: Record<AcaoDaEscala, string> = {
-  ENVIAR: "Só escalas em rascunho ou devolvidas vão para aprovação.",
+  ENVIAR: "Só escalas em andamento ou devolvidas vão para aprovação.",
   APROVAR: "Esta escala não está aguardando aprovação.",
   DEVOLVER: "Esta escala não está aguardando aprovação.",
   REABRIR: "Só escalas aprovadas ou comunicadas podem ser reabertas.",

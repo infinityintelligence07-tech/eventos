@@ -35,6 +35,7 @@ export type HospedagemDoEventoCarregada = {
   evento: EventoDaLogistica | null;
   hospedagens: HospedagemCarregada[];
   locais: LocalDeHospedagem[];
+  /** Quem o time marcou para hotel na escala do evento (só essas pessoas entram em quarto). */
   equipe: PessoaDaEquipe[];
   semQuarto: PessoaDaEquipe[];
   /** Quantas pessoas sem quarto a sugestão por sexo consegue alocar. */

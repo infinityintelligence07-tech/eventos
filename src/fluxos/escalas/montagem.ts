@@ -1,6 +1,5 @@
 import { bancoParaLeitura } from "@/fluxos/_base";
 import {
-  aceitaResposta,
   type Candidato,
   type ConvocacaoDaTela,
   criarConsultaDaEscala,
@@ -12,6 +11,7 @@ import {
   type LinhaDaTela,
   type LinhaResumida,
   lerRegraGuiada,
+  nivelParaSugestao,
   ordenarSugestoes,
   pontosDeAtencao,
   type PontoDeAtencao,
@@ -35,7 +35,6 @@ export type MontagemDaEscala = {
   ultimaDevolucao: { em: Date; comentario: string | null } | null;
   /** Quem monta pode mexer (SEM_ESCALA, RASCUNHO, DEVOLVIDA e evento não encerrado). */
   editavel: boolean;
-  aceitaResposta: boolean;
   podeReabrir: boolean;
   aguardandoAprovacao: boolean;
   encerrado: boolean;
@@ -99,7 +98,6 @@ export async function carregarMontagem(eventoId: string): Promise<MontagemDaEsca
     historico,
     ultimaDevolucao: evento.statusEscala === "DEVOLVIDA" && devolucao ? { em: devolucao.criadoEm, comentario: devolucao.comentario } : null,
     editavel: !encerrado && escalaEditavel(evento.statusEscala),
-    aceitaResposta: !encerrado && aceitaResposta(evento.statusEscala),
     podeReabrir: !encerrado && (evento.statusEscala === "APROVADA" || evento.statusEscala === "COMUNICADA"),
     aguardandoAprovacao: evento.statusEscala === "AGUARDANDO_APROVACAO",
     encerrado,
@@ -122,6 +120,8 @@ export type CandidatoSugerido = Candidato & { pontuacao: number; ultimaData: str
 export type SugestoesDaVaga = {
   escalaId: string;
   nomeDaFuncao: string;
+  /** Cargo do evento (Pai / mãe): qualquer staff pode ocupar, sem habilitação. */
+  cargoDoEvento: boolean;
   vagasAbertas: number;
   temEnquete: boolean;
   sugeridos: CandidatoSugerido[];
@@ -143,7 +143,7 @@ export async function sugerirPessoas(eventoId: string, escalaId: string, agora: 
       pessoaId: doBanco.pessoaId,
       nome: doBanco.nome,
       disponibilidade: doBanco.disponivel === null ? "SEM_RESPOSTA" : doBanco.disponivel ? "PODE" : "NAO_PODE",
-      nivel: doBanco.nivel ?? "SEM_FUNCAO",
+      nivel: nivelParaSugestao(doBanco.nivel, linha.cargoDoEvento),
       distanciaKm: distanciaKm(doBanco.lat !== null && doBanco.lng !== null ? { lat: doBanco.lat, lng: doBanco.lng } : null, local),
       convocacoesUltimos90Dias: doBanco.convocacoesUltimos90Dias,
       diasDesdeUltima: doBanco.diasDesdeUltima,
@@ -162,6 +162,7 @@ export async function sugerirPessoas(eventoId: string, escalaId: string, agora: 
   return {
     escalaId,
     nomeDaFuncao: linha.nomeDaFuncao,
+    cargoDoEvento: linha.cargoDoEvento,
     vagasAbertas: Math.max(0, linha.quantidade - linha.ativas),
     temEnquete: linha.temEnquete,
     sugeridos: sugeridos.map(completar),

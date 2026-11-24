@@ -9,6 +9,7 @@ function repositorio(dados: Partial<RepositorioConvite> = {}): RepositorioConvit
   return {
     travarConvocacao: vi.fn(async () => "SUGERIDA" as const),
     marcarConvidada: vi.fn(async () => true),
+    marcarAvisada: vi.fn(async () => true),
     travarComunicacaoDoEvento: vi.fn(async () => ({ statusEscala: "APROVADA" as const, equipe: { ativas: 2, semEnvio: 0 } })),
     marcarComunicada: vi.fn(async () => true),
     ...dados,
@@ -16,14 +17,27 @@ function repositorio(dados: Partial<RepositorioConvite> = {}): RepositorioConvit
 }
 
 describe("registrarConvite", () => {
-  it("convida a sugerida e não regrava quem já foi convidado", async () => {
+  it("quem já está confirmada só ganha a data do aviso na primeira copy; o status não muda", async () => {
+    const repo = repositorio({ travarConvocacao: async () => "ACEITA" });
+    await expect(registrarConvite(repo, { convocacaoId: "c1", instante: INSTANTE })).resolves.toBe("CONVIDADA");
+    expect(repo.marcarAvisada).toHaveBeenCalledWith("c1", INSTANTE);
+    expect(repo.marcarConvidada).not.toHaveBeenCalled();
+
+    // Reenvio: já tinha a data.
+    const jaAvisada = repositorio({ travarConvocacao: async () => "ACEITA", marcarAvisada: vi.fn(async () => false) });
+    await expect(registrarConvite(jaAvisada, { convocacaoId: "c1", instante: INSTANTE })).resolves.toBe("SEM_MUDANCA");
+  });
+
+  it("dado antigo: convida a sugerida e não regrava quem já foi convidado", async () => {
     const repo = repositorio();
     await expect(registrarConvite(repo, { convocacaoId: "c1", instante: INSTANTE })).resolves.toBe("CONVIDADA");
     expect(repo.marcarConvidada).toHaveBeenCalledWith("c1", INSTANTE);
+    expect(repo.marcarAvisada).not.toHaveBeenCalled();
 
-    const jaConvidada = repositorio({ travarConvocacao: async () => "ACEITA" });
+    const jaConvidada = repositorio({ travarConvocacao: async () => "CONVIDADA" });
     await expect(registrarConvite(jaConvidada, { convocacaoId: "c1", instante: INSTANTE })).resolves.toBe("SEM_MUDANCA");
     expect(jaConvidada.marcarConvidada).not.toHaveBeenCalled();
+    expect(jaConvidada.marcarAvisada).not.toHaveBeenCalled();
   });
 
   it("recusa convocação inativa ou inexistente e acusa a corrida perdida", async () => {

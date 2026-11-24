@@ -24,7 +24,6 @@ const EXPLICACAO: Record<string, string> = {
   "escalas-aguardando-aprovacao": "Escalas enviadas para a líder aprovar.",
   "escalas-devolvidas": "A líder devolveu para ajustar.",
   "escalas-a-montar": "Eventos nos próximos 30 dias com a escala ainda não aprovada.",
-  "escalas-sem-resposta": "Convidadas há mais de 2 dias sem confirmar.",
   "comunicacao-desatualizadas": "Os dados mudaram depois do envio. Copie e envie de novo.",
   "confronto-sem-fila": "Sem o número de pessoas na fila, as vagas de pai e mãe não são calculadas.",
   "eventos-sem-codigo": "Eventos sem polo cadastrado ou com código repetido no IAM Control.",

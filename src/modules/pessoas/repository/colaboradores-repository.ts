@@ -86,7 +86,7 @@ export function criarRepositorioColaboradores(db: Db): RepositorioColaboradores 
             await tx.execute(sql`
               insert into eventos.pessoa_funcao (pessoa_id, funcao_id)
               select ${pessoaId}, id from eventos.funcao
-               where ativo and codigo in (${sql.join(
+               where ativo and not cargo_do_evento and codigo in (${sql.join(
                  plano.funcoesDoEventos.map((codigo) => sql`${codigo}`),
                  sql`, `,
                )})

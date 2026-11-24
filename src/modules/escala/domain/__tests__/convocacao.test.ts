@@ -8,8 +8,9 @@ const INVALIDA: TransicaoDaConvocacao = { erro: "TRANSICAO_INVALIDA" };
 
 const ESPERADO: Record<AcaoDaConvocacao, (TransicaoDaConvocacao | null)[]> = {
   //                  null                  SUGERIDA              CONVIDADA             ACEITA                RECUSADA              CANCELADA
-  POR_NA_VAGA: [{ para: "SUGERIDA" }, null, null, null, { para: "SUGERIDA" }, { para: "SUGERIDA" }],
-  TIRAR_DA_VAGA: [null, { apagar: true }, { para: "CANCELADA" }, { para: "CANCELADA" }, null, null],
+  // Quem entra na escala já entra confirmado. ACEITA aqui é sem aviso (o padrão): sai sem deixar linha.
+  POR_NA_VAGA: [{ para: "ACEITA" }, null, null, null, { para: "ACEITA" }, { para: "ACEITA" }],
+  TIRAR_DA_VAGA: [null, { apagar: true }, { para: "CANCELADA" }, { apagar: true }, null, null],
   REGISTRAR_ACEITA: [null, null, { para: "ACEITA" }, null, { para: "ACEITA" }, null],
   REGISTRAR_RECUSADA: [null, null, { para: "RECUSADA" }, { para: "RECUSADA" }, null, null],
 };
@@ -21,6 +22,15 @@ describe("máquina de estado da convocação (docs/07 §4.2)", () => {
 
   it.each(casos)("$acao a partir de $de", ({ acao, de, esperado }) => {
     expect(transicaoDaConvocacao(de, acao)).toEqual(esperado);
+  });
+
+  it("tirar da vaga: confirmada que já foi avisada fica como removida; sem aviso, a linha some", () => {
+    expect(transicaoDaConvocacao("ACEITA", "TIRAR_DA_VAGA", { avisada: true })).toEqual({ para: "CANCELADA" });
+    expect(transicaoDaConvocacao("ACEITA", "TIRAR_DA_VAGA", { avisada: false })).toEqual({ apagar: true });
+    // Dados antigos: SUGERIDA nunca foi avisada e CONVIDADA sempre foi, diga o que disser o parâmetro.
+    expect(transicaoDaConvocacao("SUGERIDA", "TIRAR_DA_VAGA", { avisada: true })).toEqual({ apagar: true });
+    expect(transicaoDaConvocacao("CONVIDADA", "TIRAR_DA_VAGA", { avisada: false })).toEqual({ para: "CANCELADA" });
+    for (const fora of ["RECUSADA", "CANCELADA"] as const) expect(transicaoDaConvocacao(fora, "TIRAR_DA_VAGA", { avisada: true })).toEqual(INVALIDA);
   });
 
   it("rótulos da doc 08 §13", () => {

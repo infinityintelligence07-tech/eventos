@@ -41,13 +41,13 @@ export const porNaVagaSchema = z.object({
 
 export const tirarDaVagaSchema = z.object({ eventoId: id, convocacaoId: id });
 
-export const DESLOCAMENTOS = ["CARRO_PROPRIO", "CARONA", "CARRO_IAM", "UBER", "ONIBUS", "VOO", "MOTO", "A_PE", "NAO_SE_APLICA"] as const;
+/** Valores do CHECK convocacao_deslocamento_check (Moto, A pé e Não se aplica saíram na migration 0013). */
+export const DESLOCAMENTOS = ["CARRO_PROPRIO", "CARONA", "CARRO_IAM", "UBER", "ONIBUS", "VOO"] as const;
 export type Deslocamento = (typeof DESLOCAMENTOS)[number];
 
 /** Um campo por envio: o formulário diz qual mudou, e os outros ficam como estão. */
-export const CAMPOS_DA_CONVOCACAO = ["deslocamento", "montagem", "observacao"] as const;
+export const CAMPOS_DA_CONVOCACAO = ["deslocamento", "montagem", "hotel"] as const;
 export type CampoDaConvocacao = (typeof CAMPOS_DA_CONVOCACAO)[number];
-export const LIMITE_DA_OBSERVACAO = 500;
 
 export const atualizarConvocacaoSchema = z.object({
   eventoId: id,
@@ -60,14 +60,17 @@ export const atualizarConvocacaoSchema = z.object({
     .literal("sim")
     .optional()
     .transform((valor) => valor === "sim"),
-  /** Ausente = apaga a observação. */
-  observacao: textoOpcional(LIMITE_DA_OBSERVACAO),
+  /** Caixa de seleção "precisa de hotel": só chega quando marcada. */
+  hotel: z
+    .literal("sim")
+    .optional()
+    .transform((valor) => valor === "sim"),
 });
 
 export type MudancaDaConvocacao =
   | { campo: "deslocamento"; deslocamento: Deslocamento | null }
   | { campo: "montagem"; montagem: boolean }
-  | { campo: "observacao"; observacao: string | null };
+  | { campo: "hotel"; precisaHotel: boolean };
 
 export function mudancaDaConvocacao(dados: z.output<typeof atualizarConvocacaoSchema>): MudancaDaConvocacao {
   switch (dados.campo) {
@@ -75,8 +78,8 @@ export function mudancaDaConvocacao(dados: z.output<typeof atualizarConvocacaoSc
       return { campo: "deslocamento", deslocamento: dados.deslocamento ?? null };
     case "montagem":
       return { campo: "montagem", montagem: dados.montagem };
-    case "observacao":
-      return { campo: "observacao", observacao: dados.observacao ?? null };
+    case "hotel":
+      return { campo: "hotel", precisaHotel: dados.hotel };
     default: {
       const desconhecido: never = dados.campo;
       throw new Error(`campo da convocação desconhecido: ${String(desconhecido)}`);

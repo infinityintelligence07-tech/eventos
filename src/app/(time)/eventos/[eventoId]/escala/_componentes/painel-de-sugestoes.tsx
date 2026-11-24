@@ -61,12 +61,15 @@ function ItemDaSugestao({
   eventoId,
   escalaId,
   candidato,
+  cargoDoEvento,
   adicionar,
   pendente,
 }: {
   eventoId: string;
   escalaId: string;
   candidato: CandidatoSugerido;
+  /** Cargo do evento (Pai / mãe): qualquer staff serve, então a habilitação não aparece. */
+  cargoDoEvento: boolean;
   adicionar: (form: FormData) => void;
   pendente: boolean;
 }) {
@@ -91,7 +94,7 @@ function ItemDaSugestao({
         <p className="text-[14px] font-medium">{candidato.nome}</p>
         <p className="mt-1 flex flex-wrap items-center gap-1 text-[var(--ds-label-2)]">
           <ChipDaDisponibilidade candidato={candidato} />
-          {candidato.nivel === "SEM_FUNCAO" ? (
+          {cargoDoEvento ? null : candidato.nivel === "SEM_FUNCAO" ? (
             <Chip tom="atencao" icone={<TriangleAlert size={14} aria-hidden />}>
               Não habilitado
             </Chip>
@@ -196,7 +199,9 @@ export function PainelDeSugestoes({
       subtitulo={`${sugestoes.nomeDaFuncao} · ${periodoDoEvento} · ${abertas === 1 ? "1 vaga aberta" : `${abertas} vagas abertas`}`}
     >
       <p className="mb-3 text-[13px] text-[var(--ds-label-2)]">
-        Ordem: quem disse que pode, função habilitada, mais perto do evento e quem serviu há mais tempo.
+        {sugestoes.cargoDoEvento
+          ? `${sugestoes.nomeDaFuncao} é um cargo deste evento: qualquer pessoa do staff pode ocupar. Ordem: quem disse que pode, mais perto do evento e quem serviu há mais tempo.`
+          : "Ordem: quem disse que pode, função habilitada, mais perto do evento e quem serviu há mais tempo."}
       </p>
       <label data-ds-field="" className="mb-2 flex h-10 items-center gap-2 rounded-[10px] border border-[var(--ds-separator)] bg-[var(--ds-surface)] px-3">
         <Search size={18} aria-hidden className="shrink-0 text-[var(--ds-label-2)]" />
@@ -205,7 +210,7 @@ export function PainelDeSugestoes({
       </label>
       <div className="mb-3 flex flex-wrap gap-x-4">
         <CaixaDeMarcar rotulo="Só quem disse que pode" checked={soQuemPode} onChange={(evento) => setSoQuemPode(evento.target.checked)} />
-        <CaixaDeMarcar rotulo="Só habilitados nesta função" checked={soHabilitados} onChange={(evento) => setSoHabilitados(evento.target.checked)} />
+        {!sugestoes.cargoDoEvento && <CaixaDeMarcar rotulo="Só habilitados nesta função" checked={soHabilitados} onChange={(evento) => setSoHabilitados(evento.target.checked)} />}
       </div>
       <p className="sr-only" aria-live="polite">
         {sugeridos.length === 1 ? "1 pessoa sugerida" : `${sugeridos.length} pessoas sugeridas`}
@@ -218,7 +223,15 @@ export function PainelDeSugestoes({
       ) : (
         <ul>
           {sugeridos.map((candidato) => (
-            <ItemDaSugestao key={candidato.pessoaId} eventoId={eventoId} escalaId={sugestoes.escalaId} candidato={candidato} adicionar={adicionar} pendente={pendente && adicionando === candidato.pessoaId} />
+            <ItemDaSugestao
+              key={candidato.pessoaId}
+              eventoId={eventoId}
+              escalaId={sugestoes.escalaId}
+              candidato={candidato}
+              cargoDoEvento={sugestoes.cargoDoEvento}
+              adicionar={adicionar}
+              pendente={pendente && adicionando === candidato.pessoaId}
+            />
           ))}
         </ul>
       )}
@@ -227,7 +240,15 @@ export function PainelDeSugestoes({
           <summary className="cursor-pointer text-[14px] font-medium">Disseram que não podem ({naoPodem.length})</summary>
           <ul>
             {naoPodem.map((candidato) => (
-              <ItemDaSugestao key={candidato.pessoaId} eventoId={eventoId} escalaId={sugestoes.escalaId} candidato={candidato} adicionar={adicionar} pendente={pendente && adicionando === candidato.pessoaId} />
+              <ItemDaSugestao
+              key={candidato.pessoaId}
+              eventoId={eventoId}
+              escalaId={sugestoes.escalaId}
+              candidato={candidato}
+              cargoDoEvento={sugestoes.cargoDoEvento}
+              adicionar={adicionar}
+              pendente={pendente && adicionando === candidato.pessoaId}
+            />
             ))}
           </ul>
         </details>

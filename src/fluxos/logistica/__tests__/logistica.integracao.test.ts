@@ -49,15 +49,17 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
 
   const um = async (texto: string, params: unknown[] = []) => ((await teste.sql(texto, params)) as Record<string, string>[])[0]!;
 
-  async function convocar(nome: string, opcoes: { deslocamento?: string; sexo?: "F" | "M" | null; lugares?: number; status?: string } = {}) {
+  /** `hotel`: marcada na escala como "precisa de hotel" (padrão sim; a Hospedagem só enxerga quem está marcado). */
+  async function convocar(nome: string, opcoes: { deslocamento?: string; sexo?: "F" | "M" | null; lugares?: number; status?: string; hotel?: boolean } = {}) {
     const { id: pessoaId } = await um(`insert into core.pessoa (nome_completo) values ($1) returning id`, [nome]);
     await teste.sql(`insert into eventos.pessoa_evento (pessoa_id, sexo) values ($1, $2)`, [pessoaId, opcoes.sexo ?? null]);
     if (opcoes.lugares) await teste.sql(`insert into eventos.pessoa_veiculo (pessoa_id, lugares, consumo_km_l) values ($1, $2, 11.5)`, [pessoaId, opcoes.lugares]);
-    const { id } = await um(`insert into eventos.convocacao (escala_id, pessoa_id, status, deslocamento) values ($1, $2, $3, $4) returning id`, [
+    const { id } = await um(`insert into eventos.convocacao (escala_id, pessoa_id, status, deslocamento, precisa_hotel) values ($1, $2, $3, $4, $5) returning id`, [
       escalaId,
       pessoaId,
       opcoes.status ?? "ACEITA",
       opcoes.deslocamento ?? null,
+      opcoes.hotel ?? true,
     ]);
     return { convocacaoId: id!, pessoaId: pessoaId! };
   }
@@ -163,6 +165,8 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
     const bia = await convocar("Bia Quarto", { sexo: "F" });
     const duda = await convocar("Duda Quarto", { sexo: "F" });
     const edu = await convocar("Edu Quarto", { sexo: "M" });
+    // Na escala, mas o time não marcou hotel para ela: não entra na hospedagem.
+    const nara = await convocar("Nara Sem Hotel", { sexo: "F", hotel: false });
     const { id: localEvento } = await um(`select local_id as id from eventos.evento where id = $1`, [eventoId]);
     const { id: hotelId } = await um(`insert into eventos.local (nome, tipo, cidade, uf) values ('Hotel Teste', 'HOTEL', 'Manaus', 'AM') returning id`);
 
@@ -181,6 +185,14 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
 
     const carregada = await carregarHospedagem(eventoId, agora);
     const [quarto1, quarto2] = carregada.hospedagens[0]!.quartos;
+    // Só quem está marcado para hotel na escala aparece para alocar e pode entrar em quarto.
+    const nomes = (lista: { nome: string }[]) => lista.map((pessoa) => pessoa.nome);
+    expect(nomes(carregada.semQuarto)).toEqual(expect.arrayContaining(["Bia Quarto", "Duda Quarto", "Edu Quarto"]));
+    expect(nomes(carregada.equipe)).not.toContain("Nara Sem Hotel");
+    expect(nomes(carregada.semQuarto)).not.toContain("Nara Sem Hotel");
+    const semMarca = porNoQuarto({ quartoId: quarto2!.id, convocacaoId: nara.convocacaoId }, ator(), agora);
+    await expect(semMarca).rejects.toBeInstanceOf(RegraDeNegocioError);
+    await expect(semMarca).rejects.toThrow(/não está marcada para hotel/);
     await expect(porNoQuarto({ quartoId: quarto1!.id, convocacaoId: edu.convocacaoId }, ator(), agora)).rejects.toThrow(/outro sexo/);
     await porNoQuarto({ quartoId: quarto1!.id, convocacaoId: bia.convocacaoId }, ator(), agora);
     await expect(porNoQuarto({ quartoId: quarto1!.id, convocacaoId: duda.convocacaoId }, ator(), agora)).rejects.toThrow(/todas as camas/);
@@ -227,6 +239,17 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
     expect(depois.hospedagens[0]!.quartosComSexosMisturados).toEqual([]);
     const movidas = await teste.sql(`select acao from eventos.registro_acao where entidade = 'HOSPEDAGEM' and entidade_id = $1 order by criado_em`, [hospedagemId]);
     expect(movidas.map((linha) => (linha as { acao: string }).acao)).toContain("OCUPANTE_MOVIDO");
+
+    // O rooming sugerido também ignora quem não está marcado; depois de marcada na escala, ela passa a aparecer.
+    expect(await teste.sql(`select 1 from eventos.quarto_ocupante where convocacao_id = $1`, [nara.convocacaoId])).toEqual([]);
+    await teste.sql(`update eventos.convocacao set precisa_hotel = true where id = $1`, [nara.convocacaoId]);
+    expect(nomes((await carregarHospedagem(eventoId, agora)).semQuarto)).toContain("Nara Sem Hotel");
+    // Quem já está num quarto continua aparecendo no quarto, mesmo que a marca seja tirada por fora da tela.
+    const [ocupante] = (await teste.sql(`select convocacao_id from eventos.quarto_ocupante limit 1`)) as { convocacao_id: string }[];
+    await teste.sql(`update eventos.convocacao set precisa_hotel = false where id = $1`, [ocupante!.convocacao_id]);
+    const comDesmarcada = await carregarHospedagem(eventoId, agora);
+    expect(comDesmarcada.hospedagens[0]!.quartos.flatMap((quarto) => quarto.ocupantes.map((pessoa) => pessoa.convocacaoId))).toContain(ocupante!.convocacao_id);
+    await teste.sql(`update eventos.convocacao set precisa_hotel = true where id = $1`, [ocupante!.convocacao_id]);
   });
 
   it("caronas: motorista com veículo e carro cheio", async () => {

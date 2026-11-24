@@ -41,6 +41,9 @@ export const funcao = eventosSchema.table(
     codigo: text("codigo").notNull().unique(),
     nome: text("nome").notNull(),
     ativo: boolean("ativo").notNull().default(true),
+    // Cargo que só existe na escala do evento (Pai / mãe no Confronto): qualquer staff pode ocupar. Não é habilitação
+    // da pessoa, então não entra em pessoa_funcao nem nas listas e filtros de funções de Pessoas.
+    cargoDoEvento: boolean("cargo_do_evento").notNull().default(false),
     criadoEm: timestamp("criado_em", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [check("funcao_codigo_check", sql`${table.codigo} ~ '^[A-Z0-9_]{2,30}$'`)],

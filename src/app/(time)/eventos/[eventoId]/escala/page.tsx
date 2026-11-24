@@ -14,7 +14,6 @@ import { dataCurta, dataEHora, periodo } from "../../../_componentes/ui/formatos
 import { AdicionarFuncao } from "./_componentes/adicionar-funcao";
 import { BarraDaEscala, type SituacaoDaBarra } from "./_componentes/barra-da-escala";
 import { EquipeDaFuncao } from "./_componentes/equipe-da-funcao";
-import { PainelDeResposta } from "./_componentes/painel-de-resposta";
 import { PainelDeSugestoes } from "./_componentes/painel-de-sugestoes";
 import { VagasPorFuncao } from "./_componentes/vagas-por-funcao";
 import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
@@ -22,7 +21,7 @@ import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Escala" };
 
-type Parametros = { params: Promise<{ eventoId: string }>; searchParams: Promise<{ vaga?: string; responder?: string }> };
+type Parametros = { params: Promise<{ eventoId: string }>; searchParams: Promise<{ vaga?: string }> };
 
 const ROTULO_DO_HISTORICO: Record<string, string> = {
   ENVIADA_APROVACAO: "Enviada para aprovação",
@@ -75,7 +74,7 @@ function resumoDaBarra(montagem: MontagemDaEscala): string {
 
 export default async function PaginaEscalaDoEvento({ params, searchParams }: Parametros) {
   await exigirAtor();
-  const [{ eventoId }, { vaga, responder }] = await Promise.all([params, searchParams]);
+  const [{ eventoId }, { vaga }] = await Promise.all([params, searchParams]);
   const [montagem, escrita, permissoes] = await Promise.all([
     carregarMontagem(eventoId),
     situacaoDaEscrita(),
@@ -88,10 +87,6 @@ export default async function PaginaEscalaDoEvento({ params, searchParams }: Par
   const escreve = escrita.liberada;
   const editavel = escreve && montagem.editavel;
   const sugestoes = editavel && vaga ? await sugerirPessoas(evento.id, vaga, new Date()) : null;
-  const convocacaoParaResponder =
-    escreve && montagem.aceitaResposta && responder
-      ? montagem.linhas.flatMap((linha) => linha.convocacoes).find((convocacao) => convocacao.id === responder && convocacao.status !== "SUGERIDA")
-      : undefined;
   const varios = montagem.dias.length > 1;
   const codigo = evento.codigo ?? evento.nome;
 
@@ -224,7 +219,6 @@ export default async function PaginaEscalaDoEvento({ params, searchParams }: Par
                 ativas={linha.ativas}
                 pessoas={linha.convocacoes}
                 editavel={editavel}
-                aceitaResposta={escreve && montagem.aceitaResposta}
                 deslocamentoEditavel={escreve && !montagem.encerrado && !montagem.aguardandoAprovacao}
                 caminho={caminho}
               />
@@ -260,15 +254,6 @@ export default async function PaginaEscalaDoEvento({ params, searchParams }: Par
       <BarraDaEscala eventoId={evento.id} codigo={codigo} resumo={resumoDaBarra(montagem)} situacao={situacaoDaBarra(montagem, escreve, { aprovar: permissoes["escala.aprovar"], reabrir: permissoes["escala.reabrir"] })} />
 
       {sugestoes && <PainelDeSugestoes eventoId={evento.id} sugestoes={sugestoes} periodoDoEvento={periodo(evento.dataInicio, evento.dataFim)} caminho={caminho} />}
-      {convocacaoParaResponder && (
-        <PainelDeResposta
-          eventoId={evento.id}
-          convocacaoId={convocacaoParaResponder.id}
-          nome={convocacaoParaResponder.nome}
-          respostaAtual={convocacaoParaResponder.status === "ACEITA" || convocacaoParaResponder.status === "RECUSADA" ? convocacaoParaResponder.status : null}
-          caminho={caminho}
-        />
-      )}
     </>
   );
 }

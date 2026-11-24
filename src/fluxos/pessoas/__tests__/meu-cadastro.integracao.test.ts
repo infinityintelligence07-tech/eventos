@@ -162,4 +162,12 @@ describe.skipIf(!TEST_DATABASE_URL)("Meu cadastro no banco", () => {
     expect(await teste.sql(`select f.codigo from eventos.pessoa_funcao pf join eventos.funcao f on f.id = pf.funcao_id where pf.pessoa_id = $1`, [staff.pessoaId])).toEqual([{ codigo: "STAFF" }]);
     await expect(salvar({ poloCodigo: "XYZ" })).rejects.toBeInstanceOf(RegraDeNegocioError);
   });
+
+  it("Pai / mãe não aparece nas funções do Meu cadastro nem pode ser escolhida", async () => {
+    const carregado = (await carregarMeuCadastro(staff.pessoaId, agora))!;
+    expect(carregado.opcoes.funcoes.map((funcao) => funcao.codigo)).not.toContain("PAI_MAE");
+    expect(carregado.opcoes.funcoes.map((funcao) => funcao.codigo)).toContain("TRAINEE_LIDER");
+    await expect(salvar({ funcoes: [funcoes.PAI_MAE] })).rejects.toBeInstanceOf(RegraDeNegocioError);
+    expect(await teste.sql(`select f.codigo from eventos.pessoa_funcao pf join eventos.funcao f on f.id = pf.funcao_id where pf.pessoa_id = $1`, [staff.pessoaId])).toEqual([{ codigo: "STAFF" }]);
+  });
 });

@@ -1,4 +1,5 @@
 import { BedDouble, Hotel, Sparkles } from "lucide-react";
+import Link from "next/link";
 
 import type { HospedagemDoEventoCarregada } from "@/fluxos/logistica";
 import { diasEntre, rotuloDaCapacidade, rotuloDoSexoDoQuarto, somarDias, textoDoPeriodo } from "@/modules/logistica";
@@ -286,7 +287,7 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
         <Cartao
           id="sem-quarto"
           titulo={`Sem quarto · ${dados.semQuarto.length}`}
-          explicacao={`Pessoas escaladas em ${evento.codigo ?? evento.nome} (${periodo(evento.dataInicio, evento.dataFim)}) que ainda não têm quarto.`}
+          explicacao={`Pessoas marcadas para hotel na escala de ${evento.codigo ?? evento.nome} (${periodo(evento.dataInicio, evento.dataFim)}) que ainda não têm quarto.`}
           acoes={
             escrita &&
             dados.sugestaoAloca > 0 && (
@@ -299,7 +300,15 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
             )
           }
         >
-          {dados.semQuarto.length === 0 ? (
+          {dados.equipe.length === 0 ? (
+            <p className="text-[13px] text-[var(--ds-label-2)]">
+              Ninguém marcado para hotel.{" "}
+              <Link href={`/eventos/${evento.id}/escala`} className="font-medium text-[var(--ds-tint-text)] hover:underline">
+                Marque na escala do evento
+              </Link>{" "}
+              quem vai hospedar.
+            </p>
+          ) : dados.semQuarto.length === 0 ? (
             <p className="flex items-center gap-2 text-[13px] text-[var(--ds-label-2)]">
               <BedDouble size={16} aria-hidden /> Todo mundo tem quarto.
             </p>

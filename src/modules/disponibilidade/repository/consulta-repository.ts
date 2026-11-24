@@ -107,7 +107,8 @@ export function criarConsultaDisponibilidade(executor: Executor): ConsultaDispon
       const funcoes = await executor
         .select({ pessoaId: pessoaFuncao.pessoaId, codigo: funcao.codigo, nome: funcao.nome })
         .from(pessoaFuncao)
-        .innerJoin(funcao, eq(funcao.id, pessoaFuncao.funcaoId))
+        // Cargo do evento (Pai / mãe) não é função da pessoa.
+        .innerJoin(funcao, and(eq(funcao.id, pessoaFuncao.funcaoId), eq(funcao.cargoDoEvento, false)))
         .orderBy(asc(funcao.nome));
       const porPessoa = Map.groupBy(funcoes, (linha) => linha.pessoaId);
       return pessoas.map((linha) => ({
@@ -153,7 +154,11 @@ export function criarConsultaDisponibilidade(executor: Executor): ConsultaDispon
       const [polos, tipos, funcoes] = await Promise.all([
         executor.select({ codigo: polo.codigo, nome: polo.nome }).from(polo).where(and(eq(polo.ativo, true), isNull(polo.deletedAt))).orderBy(asc(polo.nome)),
         executor.select({ sigla: tipoEvento.sigla, nome: tipoEvento.nome }).from(tipoEvento).where(eq(tipoEvento.ativo, true)).orderBy(asc(tipoEvento.nome)),
-        executor.select({ codigo: funcao.codigo, nome: funcao.nome }).from(funcao).where(eq(funcao.ativo, true)).orderBy(asc(funcao.nome)),
+        executor
+          .select({ codigo: funcao.codigo, nome: funcao.nome })
+          .from(funcao)
+          .where(and(eq(funcao.ativo, true), eq(funcao.cargoDoEvento, false)))
+          .orderBy(asc(funcao.nome)),
       ]);
       return { polos, tipos, funcoes };
     },

@@ -81,7 +81,7 @@ function Reabrir({ eventoId, statusEsperado }: { eventoId: string; statusEsperad
         aberto={aberto}
         aoFechar={() => setAberto(false)}
         titulo="Reabrir a escala?"
-        descricao="A escala volta para rascunho e a aprovação é desfeita. Depois das mudanças, envie para aprovação de novo. Quem já recebeu a copy continua na escala."
+        descricao="A escala volta a ficar em andamento e a aprovação é desfeita. Depois das mudanças, envie para aprovação de novo. Quem já recebeu a copy continua na escala."
         rotuloConfirmar="Reabrir escala"
         carregando={pendente}
         acao={despachar}
