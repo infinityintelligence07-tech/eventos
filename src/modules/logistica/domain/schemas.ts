@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { DIAS_DO_AVISO_MAXIMO, DIAS_DO_AVISO_MINIMO } from "./janela";
+
 // Schemas das server actions da Logística (docs/07 §6.6). Os campos chegam do FormData como texto;
 // texto vazio já chega ausente (lerFormulario).
 
@@ -205,6 +207,19 @@ export const definirPeriodoDoOcupanteSchema = z
   .refine((periodo) => !periodo.checkIn || !periodo.checkOut || periodo.checkOut > periodo.checkIn, periodoValido);
 export type DefinirPeriodoDoOcupante = z.output<typeof definirPeriodoDoOcupanteSchema>;
 export const aplicarRoomingSugeridoSchema = z.object({ eventoId: id });
+
+const LIMITES_DO_AVISO = `Use de ${DIAS_DO_AVISO_MINIMO} a ${DIAS_DO_AVISO_MAXIMO} dias.`;
+
+/** Configurações › Aviso de voos: quantos dias antes do evento o aviso de passagens a pedir começa. */
+export const salvarAvisoDeVoosSchema = z.object({
+  dias: z
+    .string({ error: "Informe quantos dias antes do evento o aviso começa." })
+    .trim()
+    .regex(/^\d{1,4}$/, "Use um número inteiro de dias, sem vírgula.")
+    .transform(Number)
+    .pipe(z.number().min(DIAS_DO_AVISO_MINIMO, LIMITES_DO_AVISO).max(DIAS_DO_AVISO_MAXIMO, LIMITES_DO_AVISO)),
+});
+export type SalvarAvisoDeVoos = z.output<typeof salvarAvisoDeVoosSchema>;
 
 export const criarCaronaSchema = z.object({ eventoId: id, motoristaConvocacaoId: id });
 export type CriarCarona = z.output<typeof criarCaronaSchema>;

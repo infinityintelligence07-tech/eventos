@@ -10,6 +10,7 @@ import {
   alterarPedido,
   aplicarRoomingSugerido,
   cancelarPedido,
+  carregarAvisoDeVoos,
   carregarCaronas,
   carregarHospedagem,
   carregarPedido,
@@ -24,6 +25,7 @@ import {
   registrarRetornoDaSdc,
   registrarRetornoDeHospedagem,
   resumoParaInicio,
+  salvarAvisoDeVoos,
   tirarDoQuarto,
   trocarDeQuarto,
 } from "..";
@@ -385,5 +387,74 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
     // Quem saiu da marca de hotel não troca de lugar (o mesmo que vale para pôr no quarto).
     await teste.sql(`update eventos.convocacao set precisa_hotel = false where id = $1`, [caio.convocacaoId]);
     await expect(troca(caio, quartoB!.id, ana, quartoA!.id)).rejects.toThrow(/não está marcada para hotel/);
+  });
+
+  it("aviso de voos configurável: padrão de 90 dias, a configuração muda a janela, o Início e o topo de Voos", async () => {
+    // Hoje é 28/10/2026: um evento a 105 dias (10/02/2027) fica fora do aviso padrão de 90 dias.
+    const evento = await outroEvento("AVISO_AM_902", "2027-02-10");
+    await convocar("Lia Aviso", { deslocamento: "VOO", naEscala: evento.escalaId });
+    await convocar("Marcos Aviso", { deslocamento: "VOO", naEscala: evento.escalaId });
+    await convocar("Nina De Carro", { deslocamento: "CARRO_PROPRIO", naEscala: evento.escalaId });
+
+    const doEvento = async () => {
+      const voos = await carregarVoos({ eventoId: evento.id }, agora);
+      const cartao = (await resumoParaInicio(agora)).find((item) => item.chave === "voos-a-pedir")!;
+      return { voos, cartao, noInicio: cartao.exemplos.find((exemplo) => exemplo.href.includes(evento.id)) };
+    };
+
+    expect(await carregarAvisoDeVoos()).toEqual({ dias: 90, diasDoAtraso: 60, padrao: 90, minimo: 7, maximo: 365 });
+    const padrao = await doEvento();
+    expect(padrao.voos.linhas.map((linha) => linha.janela)).toEqual([
+      { janela: "FORA_DA_JANELA", dias: 105 },
+      { janela: "FORA_DA_JANELA", dias: 105 },
+    ]);
+    expect(padrao.voos.aPedirNaJanela).toBe(0);
+    expect(padrao.voos.avisoDeCompra).toEqual({ diasDoAviso: 90, diasDoAtraso: 60, eventos: [] });
+    expect(padrao.noInicio).toBeUndefined();
+    expect(padrao.cartao.explicacao).toContain("90 dias");
+    const antes = padrao.cartao.quantidade;
+
+    // A líder passa o aviso para 120 dias: o evento entra na janela, com as 2 passagens e os dias que faltam.
+    expect(await salvarAvisoDeVoos({ dias: 120 }, ator(), agora)).toMatchObject({ dias: 120, diasDoAtraso: 60 });
+    expect(await carregarAvisoDeVoos()).toMatchObject({ dias: 120, diasDoAtraso: 60 });
+    const com120 = await doEvento();
+    expect(com120.voos.aPedirNaJanela).toBe(2);
+    expect(com120.voos.avisoDeCompra).toEqual({
+      diasDoAviso: 120,
+      diasDoAtraso: 60,
+      eventos: [{ eventoId: evento.id, codigo: "AVISO_AM_902", nome: "AVISO_AM_902", dataInicio: "2027-02-10", passagens: 2, janela: "NA_JANELA", dias: 105 }],
+    });
+    expect(com120.cartao.quantidade).toBe(antes + 2);
+    expect(com120.cartao.explicacao).toContain("120 dias");
+    expect(com120.noInicio).toEqual({ rotulo: "AVISO_AM_902 · 2 passagens a pedir", detalhe: "faltam 105 dias", href: `/logistica/voos?evento=${evento.id}&situacao=A_PEDIR` });
+
+    // Com uma passagem pedida, o aviso desconta.
+    const lia = com120.voos.semPedido.find((passageiro) => passageiro.pessoaNome === "Lia Aviso")!;
+    await registrarPedidoDeVoo({ convocacaoId: lia.convocacaoId, trechos: [{ ...ida, dataDesejada: "2027-02-09" }] }, ator(), agora);
+    expect((await doEvento()).noInicio).toMatchObject({ rotulo: "AVISO_AM_902 · 1 passagem a pedir" });
+
+    // Aviso curto (30 dias): o atrasado acompanha (20) e nem o evento de dezembro (a 48 dias) aparece mais.
+    await salvarAvisoDeVoos({ dias: 30 }, ator(), agora);
+    expect(await carregarAvisoDeVoos()).toMatchObject({ dias: 30, diasDoAtraso: 20 });
+    const com30 = await carregarVoos({}, agora);
+    expect(com30.avisoDeCompra).toEqual({ diasDoAviso: 30, diasDoAtraso: 20, eventos: [] });
+    expect(com30.linhas.filter((linha) => linha.situacao === "A_PEDIR").every((linha) => linha.janela.janela === "FORA_DA_JANELA")).toBe(true);
+    expect((await resumoParaInicio(agora)).find((item) => item.chave === "voos-a-pedir")).toMatchObject({ quantidade: 0, exemplos: [] });
+
+    // Fica em eventos.configuracao, com registro de quem mudou e de quanto para quanto.
+    expect(await um(`select valor, atualizado_por from eventos.configuracao where chave = 'dias_aviso_voos'`)).toEqual({ valor: "30", atualizado_por: usuarioId });
+    const registros = await teste.sql(
+      `select acao, usuario_id, dados from eventos.registro_acao where entidade = 'CONFIGURACAO' and dados->>'chave' = 'dias_aviso_voos' order by criado_em, dados->>'para' desc`,
+    );
+    expect(registros).toEqual([
+      { acao: "CONFIGURACAO_ALTERADA", usuario_id: usuarioId, dados: { chave: "dias_aviso_voos", de: null, para: "120" } },
+      { acao: "CONFIGURACAO_ALTERADA", usuario_id: usuarioId, dados: { chave: "dias_aviso_voos", de: "120", para: "30" } },
+    ]);
+
+    // Valor estranho gravado por fora da tela não quebra nada: vale o padrão.
+    await teste.sql(`update eventos.configuracao set valor = 'noventa' where chave = 'dias_aviso_voos'`);
+    expect(await carregarAvisoDeVoos()).toMatchObject({ dias: 90, diasDoAtraso: 60 });
+    await teste.sql(`delete from eventos.configuracao where chave = 'dias_aviso_voos'`);
+    expect((await carregarVoos({}, agora)).avisoDeCompra.diasDoAviso).toBe(90);
   });
 });

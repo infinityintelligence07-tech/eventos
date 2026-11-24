@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import { dataEmSaoPaulo, diasEntre, instanteDeSaoPaulo, somarDias } from "../datas";
-import { janelaDeCompra, precisaPedir } from "../janela";
+import {
+  DIAS_ABRE_A_JANELA,
+  diasDoAtraso,
+  diasDoAvisoConfigurado,
+  eventosComPassagensAPedir,
+  janelaDeCompra,
+  precisaPedir,
+  textoDasPassagensAPedir,
+  textoDosDiasQueFaltam,
+} from "../janela";
+import { salvarAvisoDeVoosSchema } from "../schemas";
 import {
   type AcaoNoPedido,
   aguardandoSdc,
@@ -48,6 +58,99 @@ describe("janela de compra (D-90 abre, a partir de D-60 atrasado)", () => {
     expect(precisaPedir("FORA_DA_JANELA")).toBe(false);
     expect(precisaPedir("NA_JANELA")).toBe(true);
     expect(precisaPedir("ATRASADO")).toBe(true);
+  });
+});
+
+describe("janela de compra com o aviso configurado (Configurações › Aviso de voos)", () => {
+  it("sem dias informados vale o padrão de 90", () => {
+    expect(DIAS_ABRE_A_JANELA).toBe(90);
+    expect(janelaDeCompra("2027-01-26", "2026-10-28")).toEqual(janelaDeCompra("2027-01-26", "2026-10-28", 90));
+  });
+
+  it.each<[number, string, ReturnType<typeof janelaDeCompra>]>([
+    // Aviso de 45 dias: atrasado a partir de 30.
+    [45, "2026-12-13", { janela: "FORA_DA_JANELA", dias: 46 }],
+    [45, "2026-12-12", { janela: "NA_JANELA", dias: 45 }],
+    [45, "2026-11-28", { janela: "NA_JANELA", dias: 31 }],
+    [45, "2026-11-27", { janela: "ATRASADO", dias: 30 }],
+    // Aviso de 120 dias: abre antes, mas o atrasado continua em 60.
+    [120, "2027-02-26", { janela: "FORA_DA_JANELA", dias: 121 }],
+    [120, "2027-02-25", { janela: "NA_JANELA", dias: 120 }],
+    [120, "2026-12-28", { janela: "NA_JANELA", dias: 61 }],
+    [120, "2026-12-27", { janela: "ATRASADO", dias: 60 }],
+    // Aviso no mínimo (7 dias): ainda sobra um trecho "na janela".
+    [7, "2026-11-05", { janela: "FORA_DA_JANELA", dias: 8 }],
+    [7, "2026-11-04", { janela: "NA_JANELA", dias: 7 }],
+    [7, "2026-11-01", { janela: "ATRASADO", dias: 4 }],
+  ])("aviso de %i dias, evento em %s, hoje 2026-10-28 → %o", (diasDoAviso, dataDoEvento, esperado) => {
+    expect(janelaDeCompra(dataDoEvento, "2026-10-28", diasDoAviso)).toEqual(esperado);
+  });
+
+  it.each([
+    [365, 60],
+    [120, 60],
+    [90, 60],
+    [89, 59],
+    [60, 40],
+    [45, 30],
+    [30, 20],
+    [7, 4],
+  ])("aviso de %i dias → atrasado a partir de %i (dois terços, no máximo 60)", (diasDoAviso, esperado) => {
+    expect(diasDoAtraso(diasDoAviso)).toBe(esperado);
+    // A regra continua coerente: o atrasado nunca chega ao dia em que o aviso abre.
+    expect(diasDoAtraso(diasDoAviso)).toBeLessThan(diasDoAviso);
+  });
+
+  it.each<[string | null | undefined, number]>([
+    [null, 90],
+    [undefined, 90],
+    ["", 90],
+    ["45", 45],
+    [" 120 ", 120],
+    ["7", 7],
+    ["365", 365],
+    ["6", 90],
+    ["366", 90],
+    ["0", 90],
+    ["-30", 90],
+    ["45.5", 90],
+    ["noventa", 90],
+  ])("configuração %o → %i dias (inválido cai no padrão)", (valor, esperado) => {
+    expect(diasDoAvisoConfigurado(valor)).toBe(esperado);
+  });
+
+  it("o formulário aceita só inteiro de 7 a 365", () => {
+    const ler = (dias: unknown) => salvarAvisoDeVoosSchema.safeParse({ dias });
+    expect(ler("90")).toEqual({ success: true, data: { dias: 90 } });
+    expect(ler(" 7 ")).toEqual({ success: true, data: { dias: 7 } });
+    expect(ler("365").success).toBe(true);
+    for (const invalido of ["6", "366", "0", "-5", "45,5", "45.5", "abc", "99999", undefined]) expect(ler(invalido).success).toBe(false);
+  });
+
+  it("aviso da tela: por evento na janela, quantas passagens faltam e quantos dias faltam, o mais próximo primeiro", () => {
+    const longe = { id: "e-longe", codigo: "IPR_SP_10", nome: "IPR", dataInicio: "2027-03-01" };
+    const naJanela = { id: "e-janela", codigo: null, nome: "Confronto Manaus", dataInicio: "2027-01-10" };
+    const atrasado = { id: "e-atrasado", codigo: "ASM_AM_900", nome: "ASM", dataInicio: "2026-12-15" };
+    const aPedir = [{ evento: naJanela }, { evento: longe }, { evento: atrasado }, { evento: naJanela }, { evento: atrasado }, { evento: atrasado }];
+
+    expect(eventosComPassagensAPedir(aPedir, "2026-10-28")).toEqual([
+      { eventoId: "e-atrasado", codigo: "ASM_AM_900", nome: "ASM", dataInicio: "2026-12-15", passagens: 3, janela: "ATRASADO", dias: 48 },
+      { eventoId: "e-janela", codigo: null, nome: "Confronto Manaus", dataInicio: "2027-01-10", passagens: 2, janela: "NA_JANELA", dias: 74 },
+    ]);
+    // Aviso de 60 dias: o evento a 74 dias sai do aviso e o de 48 dias deixa de estar atrasado (limite 40).
+    expect(eventosComPassagensAPedir(aPedir, "2026-10-28", 60)).toEqual([expect.objectContaining({ eventoId: "e-atrasado", passagens: 3, janela: "NA_JANELA", dias: 48 })]);
+    // Aviso de 150 dias: o evento distante entra.
+    expect(eventosComPassagensAPedir(aPedir, "2026-10-28", 150).map((evento) => [evento.eventoId, evento.passagens])).toEqual([
+      ["e-atrasado", 3],
+      ["e-janela", 2],
+      ["e-longe", 1],
+    ]);
+    expect(eventosComPassagensAPedir([], "2026-10-28")).toEqual([]);
+  });
+
+  it("textos do aviso", () => {
+    expect([textoDosDiasQueFaltam(12), textoDosDiasQueFaltam(1), textoDosDiasQueFaltam(0)]).toEqual(["faltam 12 dias", "falta 1 dia", "é hoje"]);
+    expect([textoDasPassagensAPedir(1), textoDasPassagensAPedir(4)]).toEqual(["1 passagem a pedir", "4 passagens a pedir"]);
   });
 });
 

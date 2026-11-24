@@ -23,6 +23,8 @@ import {
 export type ItemDoInicio = {
   chave: string;
   titulo: string;
+  /** Explicação montada pela origem (ex.: os dias configurados do aviso de voos); sem ela vale a microcopy da tela. */
+  explicacao?: string;
   quantidade: number;
   href: string;
   exemplos: { rotulo: string; detalhe?: string; href: string }[];
