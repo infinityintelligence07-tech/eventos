@@ -8,7 +8,6 @@ import { BotaoCopiar, FormularioDeAcao } from "@/app/(time)/_componentes/ui";
 import { Aviso, FaixaSomenteLeitura } from "../../_componentes/ui/aviso";
 import { BarraDeFiltros, SeletorDeFiltro } from "../../_componentes/ui/barra-de-filtros";
 import { BotaoDeEnvio } from "../../_componentes/ui/botao";
-import { BotaoLink } from "../../_componentes/ui/botao-link";
 import { Cartao } from "../../_componentes/ui/cartao";
 import { CAMPO, TITULO_DE_SECAO } from "../../_componentes/ui/classes";
 import { EstadoVazio } from "../../_componentes/ui/estados";
@@ -17,16 +16,41 @@ import {
   adicionarQuartoAcao,
   alterarHospedagemAcao,
   aplicarRoomingSugeridoAcao,
+  cancelarPedidoAcao,
   criarHospedagemAcao,
   definirPeriodoDoOcupanteAcao,
+  dispensarLogisticaDoEventoAcao,
   moverDeQuartoAcao,
   porNoQuartoAcao,
   registrarPedidoDeHospedagemAcao,
+  registrarRetornoDeHospedagemAcao,
+  removerHospedagemAcao,
   removerQuartoAcao,
   tirarDoQuartoAcao,
 } from "../acoes";
-import { BotaoDefinirHospedagem, BotaoPeriodoDoOcupante, FormularioNovoQuarto } from "./formularios-de-hospedagem";
-import { ChipDoVoo } from "./situacoes";
+import { BotaoDefinirHospedagem, BotaoPeriodoDoOcupante, BotaoRegistrarReserva, FormularioNovoQuarto } from "./formularios-de-hospedagem";
+import { BotaoCancelarPedido } from "./formularios-de-voo";
+import { ChipDoVoo, paraCampoDeDinheiro } from "./situacoes";
+
+// Hospedagem do evento: nós montamos os quartos (quem divide com quem), a SDC escolhe e reserva o hotel. A tela começa
+// pelos quartos; com eles montados o time pede a hospedagem à SDC e, no retorno, registra o hotel, a reserva e o valor.
+// Apartamento da IAM é o caminho sem SDC. "Sem hospedagem" tira o evento dos pendentes (como na planilha).
+
+const HOTEL_A_DEFINIR = "Hotel a definir pela SDC";
+
+/** Botão de "este evento não tem hospedagem" e do desfazer. */
+function BotaoSemHospedagem({ eventoId, dispensar, rotulo }: { eventoId: string; dispensar: boolean; rotulo: string }) {
+  return (
+    <FormularioDeAcao acao={dispensarLogisticaDoEventoAcao} aria-label={rotulo}>
+      <input type="hidden" name="eventoId" value={eventoId} />
+      <input type="hidden" name="item" value="HOSPEDAGEM" />
+      <input type="hidden" name="dispensar" value={dispensar ? "true" : "false"} />
+      <BotaoDeEnvio tamanho="pequeno" variante={dispensar ? "texto" : "secundario"}>
+        {rotulo}
+      </BotaoDeEnvio>
+    </FormularioDeAcao>
+  );
+}
 
 type OpcaoDeQuarto = { id: string; rotulo: string; cheio: boolean };
 /** Quem já está num quarto e pode trocar de lugar com outra pessoa. */
@@ -122,7 +146,7 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
         rotulo="Evento"
         todos="Próximo evento"
         valor={evento?.id ?? null}
-        opcoes={dados.eventos.map((item) => ({ valor: item.id, rotulo: `${item.codigo ?? item.nome} · ${dataCurta(item.dataInicio)}` }))}
+        opcoes={dados.eventos.map((item) => ({ valor: item.id, rotulo: `${item.codigo ?? item.nome} · ${dataCurta(item.dataInicio)}${item.semHospedagem ? " · sem hospedagem" : ""}` }))}
       />
     </BarraDeFiltros>
   );
@@ -135,7 +159,7 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
         </h2>
         <Cartao espacamento="nenhum">
           <EstadoVazio icone={<Hotel size={32} aria-hidden />} titulo="Nenhum evento com equipe nos próximos dias.">
-            A hospedagem é montada por evento, depois que a escala tem pessoas.
+            Os quartos são montados por evento, com quem foi marcado para hotel na escala.
           </EstadoVazio>
         </Cartao>
       </section>
@@ -144,13 +168,16 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
 
   const locais = dados.locais.map((local) => ({ valor: local.id, rotulo: `${local.nome} · ${local.cidade} (${local.uf})${local.tipo === "APARTAMENTO" ? " · apartamento" : ""}` }));
   const periodoSugerido = { checkIn: somarDias(evento.dataInicio, -1), checkOut: somarDias(evento.dataFim, 1) };
+  const hoteis = dados.locais.filter((local) => local.tipo === "HOTEL").map((local) => ({ valor: local.id, rotulo: `${local.nome} · ${local.cidade} (${local.uf})` }));
+  const cidadeDoEvento = evento.cidade && evento.uf ? { cidade: evento.cidade, uf: evento.uf } : null;
+  const nomeDaHospedagem = (hospedagem: (typeof dados.hospedagens)[number]) => hospedagem.local?.nome ?? HOTEL_A_DEFINIR;
   const variosHoteis = dados.hospedagens.length > 1;
   // A opção do quarto diz quem já está nele: escolher o quarto é escolher com quem a pessoa divide.
   const quartos: OpcaoDeQuarto[] = dados.hospedagens.flatMap((hospedagem) =>
     hospedagem.quartos.map((quarto) => ({
       id: quarto.id,
       rotulo: [
-        `${quarto.nome}${variosHoteis ? ` · ${hospedagem.local.nome}` : ""}`,
+        `${quarto.nome}${variosHoteis ? ` · ${nomeDaHospedagem(hospedagem)}` : ""}`,
         quantidadeDe(quarto.ocupantes.length, quarto.capacidade),
         rotuloDoSexoDoQuarto(quarto.sexo),
         quarto.ocupantes.length > 0 ? `com ${quarto.ocupantes.map((ocupante) => primeiroNome(ocupante.nome)).join(", ")}` : "vazio",
@@ -163,13 +190,41 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
       quarto.ocupantes.map((ocupante) => ({
         convocacaoId: ocupante.convocacaoId,
         quartoId: quarto.id,
-        rotulo: `${ocupante.nome} (${quarto.nome}${variosHoteis ? ` · ${hospedagem.local.nome}` : ""})`,
+        rotulo: `${ocupante.nome} (${quarto.nome}${variosHoteis ? ` · ${nomeDaHospedagem(hospedagem)}` : ""})`,
       })),
     ),
   );
   const totalDeQuartos = quartos.length;
   const comQuarto = dados.equipe.length - dados.semQuarto.length;
   const escalaHref = `/eventos/${evento.id}/escala`;
+
+  // O time marcou que este evento não tem hospedagem (o "Sem hospedagem" da planilha): nada para montar, só o desfazer.
+  if (evento.semHospedagem && dados.hospedagens.length === 0) {
+    return (
+      <section aria-labelledby="titulo-hospedagem" className="mb-8">
+        <h2 id="titulo-hospedagem" className={`${TITULO_DE_SECAO} mb-3`}>
+          Hospedagem
+        </h2>
+        {!escrita && comSeletorDeEvento && <FaixaSomenteLeitura />}
+        {seletor}
+        <Aviso
+          tom="neutro"
+          titulo={`${evento.codigo ?? evento.nome} está marcado como sem hospedagem`}
+          acao={escrita && <BotaoSemHospedagem eventoId={evento.id} dispensar={false} rotulo="Desfazer" />}
+        >
+          <p>O time marcou que este evento não tem hospedagem: não há quartos a montar nem pedido à SDC. Dá para desfazer a qualquer momento.</p>
+          {dados.equipe.length > 0 && (
+            <p className="mt-1 text-[13px] text-[var(--ds-label-2)]">
+              {dados.equipe.length === 1 ? "1 pessoa está marcada" : `${dados.equipe.length} pessoas estão marcadas`} para hotel na escala deste evento.{" "}
+              <Link href={escalaHref} className="font-medium text-[var(--ds-tint-text)] hover:underline">
+                Abrir a escala
+              </Link>
+            </p>
+          )}
+        </Aviso>
+      </section>
+    );
+  }
 
   return (
     <section aria-labelledby="titulo-hospedagem" className="mb-8">
@@ -233,7 +288,7 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
         >
           {totalDeQuartos === 0 && (
             <p className="mb-3 text-[13px] text-[var(--ds-label-2)]">
-              {dados.hospedagens.length === 0 ? "Defina o hotel e crie os quartos logo abaixo para começar a distribuir." : "Crie os quartos logo abaixo para começar a distribuir."}
+              {dados.hospedagens.length === 0 ? "Clique em \"Montar quartos\" logo abaixo para começar a distribuir." : "Crie os quartos logo abaixo para começar a distribuir."}
             </p>
           )}
           <ul className="flex flex-col gap-2 text-[14px]">
@@ -256,177 +311,241 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
         <Cartao espacamento="nenhum" className="mb-4">
           <EstadoVazio
             icone={<Hotel size={32} aria-hidden />}
-            titulo="Nenhum hotel definido para este evento."
-            acao={escrita && <BotaoDefinirHospedagem acao={criarHospedagemAcao} rotulo="Definir hotel" eventoId={evento.id} locais={locais} periodoSugerido={periodoSugerido} primario />}
+            titulo="Nenhum quarto montado para este evento."
+            acao={
+              escrita && (
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <BotaoDefinirHospedagem acao={criarHospedagemAcao} rotulo="Montar quartos" eventoId={evento.id} locais={locais} periodoSugerido={periodoSugerido} primario />
+                  <BotaoSemHospedagem eventoId={evento.id} dispensar rotulo="Este evento não tem hospedagem" />
+                </div>
+              )
+            }
           >
-            Escolha o hotel (pela SDC) ou o apartamento da IAM e depois monte os quartos.
+            Comece pelos quartos: as datas de entrada e saída e quem divide com quem. Com eles montados, peça a hospedagem à SDC, que escolhe e reserva o hotel. Evento de casa, sem hotel? Marque que ele não tem hospedagem.
           </EstadoVazio>
         </Cartao>
       )}
 
-      {dados.hospedagens.map((hospedagem) => (
-        <div key={hospedagem.id} className="mb-6">
-          <Cartao
-            id={`hospedagem-${hospedagem.id}`}
-            titulo={hospedagem.local.nome}
-            explicacao={[hospedagem.local.tipo === "HOTEL" ? "Hotel" : "Apartamento da IAM", hospedagem.local.endereco, `${hospedagem.local.cidade} (${hospedagem.local.uf})`].filter(Boolean).join(" · ")}
-            className="mb-4"
-            acoes={
-              <>
-                <BotaoCopiar
-                  tamanho="pequeno"
-                  texto={hospedagem.textoDoRooming}
-                  rotulo="Copiar rooming list"
-                  mensagem={`Rooming list de ${hospedagem.local.nome} copiada.`}
-                />
-                {hospedagem.textoParaSdc && hospedagem.pedido && (
-                  <BotaoCopiar tamanho="pequeno" texto={hospedagem.textoParaSdc} rotulo="Copiar pedido" mensagem={`Pedido ${hospedagem.pedido.referencia} copiado. Cole no canal da SDC.`} />
-                )}
-                {escrita && (
-                  <BotaoDefinirHospedagem
-                    acao={alterarHospedagemAcao}
-                    rotulo="Editar hotel"
-                    eventoId={evento.id}
-                    locais={locais}
-                    periodoSugerido={periodoSugerido}
-                    hospedagem={{
-                      id: hospedagem.id,
-                      localId: hospedagem.local.id,
-                      checkIn: hospedagem.checkIn,
-                      checkOut: hospedagem.checkOut,
-                      observacao: hospedagem.observacao,
-                      atualizadoEm: hospedagem.atualizadoEm,
-                    }}
-                  />
-                )}
-              </>
-            }
-          >
-            <dl className="grid grid-cols-[120px_1fr] gap-x-3 gap-y-1 text-[14px]">
-              <dt className="text-[var(--ds-label-2)]">Período</dt>
-              <dd>Check-in {dataCurta(hospedagem.checkIn)} · check-out {dataCurta(hospedagem.checkOut)}</dd>
-              <dt className="text-[var(--ds-label-2)]">Reserva</dt>
-              <dd>{hospedagem.numeroReserva ?? "—"}</dd>
-              {hospedagem.local.tipo === "HOTEL" && (
+      {dados.hospedagens.map((hospedagem) => {
+        const ehApartamento = hospedagem.local?.tipo === "APARTAMENTO";
+        const pessoasNosQuartos = hospedagem.quartos.reduce((total, quarto) => total + quarto.ocupantes.length, 0);
+        const pedido = hospedagem.pedido;
+        const aguardando = pedido !== null && (pedido.situacao === "PEDIDO" || pedido.situacao === "ALTERADO");
+        return (
+          <div key={hospedagem.id} className="mb-6">
+            <Cartao
+              id={`hospedagem-${hospedagem.id}`}
+              titulo={nomeDaHospedagem(hospedagem)}
+              explicacao={
+                hospedagem.local
+                  ? [ehApartamento ? "Apartamento da IAM (sem SDC)" : "Hotel", hospedagem.local.endereco, `${hospedagem.local.cidade} (${hospedagem.local.uf})`].filter(Boolean).join(" · ")
+                  : "Quem escolhe e reserva o hotel é a SDC. Monte os quartos, peça a hospedagem e registre o hotel quando ela responder."
+              }
+              className="mb-4"
+              acoes={
                 <>
-                  <dt className="text-[var(--ds-label-2)]">Pedido à SDC</dt>
-                  <dd className="flex flex-wrap items-center gap-2">
-                    {hospedagem.pedido ? (
-                      <>
-                        <span className="[font-family:var(--ds-font-mono)] text-[13px]">{hospedagem.pedido.referencia}</span>
-                        <ChipDoVoo situacao={hospedagem.pedido.situacao} />
-                        {hospedagem.pedido.valorCentavos !== null && <span className="tabular-nums">{dinheiro(hospedagem.pedido.valorCentavos)}</span>}
-                        {escrita && (hospedagem.pedido.situacao === "PEDIDO" || hospedagem.pedido.situacao === "ALTERADO") && (
-                          <BotaoLink tamanho="pequeno" href={`/logistica/voos?ref=${hospedagem.pedido.referencia}&modo=registrar`}>
-                            Registrar reserva
-                          </BotaoLink>
-                        )}
-                        <BotaoLink tamanho="pequeno" variante="texto" href={`/logistica/voos?ref=${hospedagem.pedido.referencia}`}>
-                          Abrir pedido
-                        </BotaoLink>
-                      </>
-                    ) : escrita ? (
-                      <FormularioDeAcao acao={registrarPedidoDeHospedagemAcao} aria-label="Pedir hospedagem à SDC">
-                        <input type="hidden" name="hospedagemId" value={hospedagem.id} />
-                        <BotaoDeEnvio tamanho="pequeno" variante="secundario">
-                          Registrar pedido à SDC
-                        </BotaoDeEnvio>
-                      </FormularioDeAcao>
-                    ) : (
-                      "Sem pedido"
-                    )}
-                  </dd>
-                </>
-              )}
-              {hospedagem.observacao && (
-                <>
-                  <dt className="text-[var(--ds-label-2)]">Observação</dt>
-                  <dd>{hospedagem.observacao}</dd>
-                </>
-              )}
-            </dl>
-          </Cartao>
-
-          <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {hospedagem.quartos.map((quarto) => (
-              <li key={quarto.id}>
-                <Cartao
-                  id={`quarto-${quarto.id}`}
-                  titulo={`${quarto.nome} · ${rotuloDaCapacidade(quarto.capacidade)} · ${quantidadeDe(quarto.ocupantes.length, quarto.capacidade)}`}
-                  explicacao={[
-                    rotuloDoSexoDoQuarto(quarto.sexo),
-                    quarto.valorDiariaCentavos !== null ? `diária ${dinheiro(quarto.valorDiariaCentavos)}` : null,
-                    quarto.ocupantes.length > 1 ? `${pessoas(quarto.ocupantes.length)} dividem o quarto` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                  acoes={
-                    escrita &&
-                    quarto.ocupantes.length === 0 && (
-                      <FormularioDeAcao acao={removerQuartoAcao} aria-label={`Remover ${quarto.nome}`}>
-                        <input type="hidden" name="quartoId" value={quarto.id} />
-                        <BotaoDeEnvio tamanho="pequeno" variante="perigo">
-                          Remover
-                        </BotaoDeEnvio>
-                      </FormularioDeAcao>
-                    )
-                  }
-                >
-                  {hospedagem.quartosComSexosMisturados.includes(quarto.id) && (
-                    <Aviso tom="atencao" className="mb-3">
-                      Quarto com pessoas de sexos diferentes.
-                    </Aviso>
+                  <BotaoCopiar tamanho="pequeno" texto={hospedagem.textoDoRooming} rotulo="Copiar rooming list" mensagem="Rooming list copiada." />
+                  {hospedagem.textoParaSdc && pedido && (
+                    <BotaoCopiar tamanho="pequeno" texto={hospedagem.textoParaSdc} rotulo="Copiar pedido" mensagem={`Pedido ${pedido.referencia} copiado. Cole no canal da SDC.`} />
                   )}
-                  {quarto.ocupantes.length === 0 ? (
-                    <p className="text-[13px] text-[var(--ds-label-2)]">Quarto vazio. Coloque alguém pela lista &quot;Sem quarto&quot;, no topo.</p>
-                  ) : (
-                    <ul className="flex flex-col gap-2 text-[14px]">
-                      {quarto.ocupantes.map((ocupante) => (
-                        <li key={ocupante.convocacaoId} className="flex flex-wrap items-center justify-between gap-2">
-                          <span>
-                            {ocupante.nome}
-                            {ocupante.sexo === null && <span className="ml-1 text-[12px] text-[var(--ds-orange-deep)]">(sem sexo no cadastro)</span>}
-                            {ocupante.checkIn && ocupante.checkOut && (
-                              <span className="block text-[12px] text-[var(--ds-label-2)]">
-                                {textoDoPeriodo({ checkIn: ocupante.checkIn, checkOut: ocupante.checkOut })} · {diarias(diasEntre(ocupante.checkIn, ocupante.checkOut))}
+                  {escrita && (
+                    <BotaoDefinirHospedagem
+                      acao={alterarHospedagemAcao}
+                      rotulo="Editar"
+                      eventoId={evento.id}
+                      locais={locais}
+                      periodoSugerido={periodoSugerido}
+                      hospedagem={{
+                        id: hospedagem.id,
+                        localId: hospedagem.local?.id ?? null,
+                        checkIn: hospedagem.checkIn,
+                        checkOut: hospedagem.checkOut,
+                        observacao: hospedagem.observacao,
+                        atualizadoEm: hospedagem.atualizadoEm,
+                      }}
+                    />
+                  )}
+                  {escrita && hospedagem.quartos.length === 0 && !pedido && (
+                    <FormularioDeAcao acao={removerHospedagemAcao} aria-label="Remover esta hospedagem">
+                      <input type="hidden" name="hospedagemId" value={hospedagem.id} />
+                      <BotaoDeEnvio tamanho="pequeno" variante="perigo">
+                        Remover
+                      </BotaoDeEnvio>
+                    </FormularioDeAcao>
+                  )}
+                </>
+              }
+            >
+              <dl className="grid grid-cols-[130px_1fr] gap-x-3 gap-y-1 text-[14px]">
+                <dt className="text-[var(--ds-label-2)]">Período</dt>
+                <dd>
+                  Entrada {dataCurta(hospedagem.checkIn)} · saída {dataCurta(hospedagem.checkOut)}
+                </dd>
+                <dt className="text-[var(--ds-label-2)]">Quartos</dt>
+                <dd>
+                  {hospedagem.quartos.length === 0
+                    ? "Nenhum quarto ainda. Crie o primeiro logo abaixo."
+                    : `${hospedagem.quartos.length === 1 ? "1 quarto" : `${hospedagem.quartos.length} quartos`} · ${pessoas(pessoasNosQuartos)}`}
+                </dd>
+                {!ehApartamento && (
+                  <>
+                    <dt className="text-[var(--ds-label-2)]">Pedido à SDC</dt>
+                    <dd className="flex flex-wrap items-center gap-2">
+                      {pedido ? (
+                        <>
+                          <span className="[font-family:var(--ds-font-mono)] text-[13px]">{pedido.referencia}</span>
+                          <ChipDoVoo situacao={pedido.situacao} />
+                          {escrita && aguardando && (
+                            <BotaoRegistrarReserva
+                              acao={registrarRetornoDeHospedagemAcao}
+                              pedidoId={pedido.id}
+                              referencia={pedido.referencia}
+                              hoteis={hoteis}
+                              cidadeDoEvento={cidadeDoEvento}
+                              inicial={{
+                                localId: hospedagem.local?.id ?? null,
+                                numeroReserva: hospedagem.numeroReserva,
+                                valor: paraCampoDeDinheiro(pedido.valorCentavos),
+                                formaPagamento: pedido.formaPagamento,
+                              }}
+                            />
+                          )}
+                          {escrita && (
+                            <BotaoCancelarPedido
+                              acao={cancelarPedidoAcao}
+                              pedidoId={pedido.id}
+                              referencia={pedido.referencia}
+                              tamanho="pequeno"
+                              descricao="Avise a SDC pelo canal de sempre. Os quartos continuam montados e dá para pedir de novo."
+                            />
+                          )}
+                        </>
+                      ) : !escrita ? (
+                        "Ainda não pedida"
+                      ) : hospedagem.quartos.length === 0 ? (
+                        <span className="text-[var(--ds-label-2)]">Monte os quartos para pedir a hospedagem à SDC.</span>
+                      ) : (
+                        <FormularioDeAcao acao={registrarPedidoDeHospedagemAcao} aria-label="Pedir hospedagem à SDC">
+                          <input type="hidden" name="hospedagemId" value={hospedagem.id} />
+                          <BotaoDeEnvio tamanho="pequeno" variante="primario">
+                            Pedir hospedagem à SDC
+                          </BotaoDeEnvio>
+                        </FormularioDeAcao>
+                      )}
+                    </dd>
+                  </>
+                )}
+                {hospedagem.numeroReserva && (
+                  <>
+                    <dt className="text-[var(--ds-label-2)]">Reserva</dt>
+                    <dd>{hospedagem.numeroReserva}</dd>
+                  </>
+                )}
+                {pedido && pedido.valorCentavos !== null && (
+                  <>
+                    <dt className="text-[var(--ds-label-2)]">Valor total</dt>
+                    <dd className="tabular-nums">
+                      {dinheiro(pedido.valorCentavos)}
+                      {pedido.formaPagamento ? ` · ${pedido.formaPagamento}` : ""}
+                    </dd>
+                  </>
+                )}
+                {pedido?.observacaoSdc && (
+                  <>
+                    <dt className="text-[var(--ds-label-2)]">Resposta da SDC</dt>
+                    <dd>{pedido.observacaoSdc}</dd>
+                  </>
+                )}
+                {hospedagem.observacao && (
+                  <>
+                    <dt className="text-[var(--ds-label-2)]">Observação</dt>
+                    <dd>{hospedagem.observacao}</dd>
+                  </>
+                )}
+              </dl>
+            </Cartao>
+
+            <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {hospedagem.quartos.map((quarto) => (
+                <li key={quarto.id}>
+                  <Cartao
+                    id={`quarto-${quarto.id}`}
+                    titulo={`${quarto.nome} · ${rotuloDaCapacidade(quarto.capacidade)} · ${quantidadeDe(quarto.ocupantes.length, quarto.capacidade)}`}
+                    explicacao={[
+                      rotuloDoSexoDoQuarto(quarto.sexo),
+                      quarto.valorDiariaCentavos !== null ? `diária ${dinheiro(quarto.valorDiariaCentavos)}` : null,
+                      quarto.ocupantes.length > 1 ? `${pessoas(quarto.ocupantes.length)} dividem o quarto` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                    acoes={
+                      escrita &&
+                      quarto.ocupantes.length === 0 && (
+                        <FormularioDeAcao acao={removerQuartoAcao} aria-label={`Remover ${quarto.nome}`}>
+                          <input type="hidden" name="quartoId" value={quarto.id} />
+                          <BotaoDeEnvio tamanho="pequeno" variante="perigo">
+                            Remover
+                          </BotaoDeEnvio>
+                        </FormularioDeAcao>
+                      )
+                    }
+                  >
+                    {hospedagem.quartosComSexosMisturados.includes(quarto.id) && (
+                      <Aviso tom="atencao" className="mb-3">
+                        Quarto com pessoas de sexos diferentes.
+                      </Aviso>
+                    )}
+                    {quarto.ocupantes.length === 0 ? (
+                      <p className="text-[13px] text-[var(--ds-label-2)]">Quarto vazio. Coloque alguém pela lista &quot;Sem quarto&quot;, no topo.</p>
+                    ) : (
+                      <ul className="flex flex-col gap-2 text-[14px]">
+                        {quarto.ocupantes.map((ocupante) => (
+                          <li key={ocupante.convocacaoId} className="flex flex-wrap items-center justify-between gap-2">
+                            <span>
+                              {ocupante.nome}
+                              {ocupante.sexo === null && <span className="ml-1 text-[12px] text-[var(--ds-orange-deep)]">(sem sexo no cadastro)</span>}
+                              {ocupante.checkIn && ocupante.checkOut && (
+                                <span className="block text-[12px] text-[var(--ds-label-2)]">
+                                  {textoDoPeriodo({ checkIn: ocupante.checkIn, checkOut: ocupante.checkOut })} · {diarias(diasEntre(ocupante.checkIn, ocupante.checkOut))}
+                                </span>
+                              )}
+                            </span>
+                            {escrita && (
+                              <span className="flex flex-wrap items-center gap-1">
+                                <BotaoPeriodoDoOcupante
+                                  acao={definirPeriodoDoOcupanteAcao}
+                                  quartoId={quarto.id}
+                                  convocacaoId={ocupante.convocacaoId}
+                                  nome={ocupante.nome}
+                                  hospedagem={{ checkIn: hospedagem.checkIn, checkOut: hospedagem.checkOut }}
+                                  proprio={ocupante.checkIn && ocupante.checkOut ? { checkIn: ocupante.checkIn, checkOut: ocupante.checkOut } : null}
+                                />
+                                <MoverDeQuarto convocacaoId={ocupante.convocacaoId} nome={ocupante.nome} quartoAtual={quarto.id} quartos={quartos} trocas={trocas} />
+                                <FormularioDeAcao acao={tirarDoQuartoAcao} aria-label={`Tirar ${ocupante.nome} do quarto`}>
+                                  <input type="hidden" name="quartoId" value={quarto.id} />
+                                  <input type="hidden" name="convocacaoId" value={ocupante.convocacaoId} />
+                                  <BotaoDeEnvio tamanho="pequeno" variante="texto" aria-label={`Tirar ${ocupante.nome} do ${quarto.nome}`}>
+                                    Tirar
+                                  </BotaoDeEnvio>
+                                </FormularioDeAcao>
                               </span>
                             )}
-                          </span>
-                          {escrita && (
-                            <span className="flex flex-wrap items-center gap-1">
-                              <BotaoPeriodoDoOcupante
-                                acao={definirPeriodoDoOcupanteAcao}
-                                quartoId={quarto.id}
-                                convocacaoId={ocupante.convocacaoId}
-                                nome={ocupante.nome}
-                                hospedagem={{ checkIn: hospedagem.checkIn, checkOut: hospedagem.checkOut }}
-                                proprio={ocupante.checkIn && ocupante.checkOut ? { checkIn: ocupante.checkIn, checkOut: ocupante.checkOut } : null}
-                              />
-                              <MoverDeQuarto convocacaoId={ocupante.convocacaoId} nome={ocupante.nome} quartoAtual={quarto.id} quartos={quartos} trocas={trocas} />
-                              <FormularioDeAcao acao={tirarDoQuartoAcao} aria-label={`Tirar ${ocupante.nome} do quarto`}>
-                                <input type="hidden" name="quartoId" value={quarto.id} />
-                                <input type="hidden" name="convocacaoId" value={ocupante.convocacaoId} />
-                                <BotaoDeEnvio tamanho="pequeno" variante="texto" aria-label={`Tirar ${ocupante.nome} do ${quarto.nome}`}>
-                                  Tirar
-                                </BotaoDeEnvio>
-                              </FormularioDeAcao>
-                            </span>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </Cartao>
-              </li>
-            ))}
-            {escrita && (
-              <li className="flex items-start">
-                <FormularioNovoQuarto acao={adicionarQuartoAcao} hospedagemId={hospedagem.id} proximoNome={`Quarto ${hospedagem.quartos.length + 1}`} />
-              </li>
-            )}
-          </ul>
-        </div>
-      ))}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </Cartao>
+                </li>
+              ))}
+              {escrita && (
+                <li className="flex items-start">
+                  <FormularioNovoQuarto acao={adicionarQuartoAcao} hospedagemId={hospedagem.id} proximoNome={`Quarto ${hospedagem.quartos.length + 1}`} />
+                </li>
+              )}
+            </ul>
+          </div>
+        );
+      })}
     </section>
   );
 }

@@ -2,7 +2,7 @@ import type { Executor } from "@/core/db/database";
 import type { AtorDaEscrita } from "@/fluxos/_base";
 import { transferirSolicitacaoDaConvocacao } from "@/modules/custos";
 import * as escala from "@/modules/escala";
-import { transferirLogisticaDaConvocacao } from "@/modules/logistica";
+import { transferirLogisticaDaConvocacao, vincularPedidosDeVooDaPessoa } from "@/modules/logistica";
 
 import { escrever } from "./comum";
 
@@ -41,9 +41,12 @@ export function removerVagaManual(entrada: { eventoId: string; escalaId: string 
 }
 
 export function porNaVaga(entrada: { eventoId: string; escalaId: string; pessoaId: string; sugestaoScore?: number }, { ator, agora }: Quem) {
-  return escrever(ator, (tx) =>
-    escala.porNaVaga(montagem(tx), { ...entrada, sugestaoScore: entrada.sugestaoScore ?? null, usuarioId: ator.usuarioId, instante: agora }),
-  );
+  return escrever(ator, async (tx) => {
+    const resultado = await escala.porNaVaga(montagem(tx), { ...entrada, sugestaoScore: entrada.sugestaoScore ?? null, usuarioId: ator.usuarioId, instante: agora });
+    // O voo costuma ser pedido antes da escala: quem entra agora leva os pedidos de voo que já tinha neste evento.
+    await vincularPedidosDeVooDaPessoa(tx, { eventoId: entrada.eventoId, pessoaId: entrada.pessoaId });
+    return resultado;
+  });
 }
 
 export function tirarDaVaga(entrada: { eventoId: string; convocacaoId: string }, { ator, agora }: Quem) {

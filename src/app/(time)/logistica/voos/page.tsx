@@ -24,7 +24,7 @@ export default async function PaginaVoos({ searchParams }: { searchParams: Promi
     ref: parametro(busca.ref),
     modo: parametro(busca.modo),
     novo: parametro(busca.novo),
-    convocacao: parametro(busca.convocacao),
+    pessoa: z.uuid().safeParse(parametro(busca.pessoa)).data,
     registrado: parametro(busca.registrado),
   };
   const agora = new Date();

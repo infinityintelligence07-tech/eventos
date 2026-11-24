@@ -42,6 +42,10 @@ export const evento = eventosSchema.table(
     alunosConfirmados: integer("alunos_confirmados"),
     // Confronto: base do cálculo de pai/mãe (fila ÷ 15).
     pessoasNaFila: integer("pessoas_na_fila"),
+    // Marcadores da logística (o time decide por evento; dá para desfazer): o evento não precisa de voo (sai do aviso de
+    // voos) e o evento não tem hospedagem (como o "Sem hospedagem" da planilha). Quem e quando ficam no registro_acao.
+    semVoo: boolean("sem_voo").notNull().default(false),
+    semHospedagem: boolean("sem_hospedagem").notNull().default(false),
     statusEscala: text("status_escala").notNull().default("SEM_ESCALA"),
     aprovadoPor: uuid("aprovado_por").references((): AnyPgColumn => usuario.id, {
       onDelete: "set null",

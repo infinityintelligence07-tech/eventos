@@ -29,7 +29,7 @@ const EXPLICACAO: Record<string, string> = {
   "custos-para-auditar": "Solicitações de custo esperando aprovação do time.",
   "custos-criticos": "Solicitações com alerta crítico de consumo ou distância.",
   // O fluxo manda a explicação com os dias configurados em Configurações › Aviso de voos; esta é a de reserva.
-  "voos-a-pedir": "Eventos na janela do aviso com pessoas que vão de avião e ainda sem pedido à SDC.",
+  "voos-a-pedir": "Eventos que entraram no prazo do aviso e ainda não têm nenhum pedido de voo à SDC.",
   "pedidos-alterados": "Pedidos mudados pelo time depois da emissão, esperando novo retorno da SDC.",
   "disponibilidade.enquetes-fechando": "Enquetes de disponibilidade perto de fechar.",
 };

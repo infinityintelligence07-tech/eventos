@@ -86,15 +86,14 @@ describe.skipIf(!TEST_DATABASE_URL)("migration 0004: registro de ações, convoc
     ).rejects.toThrow(/convocacao_status_check/);
   });
 
-  it("pedido à SDC numera SDC-000001 e aceita um só voo ativo por pessoa no evento", async () => {
+  it("pedido à SDC numera SDC-000001 e exige passageiro no voo (desde a 0015 a pessoa pode ter mais de um voo ativo no evento)", async () => {
     const pedido = await primeiro(
       `insert into eventos.pedido_sdc (tipo, evento_id, pessoa_id) values ('VOO', $1, $2) returning referencia`,
       [eventoId, pessoaId],
     );
     expect(pedido.referencia).toMatch(/^SDC-\d{6}$/);
-    await expect(
-      banco.sql(`insert into eventos.pedido_sdc (tipo, evento_id, pessoa_id) values ('VOO', $1, $2)`, [eventoId, pessoaId]),
-    ).rejects.toThrow(/pedido_sdc_voo_ativo_unique/);
+    const segundo = await primeiro(`insert into eventos.pedido_sdc (tipo, evento_id, pessoa_id) values ('VOO', $1, $2) returning referencia`, [eventoId, pessoaId]);
+    expect(segundo.referencia).not.toBe(pedido.referencia);
     await expect(
       banco.sql(`insert into eventos.pedido_sdc (tipo, evento_id) values ('VOO', $1)`, [eventoId]),
     ).rejects.toThrow(/pedido_sdc_passageiro_check/);

@@ -1,9 +1,9 @@
-import { and, asc, desc, eq, inArray, isNull, ne, notInArray, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, ne, notInArray, sql, type SQL } from "drizzle-orm";
 
 import { pessoa, usuario } from "@/core/db/schema/core";
 import type { Executor } from "@/core/db/database";
 import { registrarAcao } from "@/core/db/registro-acao";
-import { convocacao, escala, evento, hospedagem, local, pedidoSdc, trechoVoo } from "@/core/db/schema/eventos";
+import { convocacao, escala, evento, hospedagem, local, pedidoSdc, pessoaEvento, quarto, tipoEvento, trechoVoo } from "@/core/db/schema/eventos";
 
 import type { PreferenciaDeHorario, Sentido, SituacaoDoPedido, TipoDoPedido } from "../domain/pedido";
 import type { RepositorioPedidos } from "../service/pedidos";
@@ -15,9 +15,18 @@ export type EventoDaLogistica = {
   nome: string;
   dataInicio: string;
   dataFim: string;
+  /** Local do evento (onde ele acontece), com cidade e UF. */
+  localNome: string | null;
   cidade: string | null;
   uf: string | null;
+  /** O time marcou que o evento não precisa de voo: sai do aviso de voos. */
+  semVoo: boolean;
+  /** O time marcou que o evento não tem hospedagem (o "Sem hospedagem" da planilha). */
+  semHospedagem: boolean;
 };
+
+/** Evento de hoje em diante, não cancelado, com a sigla do tipo (o aviso de voos deixa as Masterclasses de fora). */
+export type EventoFuturo = EventoDaLogistica & { tipoSigla: string | null };
 
 export type PassageiroDeVoo = {
   convocacaoId: string;
@@ -51,6 +60,7 @@ export type PedidoDaSdc = {
   pessoaNome: string | null;
   convocacaoId: string | null;
   valorCentavos: number | null;
+  formaPagamento: string | null;
   observacaoTime: string | null;
   observacaoSdc: string | null;
   solicitadoEm: Date;
@@ -69,15 +79,27 @@ const colunasDoEvento = {
   nome: evento.nome,
   dataInicio: inicioDoEvento,
   dataFim: fimDoEvento,
+  localNome: local.nome,
   cidade: local.cidade,
   uf: local.uf,
+  semVoo: evento.semVoo,
+  semHospedagem: evento.semHospedagem,
 };
 
 /** Recebe o executor da transação do fluxo (escrita) ou o banco (leitura). */
 export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos & {
   eventoPorId(eventoId: string): Promise<EventoDaLogistica | null>;
+  /** Eventos de hoje em diante que já têm gente na escala (é com eles que a Hospedagem e as Caronas trabalham). */
   eventosDaLogistica(filtro: { desde: string }): Promise<EventoDaLogistica[]>;
+  /** Todos os eventos de hoje em diante, com ou sem escala, fora os cancelados: o voo é pedido antes da escala. */
+  eventosFuturos(filtro: { desde: string }): Promise<EventoFuturo[]>;
+  /** Lembrete da escala: quem está nela com o deslocamento Avião. */
   passageirosDeVoo(filtro: { desde: string; eventoId?: string }): Promise<PassageiroDeVoo[]>;
+  /** Pares evento|pessoa de quem está na escala (convocação principal ativa), para a coluna "Escala" dos pedidos. */
+  naEscala(filtro: { desde: string; eventoId?: string }): Promise<Set<string>>;
+  /** Pessoas ativas do cadastro de staff, por nome: quem pode receber um pedido de voo. */
+  staffAtivoPorNome(): Promise<{ pessoaId: string; nome: string }[]>;
+  temPedidoDeVooAtivo(eventoId: string): Promise<boolean>;
   pedidos(filtro: { desde?: string; eventoId?: string; tipo?: TipoDoPedido; referencia?: string; situacoes?: SituacaoDoPedido[] }): Promise<PedidoDaSdc[]>;
 } {
   async function trechosDosPedidos(ids: string[]): Promise<Map<string, TrechoDoPedido[]>> {
@@ -135,6 +157,52 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
         .orderBy(asc(inicioDoEvento), asc(evento.codigo));
     },
 
+    async eventosFuturos({ desde }) {
+      return executor
+        .select({ ...colunasDoEvento, tipoSigla: tipoEvento.sigla })
+        .from(evento)
+        .leftJoin(local, eq(local.id, evento.localId))
+        .leftJoin(tipoEvento, eq(tipoEvento.id, evento.tipoEventoId))
+        .where(and(isNull(evento.deletedAt), ne(evento.status, "CANCELADO"), eventoTerminaDesde(desde)))
+        .orderBy(asc(inicioDoEvento), asc(evento.codigo));
+    },
+
+    async naEscala({ desde, eventoId }) {
+      const linhas = await executor
+        .select({ eventoId: escala.eventoId, pessoaId: convocacao.pessoaId })
+        .from(convocacao)
+        .innerJoin(escala, eq(escala.id, convocacao.escalaId))
+        .innerJoin(evento, eq(evento.id, escala.eventoId))
+        .where(
+          and(
+            isNull(escala.deletedAt),
+            isNull(evento.deletedAt),
+            inArray(convocacao.status, CONVOCACAO_ATIVA),
+            convocacaoPrincipal,
+            eventoId ? eq(evento.id, eventoId) : eventoTerminaDesde(desde),
+          ),
+        );
+      return new Set(linhas.map((linha) => `${linha.eventoId}|${linha.pessoaId}`));
+    },
+
+    async temPedidoDeVooAtivo(eventoId) {
+      const [linha] = await executor
+        .select({ id: pedidoSdc.id })
+        .from(pedidoSdc)
+        .where(and(eq(pedidoSdc.eventoId, eventoId), eq(pedidoSdc.tipo, "VOO"), ne(pedidoSdc.situacao, "CANCELADO")))
+        .limit(1);
+      return linha !== undefined;
+    },
+
+    async staffAtivoPorNome() {
+      return executor
+        .select({ pessoaId: pessoa.id, nome: nomeDaPessoa })
+        .from(pessoa)
+        .innerJoin(pessoaEvento, eq(pessoaEvento.pessoaId, pessoa.id))
+        .where(and(eq(pessoa.ativo, true), isNull(pessoa.deletedAt)))
+        .orderBy(asc(nomeDaPessoa));
+    },
+
     async passageirosDeVoo({ desde, eventoId }) {
       const linhas = await executor
         .select({
@@ -182,6 +250,7 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
           pessoaNome: sql<string | null>`case when ${pessoa.id} is null then null else ${nomeDaPessoa} end`,
           convocacaoId: pedidoSdc.convocacaoId,
           valorCentavos: pedidoSdc.valorCentavos,
+          formaPagamento: pedidoSdc.formaPagamento,
           observacaoTime: pedidoSdc.observacaoTime,
           observacaoSdc: pedidoSdc.observacaoSdc,
           solicitadoEm: pedidoSdc.solicitadoEm,
@@ -209,24 +278,41 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
       }));
     },
 
-    async travarConvocacao(convocacaoId) {
-      if (!(await travarLinha(executor, convocacao, convocacaoId))) return null;
+    async travarEvento(eventoId) {
+      if (!(await travarLinha(executor, evento, eventoId))) return null;
       const [linha] = await executor
-        .select({ convocacaoId: convocacao.id, pessoaId: convocacao.pessoaId, eventoId: escala.eventoId, status: convocacao.status, principal: convocacao.principal, deslocamento: convocacao.deslocamento })
-        .from(convocacao)
-        .innerJoin(escala, eq(escala.id, convocacao.escalaId))
-        .where(and(eq(convocacao.id, convocacaoId), isNull(escala.deletedAt)));
-      if (!linha) return null;
-      const { principal, ...resto } = linha;
-      return { ...resto, ativa: CONVOCACAO_ATIVA.includes(linha.status) && principal };
+        .select({ id: evento.id, dataFim: fimDoEvento, status: evento.status })
+        .from(evento)
+        .where(and(eq(evento.id, eventoId), isNull(evento.deletedAt)));
+      return linha ? { id: linha.id, dataFim: linha.dataFim, cancelado: linha.status === "CANCELADO" } : null;
     },
 
-    async pedidoDeVooAtivo(eventoId, pessoaId) {
+    async staffAtivo(pessoaId) {
       const [linha] = await executor
+        .select({ pessoaId: pessoa.id, nome: nomeDaPessoa })
+        .from(pessoa)
+        .innerJoin(pessoaEvento, eq(pessoaEvento.pessoaId, pessoa.id))
+        .where(and(eq(pessoa.id, pessoaId), eq(pessoa.ativo, true), isNull(pessoa.deletedAt)));
+      return linha ?? null;
+    },
+
+    async convocacaoPrincipal(eventoId, pessoaId) {
+      const [linha] = await executor
+        .select({ id: convocacao.id })
+        .from(convocacao)
+        .innerJoin(escala, eq(escala.id, convocacao.escalaId))
+        .where(and(eq(escala.eventoId, eventoId), isNull(escala.deletedAt), eq(convocacao.pessoaId, pessoaId), inArray(convocacao.status, CONVOCACAO_ATIVA), convocacaoPrincipal))
+        .limit(1);
+      return linha?.id ?? null;
+    },
+
+    async pedidosDeVooAtivos(eventoId, pessoaId) {
+      const linhas = await executor
         .select({ referencia: pedidoSdc.referencia })
         .from(pedidoSdc)
-        .where(and(eq(pedidoSdc.eventoId, eventoId), eq(pedidoSdc.pessoaId, pessoaId), eq(pedidoSdc.tipo, "VOO"), ne(pedidoSdc.situacao, "CANCELADO")));
-      return linha?.referencia ?? null;
+        .where(and(eq(pedidoSdc.eventoId, eventoId), eq(pedidoSdc.pessoaId, pessoaId), eq(pedidoSdc.tipo, "VOO"), ne(pedidoSdc.situacao, "CANCELADO")))
+        .orderBy(asc(pedidoSdc.referencia));
+      return linhas.map((linha) => linha.referencia);
     },
 
     async inserirPedido(pedido) {
@@ -302,6 +388,7 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
                 valorCentavos: mudanca.emissao.valorCentavos,
                 observacaoSdc: mudanca.emissao.observacaoSdc,
                 retornoRegistradoPor: mudanca.emissao.usuarioId,
+                ...(mudanca.emissao.formaPagamento !== undefined ? { formaPagamento: mudanca.emissao.formaPagamento } : {}),
               }
             : {}),
           ...(mudanca.cancelamento
@@ -338,12 +425,15 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
 
     async travarHospedagemSemPedido(hospedagemId) {
       if (!(await travarLinha(executor, hospedagem, hospedagemId))) return null;
+      // Left join: enquanto a SDC não escolhe o hotel, a hospedagem não tem local.
       const [linha] = await executor
         .select({ eventoId: hospedagem.eventoId, pedidoId: hospedagem.pedidoId, localTipo: local.tipo })
         .from(hospedagem)
-        .innerJoin(local, eq(local.id, hospedagem.localId))
+        .leftJoin(local, eq(local.id, hospedagem.localId))
         .where(eq(hospedagem.id, hospedagemId));
-      return linha ?? null;
+      if (!linha) return null;
+      const [quartos] = await executor.select({ total: count() }).from(quarto).where(eq(quarto.hospedagemId, hospedagemId));
+      return { ...linha, quartos: quartos?.total ?? 0 };
     },
 
     async vincularHospedagem(hospedagemId, pedidoId, instante) {
@@ -354,8 +444,18 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
       await executor.update(hospedagem).set({ pedidoId: null, atualizadoEm: instante }).where(eq(hospedagem.pedidoId, pedidoId));
     },
 
-    async registrarReserva(pedidoId, numeroReserva, instante) {
-      await executor.update(hospedagem).set({ numeroReserva, atualizadoEm: instante }).where(eq(hospedagem.pedidoId, pedidoId));
+    async tipoDoLocal(localId) {
+      const [linha] = await executor.select({ tipo: local.tipo }).from(local).where(and(eq(local.id, localId), isNull(local.deletedAt)));
+      return linha?.tipo ?? null;
+    },
+
+    async registrarReserva(pedidoId, { numeroReserva, localId }, instante) {
+      const alteradas = await executor
+        .update(hospedagem)
+        .set({ numeroReserva, localId, atualizadoEm: instante })
+        .where(eq(hospedagem.pedidoId, pedidoId))
+        .returning({ id: hospedagem.id });
+      return alteradas.length === 1;
     },
 
     async registrar({ pedidoId, eventoId, acao, statusDe, statusPara, comentario, emNomeDePessoaId, dados, usuarioId }) {

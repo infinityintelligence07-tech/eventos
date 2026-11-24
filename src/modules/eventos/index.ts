@@ -56,7 +56,7 @@ export {
   type SemanaDoCalendario,
 } from "./service/calendario";
 export { type SalvarDadosDoEvento, salvarDadosDoEventoSchema } from "./domain/schemas";
-export { criarRepositorioEvento, type EventoDoResumo, type RepositorioEvento } from "./repository/evento-repository";
+export { criarRepositorioEvento, type EventoDoResumo, type MarcadorDaLogistica, type RepositorioEvento } from "./repository/evento-repository";
 export { dadosEditados, SIGLA_CONFRONTO, usaFila } from "./domain/resumo";
 export {
   arquivarLocalSchema,

@@ -9,9 +9,9 @@ export {
   type PedidoCarregado,
   registrarPedidoDeVoo,
   registrarRetornoDaSdc,
-  registrarRetornoDeHospedagem,
   type VoosCarregados,
 } from "./voos";
+export { dispensarLogisticaDoEvento } from "./dispensa";
 export {
   adicionarQuarto,
   alterarHospedagem,
@@ -23,6 +23,8 @@ export {
   type HospedagemDoEventoCarregada,
   porNoQuarto,
   registrarPedidoDeHospedagem,
+  registrarRetornoDeHospedagem,
+  removerHospedagem,
   removerQuarto,
   tirarDoQuarto,
   trocarDeQuarto,

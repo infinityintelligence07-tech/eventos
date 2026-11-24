@@ -5,12 +5,12 @@ import {
   DIAS_ABRE_A_JANELA,
   diasDoAtraso,
   diasDoAvisoConfigurado,
-  eventosComPassagensAPedir,
+  eventosSemPedidoDeVoo,
   janelaDeCompra,
   precisaPedir,
-  textoDasPassagensAPedir,
   textoDosDiasQueFaltam,
 } from "../janela";
+import { agruparPorMesEEvento, rotuloDoMes, rotuloDoTrajeto, trajetoDosTrechos } from "../planilha-de-voos";
 import { salvarAvisoDeVoosSchema } from "../schemas";
 import {
   type AcaoNoPedido,
@@ -127,30 +127,78 @@ describe("janela de compra com o aviso configurado (Configurações › Aviso de
     for (const invalido of ["6", "366", "0", "-5", "45,5", "45.5", "abc", "99999", undefined]) expect(ler(invalido).success).toBe(false);
   });
 
-  it("aviso da tela: por evento na janela, quantas passagens faltam e quantos dias faltam, o mais próximo primeiro", () => {
-    const longe = { id: "e-longe", codigo: "IPR_SP_10", nome: "IPR", dataInicio: "2027-03-01" };
-    const naJanela = { id: "e-janela", codigo: null, nome: "Confronto Manaus", dataInicio: "2027-01-10" };
-    const atrasado = { id: "e-atrasado", codigo: "ASM_AM_900", nome: "ASM", dataInicio: "2026-12-15" };
-    const aPedir = [{ evento: naJanela }, { evento: longe }, { evento: atrasado }, { evento: naJanela }, { evento: atrasado }, { evento: atrasado }];
+  it("aviso da tela, por evento: entrou no prazo e ainda não tem nenhum pedido de voo, o mais próximo primeiro", () => {
+    const evento = (id: string, dataInicio: string, semVoo = false) => ({ id, codigo: id.toUpperCase(), nome: id, dataInicio, semVoo });
+    const eventos = [
+      evento("longe", "2027-03-01"),
+      evento("na-janela", "2027-01-10"),
+      evento("atrasado", "2026-12-15"),
+      evento("com-pedido", "2026-12-20"),
+      evento("de-casa", "2026-12-01", true),
+      evento("ja-comecou", "2026-10-27"),
+      evento("hoje", "2026-10-28"),
+    ];
+    const comPedido = new Set(["com-pedido"]);
+    const marcadas = new Map([["atrasado", 3]]);
 
-    expect(eventosComPassagensAPedir(aPedir, "2026-10-28")).toEqual([
-      { eventoId: "e-atrasado", codigo: "ASM_AM_900", nome: "ASM", dataInicio: "2026-12-15", passagens: 3, janela: "ATRASADO", dias: 48 },
-      { eventoId: "e-janela", codigo: null, nome: "Confronto Manaus", dataInicio: "2027-01-10", passagens: 2, janela: "NA_JANELA", dias: 74 },
+    expect(eventosSemPedidoDeVoo(eventos, comPedido, marcadas, "2026-10-28")).toEqual([
+      { eventoId: "hoje", codigo: "HOJE", nome: "hoje", dataInicio: "2026-10-28", marcadasComoAviao: 0, janela: "ATRASADO", dias: 0 },
+      { eventoId: "atrasado", codigo: "ATRASADO", nome: "atrasado", dataInicio: "2026-12-15", marcadasComoAviao: 3, janela: "ATRASADO", dias: 48 },
+      { eventoId: "na-janela", codigo: "NA-JANELA", nome: "na-janela", dataInicio: "2027-01-10", marcadasComoAviao: 0, janela: "NA_JANELA", dias: 74 },
     ]);
+    const ids = (diasDoAviso: number, pedidos = comPedido) => eventosSemPedidoDeVoo(eventos, pedidos, marcadas, "2026-10-28", diasDoAviso).map((item) => `${item.eventoId}:${item.janela}`);
     // Aviso de 60 dias: o evento a 74 dias sai do aviso e o de 48 dias deixa de estar atrasado (limite 40).
-    expect(eventosComPassagensAPedir(aPedir, "2026-10-28", 60)).toEqual([expect.objectContaining({ eventoId: "e-atrasado", passagens: 3, janela: "NA_JANELA", dias: 48 })]);
-    // Aviso de 150 dias: o evento distante entra.
-    expect(eventosComPassagensAPedir(aPedir, "2026-10-28", 150).map((evento) => [evento.eventoId, evento.passagens])).toEqual([
-      ["e-atrasado", 3],
-      ["e-janela", 2],
-      ["e-longe", 1],
-    ]);
-    expect(eventosComPassagensAPedir([], "2026-10-28")).toEqual([]);
+    expect(ids(60)).toEqual(["hoje:ATRASADO", "atrasado:NA_JANELA"]);
+    // Aviso de 150 dias: o evento distante entra. O marcado como "não precisa de voo" e o que já tem pedido, nunca.
+    expect(ids(150)).toEqual(["hoje:ATRASADO", "atrasado:ATRASADO", "na-janela:NA_JANELA", "longe:NA_JANELA"]);
+    // Sem nenhum pedido registrado, o evento que tinha pedido também entra; o que já começou continua de fora.
+    expect(ids(90, new Set())).toEqual(["hoje:ATRASADO", "atrasado:ATRASADO", "com-pedido:ATRASADO", "na-janela:NA_JANELA"]);
+    expect(eventosSemPedidoDeVoo([], comPedido, marcadas, "2026-10-28")).toEqual([]);
   });
 
   it("textos do aviso", () => {
     expect([textoDosDiasQueFaltam(12), textoDosDiasQueFaltam(1), textoDosDiasQueFaltam(0)]).toEqual(["faltam 12 dias", "falta 1 dia", "é hoje"]);
-    expect([textoDasPassagensAPedir(1), textoDasPassagensAPedir(4)]).toEqual(["1 passagem a pedir", "4 passagens a pedir"]);
+  });
+});
+
+describe("a tela de Voos lê como a planilha (mês → evento → uma linha por compra)", () => {
+  it("trajeto pelos trechos do pedido", () => {
+    expect([trajetoDosTrechos(["IDA", "VOLTA"]), trajetoDosTrechos(["VOLTA", "IDA"]), trajetoDosTrechos(["IDA"]), trajetoDosTrechos(["VOLTA"]), trajetoDosTrechos([])]).toEqual([
+      "IDA_E_VOLTA",
+      "IDA_E_VOLTA",
+      "IDA",
+      "VOLTA",
+      null,
+    ]);
+    expect([rotuloDoTrajeto("IDA_E_VOLTA"), rotuloDoTrajeto("IDA"), rotuloDoTrajeto("VOLTA")]).toEqual(["Ida e volta", "Ida", "Volta"]);
+    expect([rotuloDoMes("2026-12"), rotuloDoMes("2027-01"), rotuloDoMes("2027-03")]).toEqual(["Dezembro de 2026", "Janeiro de 2027", "Março de 2027"]);
+  });
+
+  it("agrupa por mês e por evento na ordem das datas, mantendo a ordem das linhas dentro do evento", () => {
+    const janeiro = { id: "b", dataInicio: "2027-01-08" };
+    const dezembroA = { id: "a", dataInicio: "2026-12-16" };
+    const dezembroB = { id: "c", dataInicio: "2026-12-16" };
+    const dezembroCedo = { id: "z", dataInicio: "2026-12-02" };
+    const linhas = [
+      { evento: janeiro, nome: "um" },
+      { evento: dezembroB, nome: "dois" },
+      { evento: dezembroA, nome: "três" },
+      { evento: dezembroCedo, nome: "quatro" },
+      { evento: dezembroA, nome: "cinco" },
+      { evento: janeiro, nome: "seis" },
+    ];
+    expect(agruparPorMesEEvento(linhas).map((mes) => [mes.mes, mes.eventos.map((grupo) => [grupo.evento.id, grupo.linhas.map((linha) => linha.nome)])])).toEqual([
+      [
+        "2026-12",
+        [
+          ["z", ["quatro"]],
+          ["a", ["três", "cinco"]],
+          ["c", ["dois"]],
+        ],
+      ],
+      ["2027-01", [["b", ["um", "seis"]]]],
+    ]);
+    expect(agruparPorMesEEvento([])).toEqual([]);
   });
 });
 

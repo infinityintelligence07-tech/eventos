@@ -5,6 +5,8 @@ import type { ContextoDaAcao } from "./pedidos";
 
 // Hospedagem e rooming list (docs/07 §5.3): ocupantes < capacidade, sexo do quarto, convocação ativa do mesmo
 // evento e marcada para hotel na escala. O quarto é travado (FOR UPDATE) antes de contar as camas.
+// O time monta os quartos; quem escolhe e reserva o hotel é a SDC. Por isso a hospedagem nasce sem hotel (local vazio)
+// e ele entra no retorno do pedido (service/pedidos.ts). Apartamento da IAM é o caminho sem SDC.
 
 export type QuartoTravado = QuartoDoRooming & { nome: string; hospedagemId: string; eventoId: string };
 
@@ -20,7 +22,9 @@ export type RepositorioHospedagem = {
   eventoExiste(eventoId: string): Promise<boolean>;
   localDeHospedagem(localId: string): Promise<{ tipo: string; arquivado: boolean } | null>;
   inserirHospedagem(hospedagem: CriarHospedagem & { usuarioId: string; instante: Date }): Promise<string>;
-  travarHospedagem(hospedagemId: string): Promise<({ id: string; eventoId: string } & Periodo) | null>;
+  travarHospedagem(hospedagemId: string): Promise<({ id: string; eventoId: string; localId: string | null; pedidoId: string | null; numeroReserva: string | null } & Periodo) | null>;
+  quartosDaHospedagem(hospedagemId: string): Promise<number>;
+  removerHospedagem(hospedagemId: string): Promise<void>;
   /** Quantos ocupantes têm período próprio que não cabe nestas datas. */
   periodosForaDe(hospedagemId: string, periodo: Periodo): Promise<number>;
   /** Compare-and-set pela versão da tela. false = outra pessoa mudou antes. */
@@ -43,24 +47,41 @@ export type RepositorioHospedagem = {
   registrar(registro: RegistroDaHospedagem & { usuarioId: string }): Promise<void>;
 };
 
-async function localValido(repo: RepositorioHospedagem, localId: string): Promise<void> {
+/** Sem `localId` não há o que conferir: o hotel fica para a SDC definir. Devolve o tipo do local escolhido. */
+async function localValido(repo: RepositorioHospedagem, localId: string | undefined): Promise<string | null> {
+  if (localId === undefined) return null;
   const local = await repo.localDeHospedagem(localId);
   if (!local || local.arquivado) throw new ErroDaLogistica("Local não encontrado. Escolha outro hotel ou apartamento.");
   if (local.tipo !== "HOTEL" && local.tipo !== "APARTAMENTO") throw new ErroDaLogistica("Escolha um hotel ou um apartamento, não um local de evento.");
+  return local.tipo;
 }
 
+/** Primeiro passo da Hospedagem: abre a montagem dos quartos com as datas de entrada e saída. O hotel é opcional. */
 export async function criarHospedagem(repo: RepositorioHospedagem, entrada: CriarHospedagem, { usuarioId, instante }: ContextoDaAcao): Promise<string> {
   if (!(await repo.eventoExiste(entrada.eventoId))) throw new ErroDaLogistica("Evento não encontrado.");
   await localValido(repo, entrada.localId);
   const id = await repo.inserirHospedagem({ ...entrada, usuarioId, instante });
-  await repo.registrar({ hospedagemId: id, eventoId: entrada.eventoId, acao: "HOSPEDAGEM_CRIADA", usuarioId, dados: { localId: entrada.localId } });
+  await repo.registrar({ hospedagemId: id, eventoId: entrada.eventoId, acao: "HOSPEDAGEM_CRIADA", usuarioId, dados: { localId: entrada.localId ?? null } });
   return id;
+}
+
+/** Desfaz uma hospedagem aberta por engano: só sem quartos e sem pedido à SDC. */
+export async function removerHospedagem(repo: RepositorioHospedagem, hospedagemId: string, { usuarioId }: ContextoDaAcao): Promise<string> {
+  const atual = await repo.travarHospedagem(hospedagemId);
+  if (!atual) throw new ErroDaLogistica("Hospedagem não encontrada. Recarregue a página.");
+  if (atual.pedidoId) throw new ErroDaLogistica("Esta hospedagem tem pedido à SDC. Cancele o pedido antes de removê-la.");
+  if ((await repo.quartosDaHospedagem(atual.id)) > 0) throw new ErroDaLogistica("Remova os quartos antes de remover a hospedagem.");
+  await repo.removerHospedagem(atual.id);
+  await repo.registrar({ hospedagemId: atual.id, eventoId: atual.eventoId, acao: "HOSPEDAGEM_REMOVIDA", usuarioId, dados: { localId: atual.localId } });
+  return atual.eventoId;
 }
 
 export async function alterarHospedagem(repo: RepositorioHospedagem, entrada: AlterarHospedagem, { usuarioId, instante }: ContextoDaAcao): Promise<string> {
   const atual = await repo.travarHospedagem(entrada.hospedagemId);
   if (!atual) throw new ErroDaLogistica("Hospedagem não encontrada. Recarregue a página.");
-  await localValido(repo, entrada.localId);
+  const tipoDoLocal = await localValido(repo, entrada.localId);
+  if (atual.numeroReserva && tipoDoLocal !== "HOTEL") throw new ErroDaLogistica("A SDC já reservou o hotel desta hospedagem: mantenha um hotel escolhido.");
+  if (atual.pedidoId && tipoDoLocal === "APARTAMENTO") throw new ErroDaLogistica("Esta hospedagem tem pedido à SDC. Cancele o pedido antes de trocar para apartamento da IAM.");
   const fora = await repo.periodosForaDe(atual.id, { checkIn: entrada.checkIn, checkOut: entrada.checkOut });
   if (fora > 0) {
     throw new ErroDaLogistica(
@@ -70,7 +91,7 @@ export async function alterarHospedagem(repo: RepositorioHospedagem, entrada: Al
     );
   }
   if (!(await repo.atualizarHospedagem(entrada, instante))) throw new LogisticaMudouError("a hospedagem mudou");
-  await repo.registrar({ hospedagemId: atual.id, eventoId: atual.eventoId, acao: "HOSPEDAGEM_ALTERADA", usuarioId, dados: { localId: entrada.localId } });
+  await repo.registrar({ hospedagemId: atual.id, eventoId: atual.eventoId, acao: "HOSPEDAGEM_ALTERADA", usuarioId, dados: { localId: entrada.localId ?? null } });
   return atual.eventoId;
 }
 

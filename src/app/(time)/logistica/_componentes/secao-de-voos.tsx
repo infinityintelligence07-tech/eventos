@@ -2,40 +2,68 @@ import { Plane, Plus } from "lucide-react";
 import Link from "next/link";
 
 import type { LinhaDeVoo, PedidoCarregado, VoosCarregados } from "@/fluxos/logistica";
-import { aguardandoSdc, rotuloDaPreferencia, rotuloDoSentido, textoDasPassagensAPedir, textoDosDiasQueFaltam, type TrechoDoPedido } from "@/modules/logistica";
-import { BotaoCopiar, PainelPelaUrl } from "@/app/(time)/_componentes/ui";
+import {
+  aguardandoSdc,
+  type EventoDaLogistica,
+  rotuloDaPreferencia,
+  rotuloDoMes,
+  rotuloDoSentido,
+  rotuloDoTrajeto,
+  type Sentido,
+  textoDosDiasQueFaltam,
+  trajetoDosTrechos,
+  type TrechoDoPedido,
+} from "@/modules/logistica";
+import { BotaoCopiar, FormularioDeAcao, PainelPelaUrl } from "@/app/(time)/_componentes/ui";
 
 import { Aviso, FaixaSomenteLeitura } from "../../_componentes/ui/aviso";
 import { AtalhosDeFiltro, BarraDeFiltros, SeletorDeFiltro } from "../../_componentes/ui/barra-de-filtros";
+import { BotaoDeEnvio } from "../../_componentes/ui/botao";
 import { BotaoLink } from "../../_componentes/ui/botao-link";
 import { Cartao } from "../../_componentes/ui/cartao";
+import { TITULO_DE_CARTAO, TITULO_DE_SECAO } from "../../_componentes/ui/classes";
 import { EstadoVazio } from "../../_componentes/ui/estados";
-import { dataCurta, dataEHora, dinheiro, hora } from "../../_componentes/ui/formatos";
+import { dataCurta, dataEHora, dinheiro, hora, periodo } from "../../_componentes/ui/formatos";
 import { SeloRegistradoPeloTime } from "../../_componentes/ui/selo";
 import { CabecaDaTabela, CelulaDaTabela, ColunaDaTabela, LinhaDaTabela, Tabela } from "../../_componentes/ui/tabela";
-import { TITULO_DE_SECAO } from "../../_componentes/ui/classes";
-import {
-  alterarPedidoAcao,
-  cancelarPedidoAcao,
-  registrarPedidoDeVooAcao,
-  registrarRetornoDeHospedagemAcao,
-  registrarRetornoDeVooAcao,
-} from "../acoes";
+import { alterarPedidoAcao, cancelarPedidoAcao, dispensarLogisticaDoEventoAcao, registrarPedidoDeVooAcao, registrarRetornoDeVooAcao } from "../acoes";
 import { BotaoCancelarPedido, FormularioAlterarPedido, FormularioNovoPedido, FormularioRegistrarVoo, type TrechosIniciais } from "./formularios-de-voo";
-import { FormularioRegistrarReserva } from "./formularios-de-hospedagem";
 import { ChipDoVoo, enderecoCom, paraCampoDeDataEHora, paraCampoDeDinheiro } from "./situacoes";
 
-export type ParametrosDeVoos = { evento?: string; situacao?: string; ref?: string; modo?: string; novo?: string; convocacao?: string; registrado?: string };
+// Voos como na planilha do time: pedidos agrupados por mês e por evento, uma linha por compra. Nós solicitamos, a SDC
+// compra e o time registra o retorno. O pedido não depende da escala: "Novo pedido" vale para qualquer evento futuro e
+// qualquer pessoa ativa do staff.
 
-function textoDoTrecho(trecho: TrechoDoPedido): string {
-  return `${trecho.origemIata} → ${trecho.destinoIata} · ${rotuloDoSentido(trecho.sentido)}`;
-}
+export type ParametrosDeVoos = { evento?: string; situacao?: string; ref?: string; modo?: string; novo?: string; pessoa?: string; registrado?: string };
 
 function textoDoVoo(trecho: TrechoDoPedido): string | null {
   if (!trecho.companhia || !trecho.numeroVoo) return null;
   const horario = trecho.partidaEm && trecho.chegadaEm ? ` · ${dataCurta(trecho.partidaEm)} ${hora(trecho.partidaEm)}–${hora(trecho.chegadaEm)}` : "";
   return `${trecho.companhia} ${trecho.numeroVoo}${horario}${trecho.localizador ? ` · localizador ${trecho.localizador}` : ""}`;
 }
+
+const SEM_DADO = <span className="text-[var(--ds-label-2)]">—</span>;
+
+const rotuloDoEvento = (evento: EventoDaLogistica) => `${periodo(evento.dataInicio, evento.dataFim)} · ${evento.codigo ?? evento.nome}${evento.cidade && evento.uf ? ` · ${evento.cidade} (${evento.uf})` : ""}`;
+
+/** Ida ou volta numa célula: aeroportos em cima; embaixo a data e o horário (os do voo emitido, ou o que foi pedido). */
+function CelulaDoSentido({ trechos, sentido }: { trechos: TrechoDoPedido[]; sentido: Sentido }) {
+  const trecho = trechos.find((item) => item.sentido === sentido);
+  if (!trecho) return <CelulaDaTabela>{SEM_DADO}</CelulaDaTabela>;
+  const quando = trecho.partidaEm
+    ? `${dataCurta(trecho.partidaEm)} · ${hora(trecho.partidaEm)}`
+    : `${dataCurta(trecho.dataDesejada)}${trecho.preferenciaHorario ? ` · ${rotuloDaPreferencia(trecho.preferenciaHorario)}` : ""}`;
+  return (
+    <CelulaDaTabela>
+      <span className="block whitespace-nowrap [font-family:var(--ds-font-mono)] text-[13px]">
+        {trecho.origemIata} → {trecho.destinoIata}
+      </span>
+      <span className="block whitespace-nowrap text-[12px] tabular-nums text-[var(--ds-label-2)]">{quando}</span>
+    </CelulaDaTabela>
+  );
+}
+
+const distintos = (valores: (string | null)[]) => [...new Set(valores.filter((valor): valor is string => Boolean(valor)))];
 
 function trechosIniciais(trechos: TrechoDoPedido[]): TrechosIniciais {
   const ida = trechos.find((trecho) => trecho.sentido === "IDA");
@@ -48,68 +76,52 @@ function trechosIniciais(trechos: TrechoDoPedido[]): TrechosIniciais {
   };
 }
 
-function LinhaDoVoo({
-  linha,
-  base,
-  parametros,
-  escrita,
-  mostrarEvento,
-  diasDoAtraso,
-}: {
-  linha: LinhaDeVoo;
-  /** Limite do "atrasado" em vigor (acompanha o aviso configurado). */
-  diasDoAtraso: number;
-  base: string;
-  parametros: ParametrosDeVoos;
-  escrita: boolean;
-  mostrarEvento: boolean;
-}) {
-  const faltam = linha.situacao === "A_PEDIR" && linha.janela.janela !== "FORA_DA_JANELA" ? textoDosDiasQueFaltam(linha.janela.dias) : null;
+/** Uma compra (ou um lembrete da escala, sem pedido) nas colunas da planilha. */
+function LinhaDoVoo({ linha, base, parametros, escrita, diasDoAtraso }: { linha: LinhaDeVoo; /** Limite do "atrasado" em vigor. */ diasDoAtraso: number; base: string; parametros: ParametrosDeVoos; escrita: boolean }) {
   const pedido = linha.pedido;
   const trechos = pedido?.trechos ?? [];
-  const abrir = (mudancas: Record<string, string | null>) => enderecoCom(base, parametros, { ref: null, modo: null, novo: null, convocacao: null, registrado: null, ...mudancas });
+  const trajeto = trajetoDosTrechos(trechos.map((trecho) => trecho.sentido));
+  const companhias = distintos(trechos.map((trecho) => (trecho.companhia ? [trecho.companhia, trecho.numeroVoo].filter(Boolean).join(" ") : null)));
+  const reservas = distintos(trechos.map((trecho) => trecho.localizador));
+  const abrir = (mudancas: Record<string, string | null>) => enderecoCom(base, parametros, { ref: null, modo: null, novo: null, pessoa: null, registrado: null, ...mudancas });
   return (
     <LinhaDaTabela>
-      <CelulaDaTabela>
-        {pedido ? (
-          <Link
-            href={abrir({ ref: pedido.referencia })}
-            scroll={false}
-            className="whitespace-nowrap [font-family:var(--ds-font-mono)] text-[13px] font-medium text-[var(--ds-tint-text)] hover:underline"
-          >
+      <CelulaDaTabela cabecalhoDaLinha>
+        {linha.passageiro.nome}
+        {pedido && (
+          <Link href={abrir({ ref: pedido.referencia })} scroll={false} className="block whitespace-nowrap [font-family:var(--ds-font-mono)] text-[12px] font-medium text-[var(--ds-tint-text)] hover:underline">
             {pedido.referencia}
           </Link>
-        ) : (
-          <span className="text-[var(--ds-label-2)]">—</span>
         )}
       </CelulaDaTabela>
-      {mostrarEvento && (
-        <CelulaDaTabela>
-          <span className="whitespace-nowrap [font-family:var(--ds-font-mono)] text-[13px]">{linha.evento.codigo ?? linha.evento.nome}</span>
-          <span className="block whitespace-nowrap text-[12px] text-[var(--ds-label-2)]">{faltam ?? dataCurta(linha.evento.dataInicio)}</span>
-        </CelulaDaTabela>
-      )}
-      <CelulaDaTabela>{linha.passageiro.nome}</CelulaDaTabela>
-      <CelulaDaTabela>
-        {trechos.length ? trechos.map((trecho) => <span key={trecho.sentido} className="block whitespace-nowrap">{textoDoTrecho(trecho)}</span>) : <span className="text-[var(--ds-label-2)]">—</span>}
+      <CelulaDaTabela className="whitespace-nowrap text-[13px]">
+        {linha.passageiro.naEscala ? "Na escala" : <span className="text-[var(--ds-label-2)]">Fora da escala</span>}
       </CelulaDaTabela>
-      <CelulaDaTabela>
-        {trechos.length ? trechos.map((trecho) => <span key={trecho.sentido} className="block tabular-nums">{dataCurta(trecho.dataDesejada)}</span>) : "—"}
-      </CelulaDaTabela>
-      <CelulaDaTabela className="text-[13px]">
-        {trechos.some(textoDoVoo) ? trechos.map((trecho) => <span key={trecho.sentido} className="block">{textoDoVoo(trecho) ?? "—"}</span>) : "—"}
-      </CelulaDaTabela>
+      <CelulaDaTabela className="whitespace-nowrap tabular-nums">{pedido ? dataCurta(pedido.solicitadoEm) : SEM_DADO}</CelulaDaTabela>
+      <CelulaDaTabela className="whitespace-nowrap">{trajeto ? rotuloDoTrajeto(trajeto) : SEM_DADO}</CelulaDaTabela>
+      <CelulaDoSentido trechos={trechos} sentido="IDA" />
+      <CelulaDoSentido trechos={trechos} sentido="VOLTA" />
       <CelulaDaTabela>
         <span className="flex flex-wrap items-center gap-1">
           <ChipDoVoo situacao={linha.situacao} />
           {pedido?.retornoRegistradoPor && <SeloRegistradoPeloTime em={pedido.emitidoEm} por={pedido.retornoRegistradoPor} />}
         </span>
-        {linha.situacao === "A_PEDIR" && linha.janela.janela === "ATRASADO" && <span className="mt-1 block text-[12px] font-medium text-[var(--ds-red-deep)]">Atrasado ({diasDoAtraso} dias ou menos)</span>}
-        {!mostrarEvento && faltam && <span className="mt-1 block text-[12px] text-[var(--ds-label-2)]">{faltam}</span>}
+        {linha.situacao === "A_PEDIR" && (
+          <span className="mt-1 block text-[12px] text-[var(--ds-label-2)]">
+            Marcada como Avião na escala
+            {linha.janela.janela === "ATRASADO" && <span className="font-medium text-[var(--ds-red-deep)]"> · atrasado ({diasDoAtraso} dias ou menos)</span>}
+          </span>
+        )}
+      </CelulaDaTabela>
+      <CelulaDaTabela className="whitespace-nowrap tabular-nums">{pedido?.emitidoEm ? dataCurta(pedido.emitidoEm) : SEM_DADO}</CelulaDaTabela>
+      <CelulaDaTabela className="text-[13px]">{companhias.length ? companhias.map((companhia) => <span key={companhia} className="block whitespace-nowrap">{companhia}</span>) : SEM_DADO}</CelulaDaTabela>
+      <CelulaDaTabela className="[font-family:var(--ds-font-mono)] text-[13px]">{reservas.length ? reservas.join(" / ") : SEM_DADO}</CelulaDaTabela>
+      <CelulaDaTabela numero className="whitespace-nowrap">
+        {pedido && pedido.valorCentavos !== null ? dinheiro(pedido.valorCentavos) : SEM_DADO}
       </CelulaDaTabela>
       <CelulaDaTabela className="text-right">
-        {escrita && linha.situacao === "A_PEDIR" && linha.passageiro.convocacaoId && (
-          <BotaoLink tamanho="pequeno" className="whitespace-nowrap" href={abrir({ novo: "1", convocacao: linha.passageiro.convocacaoId })} scroll={false}>
+        {escrita && linha.situacao === "A_PEDIR" && linha.passageiro.pessoaId && (
+          <BotaoLink tamanho="pequeno" className="whitespace-nowrap" href={abrir({ novo: "1", evento: linha.evento.id, pessoa: linha.passageiro.pessoaId })} scroll={false}>
             Registrar pedido
           </BotaoLink>
         )}
@@ -125,6 +137,33 @@ function LinhaDoVoo({
         )}
       </CelulaDaTabela>
     </LinhaDaTabela>
+  );
+}
+
+/** A tabela de um evento, com as colunas que o time acompanha na planilha. */
+function TabelaDoEvento({ evento, linhas, base, parametros, escrita, diasDoAtraso }: { evento: EventoDaLogistica; linhas: LinhaDeVoo[]; base: string; parametros: ParametrosDeVoos; escrita: boolean; diasDoAtraso: number }) {
+  return (
+    <Tabela legenda={`Pedidos de voo de ${evento.codigo ?? evento.nome}`} larguraMinima="min-w-[1240px]">
+      <CabecaDaTabela>
+        <ColunaDaTabela>Passageiro</ColunaDaTabela>
+        <ColunaDaTabela>Escala</ColunaDaTabela>
+        <ColunaDaTabela>Solicitação</ColunaDaTabela>
+        <ColunaDaTabela>Ida/volta</ColunaDaTabela>
+        <ColunaDaTabela>Ida</ColunaDaTabela>
+        <ColunaDaTabela>Volta</ColunaDaTabela>
+        <ColunaDaTabela>Situação</ColunaDaTabela>
+        <ColunaDaTabela>Compra</ColunaDaTabela>
+        <ColunaDaTabela>Companhia</ColunaDaTabela>
+        <ColunaDaTabela>Reserva</ColunaDaTabela>
+        <ColunaDaTabela numero>Preço</ColunaDaTabela>
+        <ColunaDaTabela className="text-right">Ações</ColunaDaTabela>
+      </CabecaDaTabela>
+      <tbody>
+        {linhas.map((linha) => (
+          <LinhaDoVoo key={linha.chave} linha={linha} base={base} parametros={parametros} escrita={escrita} diasDoAtraso={diasDoAtraso} />
+        ))}
+      </tbody>
+    </Tabela>
   );
 }
 
@@ -150,7 +189,7 @@ function DetalheDoPedido({ pedido, registrado }: { pedido: PedidoCarregado; regi
         </dd>
         <dt className="text-[var(--ds-label-2)]">Evento</dt>
         <dd>
-          {pedido.evento.codigo ?? pedido.evento.nome} · {dataCurta(pedido.evento.dataInicio)}
+          {pedido.evento.codigo ?? pedido.evento.nome} · {periodo(pedido.evento.dataInicio, pedido.evento.dataFim)}
         </dd>
         {pedido.pessoaNome && (
           <>
@@ -158,8 +197,14 @@ function DetalheDoPedido({ pedido, registrado }: { pedido: PedidoCarregado; regi
             <dd>{pedido.pessoaNome}</dd>
           </>
         )}
-        <dt className="text-[var(--ds-label-2)]">Pedido em</dt>
+        <dt className="text-[var(--ds-label-2)]">Solicitado em</dt>
         <dd>{dataEHora(pedido.solicitadoEm)}</dd>
+        {pedido.emitidoEm && (
+          <>
+            <dt className="text-[var(--ds-label-2)]">Compra registrada em</dt>
+            <dd>{dataEHora(pedido.emitidoEm)}</dd>
+          </>
+        )}
         {pedido.valorCentavos !== null && (
           <>
             <dt className="text-[var(--ds-label-2)]">Valor</dt>
@@ -206,35 +251,49 @@ function PainelDoPedido({ pedido, base, parametros, escrita }: { pedido: PedidoC
   const subtitulo = [pedido.pessoaNome ?? "Hospedagem", pedido.evento.codigo ?? pedido.evento.nome].join(" · ");
   const modo = escrita ? parametros.modo : undefined;
 
-  if (modo === "registrar" && aguardandoSdc(pedido.situacao)) {
+  // Pedido de hospedagem tem a sua tela: é lá que se registra a reserva (com o hotel que a SDC escolheu) e se cancela.
+  if (pedido.tipo === "HOSPEDAGEM") {
     return (
-      <PainelPelaUrl titulo={pedido.tipo === "VOO" ? `Registrar voo · ${pedido.referencia}` : `Registrar reserva · ${pedido.referencia}`} subtitulo={subtitulo} aoFecharIrPara={fechar}>
-        {pedido.tipo === "VOO" ? (
-          <FormularioRegistrarVoo
-            acao={registrarRetornoDeVooAcao}
-            pedidoId={pedido.id}
-            valorInicial={paraCampoDeDinheiro(pedido.valorCentavos)}
-            aoConcluirIrPara={voltar}
-            trechos={pedido.trechos.map((trecho) => ({
-              sentido: trecho.sentido,
-              rotulo: `${trecho.sentido === "IDA" ? "Ida" : "Volta"}: ${trecho.origemIata} → ${trecho.destinoIata} em ${dataCurta(trecho.dataDesejada)}`,
-              partidaSugerida: `${trecho.dataDesejada}T08:00`,
-              companhia: trecho.companhia ?? "",
-              numeroVoo: trecho.numeroVoo ?? "",
-              localizador: trecho.localizador ?? "",
-              partidaEm: paraCampoDeDataEHora(trecho.partidaEm),
-              chegadaEm: paraCampoDeDataEHora(trecho.chegadaEm),
-              cartaoEmbarqueUrl: trecho.cartaoEmbarqueUrl ?? "",
-            }))}
-          />
-        ) : (
-          <FormularioRegistrarReserva acao={registrarRetornoDeHospedagemAcao} pedidoId={pedido.id} valorInicial={paraCampoDeDinheiro(pedido.valorCentavos)} aoConcluirIrPara={voltar} />
-        )}
+      <PainelPelaUrl
+        titulo={`Pedido ${pedido.referencia}`}
+        subtitulo={subtitulo}
+        aoFecharIrPara={fechar}
+        rodape={
+          <BotaoLink variante="primario" href={`/logistica/hospedagem?evento=${pedido.evento.id}`}>
+            Abrir na Hospedagem
+          </BotaoLink>
+        }
+      >
+        <DetalheDoPedido pedido={pedido} registrado={false} />
       </PainelPelaUrl>
     );
   }
 
-  if (modo === "alterar" && pedido.situacao !== "CANCELADO" && pedido.tipo === "VOO") {
+  if (modo === "registrar" && aguardandoSdc(pedido.situacao)) {
+    return (
+      <PainelPelaUrl titulo={`Registrar voo · ${pedido.referencia}`} subtitulo={subtitulo} aoFecharIrPara={fechar}>
+        <FormularioRegistrarVoo
+          acao={registrarRetornoDeVooAcao}
+          pedidoId={pedido.id}
+          valorInicial={paraCampoDeDinheiro(pedido.valorCentavos)}
+          aoConcluirIrPara={voltar}
+          trechos={pedido.trechos.map((trecho) => ({
+            sentido: trecho.sentido,
+            rotulo: `${trecho.sentido === "IDA" ? "Ida" : "Volta"}: ${trecho.origemIata} → ${trecho.destinoIata} em ${dataCurta(trecho.dataDesejada)}`,
+            partidaSugerida: `${trecho.dataDesejada}T08:00`,
+            companhia: trecho.companhia ?? "",
+            numeroVoo: trecho.numeroVoo ?? "",
+            localizador: trecho.localizador ?? "",
+            partidaEm: paraCampoDeDataEHora(trecho.partidaEm),
+            chegadaEm: paraCampoDeDataEHora(trecho.chegadaEm),
+            cartaoEmbarqueUrl: trecho.cartaoEmbarqueUrl ?? "",
+          }))}
+        />
+      </PainelPelaUrl>
+    );
+  }
+
+  if (modo === "alterar" && pedido.situacao !== "CANCELADO") {
     return (
       <PainelPelaUrl titulo={`Alterar pedido · ${pedido.referencia}`} subtitulo={subtitulo} aoFecharIrPara={fechar}>
         <FormularioAlterarPedido
@@ -262,14 +321,14 @@ function PainelDoPedido({ pedido, base, parametros, escrita }: { pedido: PedidoC
             {escrita && ativo && <BotaoCancelarPedido acao={cancelarPedidoAcao} pedidoId={pedido.id} referencia={pedido.referencia} aoConcluirIrPara={voltar} />}
           </div>
           <div className="flex flex-wrap gap-2">
-            {escrita && ativo && pedido.tipo === "VOO" && (
+            {escrita && ativo && (
               <BotaoLink href={enderecoCom(base, parametros, { modo: "alterar", registrado: null })} scroll={false}>
                 Alterar pedido
               </BotaoLink>
             )}
             {escrita && aguardandoSdc(pedido.situacao) && (
               <BotaoLink variante="primario" href={enderecoCom(base, parametros, { modo: "registrar", registrado: null })} scroll={false}>
-                {pedido.tipo === "VOO" ? "Registrar voo" : "Registrar reserva"}
+                Registrar voo
               </BotaoLink>
             )}
           </div>
@@ -281,33 +340,56 @@ function PainelDoPedido({ pedido, base, parametros, escrita }: { pedido: PedidoC
   );
 }
 
-/**
- * Aviso de passagens a pedir (só na tela, para a líder e o time): cada evento que entrou na janela configurada em
- * Configurações › Aviso de voos, com quantas passagens faltam pedir e quantos dias faltam.
- */
-function AvisoDeCompra({ aviso, base, parametros, porEvento }: { aviso: VoosCarregados["avisoDeCompra"]; base: string; parametros: ParametrosDeVoos; porEvento: boolean }) {
-  if (aviso.eventos.length === 0) return null;
-  const total = aviso.eventos.reduce((soma, evento) => soma + evento.passagens, 0);
+/** Botão de "este evento não precisa de voo" e do desfazer. */
+function BotaoSemVoo({ eventoId, dispensar, rotulo, descricao }: { eventoId: string; dispensar: boolean; rotulo: string; descricao: string }) {
   return (
-    <Aviso tom="atencao" className="mb-4" titulo={total === 1 ? "Falta pedir 1 passagem à SDC" : `Faltam pedir ${total} passagens à SDC`}>
+    <FormularioDeAcao acao={dispensarLogisticaDoEventoAcao} aria-label={descricao}>
+      <input type="hidden" name="eventoId" value={eventoId} />
+      <input type="hidden" name="item" value="VOO" />
+      <input type="hidden" name="dispensar" value={dispensar ? "true" : "false"} />
+      <BotaoDeEnvio tamanho="pequeno" variante="texto" aria-label={descricao}>
+        {rotulo}
+      </BotaoDeEnvio>
+    </FormularioDeAcao>
+  );
+}
+
+/**
+ * Aviso de voos (só na tela, para a líder e o time), por evento: os que entraram no prazo configurado em
+ * Configurações › Aviso de voos e ainda não têm nenhum pedido. Como a maioria dos eventos (os de casa) não tem voo,
+ * cada linha traz "Não precisa de voo", que tira o evento do aviso.
+ */
+function AvisoDeCompra({ aviso, base, parametros, escrita }: { aviso: VoosCarregados["avisoDeCompra"]; base: string; parametros: ParametrosDeVoos; escrita: boolean }) {
+  if (aviso.eventos.length === 0) return null;
+  const limpo = { ref: null, modo: null, pessoa: null, registrado: null, situacao: null };
+  return (
+    <Aviso tom="atencao" className="mb-4" titulo={aviso.eventos.length === 1 ? "1 evento no prazo ainda sem pedido de voo" : `${aviso.eventos.length} eventos no prazo ainda sem pedido de voo`}>
       <ul className="mt-1 flex flex-col gap-1">
         {aviso.eventos.map((evento) => (
-          <li key={evento.eventoId} className="flex flex-wrap items-baseline gap-x-2">
-            <Link
-              href={enderecoCom(base, parametros, porEvento ? { evento: evento.eventoId, situacao: "A_PEDIR" } : { situacao: "A_PEDIR" })}
-              className="font-medium text-[var(--ds-tint-text)] hover:underline"
-            >
-              {evento.codigo ?? evento.nome} · {dataCurta(evento.dataInicio)}
-            </Link>
-            <span className="tabular-nums">
-              {textoDasPassagensAPedir(evento.passagens)} · {textoDosDiasQueFaltam(evento.dias)}
-              {evento.janela === "ATRASADO" && <span className="text-[var(--ds-orange-deep)]"> · atrasado</span>}
+          <li key={evento.eventoId} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span>
+              <span className="font-medium">
+                {evento.codigo ?? evento.nome} · {dataCurta(evento.dataInicio)}
+              </span>{" "}
+              <span className="tabular-nums">
+                {textoDosDiasQueFaltam(evento.dias)}
+                {evento.janela === "ATRASADO" && <span className="text-[var(--ds-orange-deep)]"> · atrasado</span>}
+                {evento.marcadasComoAviao > 0 && ` · ${evento.marcadasComoAviao === 1 ? "1 pessoa marcada" : `${evento.marcadasComoAviao} pessoas marcadas`} como Avião na escala`}
+              </span>
             </span>
+            {escrita && (
+              <span className="flex flex-wrap items-center gap-1">
+                <BotaoLink tamanho="pequeno" href={enderecoCom(base, parametros, { ...limpo, novo: "1", evento: evento.eventoId })} scroll={false}>
+                  Pedir voo
+                </BotaoLink>
+                <BotaoSemVoo eventoId={evento.eventoId} dispensar rotulo="Não precisa de voo" descricao={`${evento.codigo ?? evento.nome} não precisa de voo`} />
+              </span>
+            )}
           </li>
         ))}
       </ul>
       <p className="mt-2 text-[12px] text-[var(--ds-label-2)]">
-        O aviso começa {aviso.diasDoAviso} dias antes do evento e o pedido conta como atrasado a partir de {aviso.diasDoAtraso} dias.{" "}
+        O aviso começa {aviso.diasDoAviso} dias antes do evento e conta como atrasado a partir de {aviso.diasDoAtraso} dias. Evento marcado como &quot;não precisa de voo&quot; sai do aviso.{" "}
         <Link href="/configuracoes/voos" className="font-medium text-[var(--ds-tint-text)] hover:underline">
           Configurações
         </Link>
@@ -322,7 +404,7 @@ export function situacaoDoFiltro(valor: string | undefined) {
   return SITUACOES_VALIDAS.find((situacao) => situacao === valor);
 }
 
-/** Voos (SDC): usada em /logistica/voos e, filtrada, em /eventos/[id]/logistica. */
+/** Voos (SDC): usada em /logistica/voos (todos os eventos, por mês) e, filtrada, em /eventos/[id]/logistica. */
 export function SecaoDeVoos({
   dados,
   pedido,
@@ -338,8 +420,15 @@ export function SecaoDeVoos({
   escrita: boolean;
   comSeletorDeEvento: boolean;
 }) {
-  const { contagens } = dados;
-  const novoHref = enderecoCom(base, parametros, { novo: "1", ref: null, modo: null, convocacao: null });
+  const { contagens, eventoDoFiltro } = dados;
+  const limpo = { ref: null, modo: null, pessoa: null, registrado: null };
+  const novoHref = enderecoCom(base, parametros, { ...limpo, novo: "1" });
+  const diasDoAtraso = dados.avisoDeCompra.diasDoAtraso;
+  // Na aba do evento o formulário já sabe o evento; na tela geral vale o do filtro (ou o do atalho que abriu o painel).
+  const eventosDoFormulario = comSeletorDeEvento ? dados.eventos : eventoDoFiltro ? [eventoDoFiltro] : [];
+  const semPedidoAtivo = eventoDoFiltro !== null && !dados.pedidosAtivos.some((item) => item.eventoId === eventoDoFiltro.id);
+  const noAviso = eventoDoFiltro !== null && dados.avisoDeCompra.eventos.some((item) => item.eventoId === eventoDoFiltro.id);
+
   return (
     <section aria-labelledby="titulo-voos" className="mb-8">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -353,15 +442,18 @@ export function SecaoDeVoos({
         )}
       </div>
       {!escrita && <FaixaSomenteLeitura />}
-      <AvisoDeCompra aviso={dados.avisoDeCompra} base={base} parametros={parametros} porEvento={comSeletorDeEvento} />
-      <BarraDeFiltros resultado={`${dados.linhas.length} linhas`}>
+      <AvisoDeCompra aviso={dados.avisoDeCompra} base={base} parametros={parametros} escrita={escrita} />
+      <BarraDeFiltros resultado={dados.total === 1 ? "1 linha" : `${dados.total} linhas`}>
         {comSeletorDeEvento && (
           <SeletorDeFiltro
             nome="evento"
             rotulo="Evento"
             todos="Próximos eventos"
             valor={parametros.evento ?? null}
-            opcoes={dados.eventos.map((evento) => ({ valor: evento.id, rotulo: `${evento.codigo ?? evento.nome} · ${dataCurta(evento.dataInicio)}` }))}
+            opcoes={[...(eventoDoFiltro && !dados.eventos.some((evento) => evento.id === eventoDoFiltro.id) ? [eventoDoFiltro] : []), ...dados.eventos].map((evento) => ({
+              valor: evento.id,
+              rotulo: `${evento.codigo ?? evento.nome} · ${dataCurta(evento.dataInicio)}`,
+            }))}
           />
         )}
         <AtalhosDeFiltro
@@ -377,52 +469,90 @@ export function SecaoDeVoos({
           ]}
         />
       </BarraDeFiltros>
-      {dados.linhas.length === 0 ? (
+
+      {dados.total === 0 ? (
         <Cartao espacamento="nenhum">
-          <EstadoVazio icone={<Plane size={32} aria-hidden />} titulo={parametros.situacao ? "Nenhum voo com esse filtro." : "Ninguém vai de avião nos próximos eventos."}>
-            Quem vai de avião aparece aqui quando o deslocamento for marcado como Avião na escala.
+          <EstadoVazio
+            icone={<Plane size={32} aria-hidden />}
+            titulo={parametros.situacao ? "Nenhum voo com esse filtro." : eventoDoFiltro ? "Nenhum pedido de voo para este evento." : "Nenhum pedido de voo nos próximos eventos."}
+            acao={
+              escrita && (
+                <BotaoLink href={novoHref} scroll={false}>
+                  Novo pedido
+                </BotaoLink>
+              )
+            }
+          >
+            Peça as passagens por aqui, como na planilha: escolha o evento e a pessoa do staff, mesmo antes de montar a escala. A SDC compra e o time registra o voo.
           </EstadoVazio>
         </Cartao>
       ) : (
-        <Tabela legenda="Pedidos de voo à SDC e pessoas a pedir">
-          <CabecaDaTabela>
-            <ColunaDaTabela>Referência</ColunaDaTabela>
-            {comSeletorDeEvento && <ColunaDaTabela>Evento</ColunaDaTabela>}
-            <ColunaDaTabela>Passageiro</ColunaDaTabela>
-            <ColunaDaTabela>Trecho</ColunaDaTabela>
-            <ColunaDaTabela>Data desejada</ColunaDaTabela>
-            <ColunaDaTabela>Voo</ColunaDaTabela>
-            <ColunaDaTabela>Situação</ColunaDaTabela>
-            <ColunaDaTabela className="text-right">Ações</ColunaDaTabela>
-          </CabecaDaTabela>
-          <tbody>
-            {dados.linhas.map((linha) => (
-              <LinhaDoVoo
-                key={linha.chave}
-                linha={linha}
-                base={base}
-                parametros={parametros}
-                escrita={escrita}
-                mostrarEvento={comSeletorDeEvento}
-                diasDoAtraso={dados.avisoDeCompra.diasDoAtraso}
-              />
+        dados.grupos.map((mes) => (
+          <div key={mes.mes} className="mb-6">
+            {comSeletorDeEvento && <h3 className={`${TITULO_DE_SECAO} mb-3`}>{rotuloDoMes(mes.mes)}</h3>}
+            {mes.eventos.map(({ evento, linhas }) => (
+              <section key={evento.id} aria-labelledby={comSeletorDeEvento ? `voos-do-evento-${evento.id}` : undefined} className="mb-4">
+                {comSeletorDeEvento && (
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <h4 id={`voos-do-evento-${evento.id}`} className={TITULO_DE_CARTAO}>
+                      {rotuloDoEvento(evento)}
+                    </h4>
+                    <span className="flex flex-wrap items-center gap-2 text-[13px] text-[var(--ds-label-2)]">
+                      {linhas.length === 1 ? "1 linha" : `${linhas.length} linhas`}
+                      {escrita && (
+                        <BotaoLink tamanho="pequeno" variante="texto" href={enderecoCom(base, parametros, { ...limpo, novo: "1", evento: evento.id })} scroll={false}>
+                          Novo pedido neste evento
+                        </BotaoLink>
+                      )}
+                    </span>
+                  </div>
+                )}
+                <TabelaDoEvento evento={evento} linhas={linhas} base={base} parametros={parametros} escrita={escrita} diasDoAtraso={diasDoAtraso} />
+              </section>
             ))}
-          </tbody>
-        </Tabela>
+          </div>
+        ))
+      )}
+
+      {/* Evento escolhido, ainda fora do aviso (longe do prazo) e sem pedido: dá para adiantar o "não precisa de voo". */}
+      {escrita && eventoDoFiltro && !eventoDoFiltro.semVoo && semPedidoAtivo && !noAviso && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 text-[13px] text-[var(--ds-label-2)]">
+          Este evento não vai ter passagem?
+          <BotaoSemVoo eventoId={eventoDoFiltro.id} dispensar rotulo="Marcar que não precisa de voo" descricao={`${eventoDoFiltro.codigo ?? eventoDoFiltro.nome} não precisa de voo`} />
+        </div>
+      )}
+
+      {dados.semVoo.length > 0 && (
+        <Cartao
+          id="sem-voo"
+          titulo={`Marcados como sem voo · ${dados.semVoo.length}`}
+          explicacao="O time marcou que estes eventos não precisam de voo: eles não entram no aviso. Registrar um pedido para o evento também desfaz a marca."
+          className="mb-4"
+        >
+          <ul className="flex flex-col gap-1 text-[14px]">
+            {dados.semVoo.map((evento) => (
+              <li key={evento.id} className="flex flex-wrap items-center justify-between gap-2">
+                <span>{rotuloDoEvento(evento)}</span>
+                {escrita && <BotaoSemVoo eventoId={evento.id} dispensar={false} rotulo="Desfazer" descricao={`Desfazer: ${evento.codigo ?? evento.nome} volta a contar no aviso de voos`} />}
+              </li>
+            ))}
+          </ul>
+        </Cartao>
       )}
 
       {escrita && parametros.novo === "1" && (
-        <PainelPelaUrl titulo="Novo pedido de voo" subtitulo="Registre o pedido e envie para a SDC pelo canal de sempre." aoFecharIrPara={enderecoCom(base, parametros, { novo: null, convocacao: null })}>
+        <PainelPelaUrl titulo="Novo pedido de voo" subtitulo="Registre o pedido e envie para a SDC pelo canal de sempre. Ela compra; o time registra o voo depois." aoFecharIrPara={enderecoCom(base, parametros, { novo: null, pessoa: null })}>
           <FormularioNovoPedido
+            // Os atalhos ("Pedir voo", "Registrar pedido") trocam o evento e a pessoa com o painel aberto.
+            key={`${eventoDoFiltro?.id ?? ""}|${parametros.pessoa ?? ""}`}
             acao={registrarPedidoDeVooAcao}
             destino={base}
-            convocacaoInicial={parametros.convocacao}
-            passageiros={dados.semPedido.map((passageiro) => ({
-              convocacaoId: passageiro.convocacaoId,
-              rotulo: `${passageiro.pessoaNome} · ${passageiro.evento.codigo ?? passageiro.evento.nome} (${dataCurta(passageiro.evento.dataInicio)})`,
-              dataInicio: passageiro.evento.dataInicio,
-              dataFim: passageiro.evento.dataFim,
-            }))}
+            eventoFixo={!comSeletorDeEvento}
+            eventoInicial={eventoDoFiltro?.id}
+            pessoaInicial={parametros.pessoa}
+            eventos={eventosDoFormulario.map((evento) => ({ id: evento.id, rotulo: rotuloDoEvento(evento), dataInicio: evento.dataInicio, dataFim: evento.dataFim }))}
+            pessoas={dados.staff}
+            pedidosAtivos={dados.pedidosAtivos.map((item) => ({ ...item, trajeto: item.trajeto ? rotuloDoTrajeto(item.trajeto).toLowerCase() : null }))}
           />
         </PainelPelaUrl>
       )}

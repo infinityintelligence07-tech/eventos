@@ -7,10 +7,11 @@ import { type AcaoDoFormulario, ErroDoFormulario, type ErrosDoCampo, useAcao } f
 
 import { Aviso } from "../../_componentes/ui/aviso";
 import { Botao, BotaoDeEnvio } from "../../_componentes/ui/botao";
-import { CampoDeSelecao, CampoDeTexto, CampoDeTextoLongo } from "../../_componentes/ui/campo";
+import { CaixaDeMarcar, CampoDeSelecao, CampoDeTexto, CampoDeTextoLongo } from "../../_componentes/ui/campo";
 import { Confirmacao } from "../../_componentes/ui/dialogo";
 
-// Formulários do pedido de voo à SDC (doc 08 §10.1). As actions vêm da página (server actions).
+// Formulários do pedido de voo à SDC (doc 08 §10.1): nós solicitamos, a SDC compra e o time registra o retorno.
+// As actions vêm da página (server actions).
 
 const PREFERENCIAS = [
   { valor: "MANHA", rotulo: "Manhã" },
@@ -115,7 +116,8 @@ function CamposDosTrechos({ inicial, erros }: { inicial: TrechosIniciais; erros:
   );
 }
 
-export type PassageiroSemPedido = { convocacaoId: string; rotulo: string; dataInicio: string; dataFim: string };
+export type EventoDoPedido = { id: string; rotulo: string; dataInicio: string; dataFim: string };
+export type PedidoAtivoDaPessoa = { eventoId: string; pessoaId: string; referencia: string; trajeto: string | null };
 
 function diaAnterior(data: string): string {
   const dia = new Date(`${data}T12:00:00Z`);
@@ -123,52 +125,87 @@ function diaAnterior(data: string): string {
   return dia.toISOString().slice(0, 10);
 }
 
+/**
+ * Novo pedido de voo, como uma linha da planilha: evento + pessoa do staff + trecho. Não depende da escala. Se a
+ * pessoa já tem pedido ativo no evento, o formulário avisa e pede a confirmação de que é outra compra.
+ */
 export function FormularioNovoPedido({
   acao,
-  passageiros,
-  convocacaoInicial,
+  eventos,
+  pessoas,
+  pedidosAtivos,
+  eventoInicial,
+  eventoFixo,
+  pessoaInicial,
   destino,
 }: {
   acao: AcaoDoFormulario;
-  passageiros: PassageiroSemPedido[];
-  convocacaoInicial?: string;
+  eventos: EventoDoPedido[];
+  pessoas: { pessoaId: string; nome: string }[];
+  pedidosAtivos: PedidoAtivoDaPessoa[];
+  eventoInicial?: string;
+  /** Na aba Logística do evento o pedido é sempre daquele evento. */
+  eventoFixo: boolean;
+  pessoaInicial?: string;
   /** Tela para onde voltar com o painel do pedido aberto. */
   destino: string;
 }) {
   const { despachar, erros, estado } = useAcao(acao);
-  const [convocacaoId, setConvocacaoId] = useState(convocacaoInicial ?? passageiros[0]?.convocacaoId ?? "");
-  const passageiro = passageiros.find((item) => item.convocacaoId === convocacaoId);
+  const [eventoId, setEventoId] = useState(eventos.some((evento) => evento.id === eventoInicial) ? (eventoInicial ?? "") : eventoFixo ? (eventos[0]?.id ?? "") : "");
+  const [pessoaId, setPessoaId] = useState(pessoas.some((pessoa) => pessoa.pessoaId === pessoaInicial) ? (pessoaInicial ?? "") : "");
+  const evento = eventos.find((item) => item.id === eventoId);
+  const jaPedidos = eventoId && pessoaId ? pedidosAtivos.filter((pedido) => pedido.eventoId === eventoId && pedido.pessoaId === pessoaId) : [];
+  const nome = pessoas.find((pessoa) => pessoa.pessoaId === pessoaId)?.nome ?? "Esta pessoa";
 
-  if (passageiros.length === 0) {
-    return (
-      <Aviso tom="informacao">
-        Ninguém sem pedido com deslocamento Avião. Para pedir o voo de alguém, mude o deslocamento da pessoa para Avião na escala do evento.
-      </Aviso>
-    );
-  }
+  if (eventos.length === 0) return <Aviso tom="informacao">Nenhum evento futuro para pedir voo. Os eventos chegam pela sincronização com o IAM Control.</Aviso>;
 
   return (
     <form action={despachar} aria-label="Novo pedido de voo">
       <ErroDoFormulario estado={estado} />
       <input type="hidden" name="destino" value={destino} />
+      {eventoFixo ? (
+        <input type="hidden" name="eventoId" value={eventoId} />
+      ) : (
+        <CampoDeSelecao
+          nome="eventoId"
+          rotulo="Evento"
+          obrigatorio
+          vazio="Escolha o evento"
+          value={eventoId}
+          onChange={(mudanca) => setEventoId(mudanca.target.value)}
+          opcoes={eventos.map((item) => ({ valor: item.id, rotulo: item.rotulo }))}
+          ajuda="Qualquer evento futuro, com ou sem escala montada."
+          erros={erros("eventoId")}
+        />
+      )}
       <CampoDeSelecao
-        nome="convocacaoId"
-        rotulo="Pessoa"
+        className={eventoFixo ? undefined : "mt-3"}
+        nome="pessoaId"
+        rotulo="Passageiro"
         obrigatorio
-        value={convocacaoId}
-        onChange={(evento) => setConvocacaoId(evento.target.value)}
-        opcoes={passageiros.map((item) => ({ valor: item.convocacaoId, rotulo: item.rotulo }))}
-        ajuda="Só aparecem pessoas escaladas com deslocamento Avião e sem pedido. Para as demais, mude o deslocamento para Avião na escala."
-        erros={erros("convocacaoId")}
+        vazio="Escolha a pessoa"
+        value={pessoaId}
+        onChange={(mudanca) => setPessoaId(mudanca.target.value)}
+        opcoes={pessoas.map((pessoa) => ({ valor: pessoa.pessoaId, rotulo: pessoa.nome }))}
+        ajuda="Qualquer pessoa ativa do cadastro de staff, esteja ou não na escala do evento."
+        erros={erros("pessoaId")}
       />
+      {jaPedidos.length > 0 && (
+        <Aviso tom="atencao" className="mt-3" titulo={`${nome} já tem pedido de voo neste evento`}>
+          <p>
+            {jaPedidos.map((pedido) => `${pedido.referencia}${pedido.trajeto ? ` (${pedido.trajeto})` : ""}`).join(", ")}. Registre outro só se for uma compra a mais, como um trecho extra.
+          </p>
+          <CaixaDeMarcar key={`${eventoId}|${pessoaId}`} name="outraCompra" rotulo="É outra compra para a mesma pessoa" className="mt-1" />
+        </Aviso>
+      )}
       <CamposDosTrechos
-        key={convocacaoId}
+        key={eventoId}
         erros={erros}
         inicial={{
           origemIata: "",
           destinoIata: "",
-          ida: passageiro ? { data: diaAnterior(passageiro.dataInicio), preferencia: "" } : null,
-          volta: passageiro ? { data: passageiro.dataFim, preferencia: "" } : null,
+          ida: evento ? { data: diaAnterior(evento.dataInicio), preferencia: "" } : null,
+          volta: evento ? { data: evento.dataFim, preferencia: "" } : null,
         }}
       />
       <CampoDeTextoLongo className="mt-4" nome="observacaoTime" rotulo="Observação para a SDC" maxLength={500} placeholder="Horário preferido, bagagem…" erros={erros("observacaoTime")} />
@@ -290,23 +327,38 @@ export function FormularioRegistrarVoo({
   );
 }
 
-export function BotaoCancelarPedido({ acao, pedidoId, referencia, aoConcluirIrPara }: { acao: AcaoDoFormulario; pedidoId: string; referencia: string; aoConcluirIrPara: string }) {
+/** Cancelar pedido de voo (no painel do pedido, que fecha ao concluir) ou de hospedagem (na própria tela da Hospedagem). */
+export function BotaoCancelarPedido({
+  acao,
+  pedidoId,
+  referencia,
+  aoConcluirIrPara,
+  descricao = "Avise a SDC pelo canal de sempre. O voo some da copy da pessoa.",
+  tamanho = "normal",
+}: {
+  acao: AcaoDoFormulario;
+  pedidoId: string;
+  referencia: string;
+  aoConcluirIrPara?: string;
+  descricao?: string;
+  tamanho?: "normal" | "pequeno";
+}) {
   const router = useRouter();
   const [aberto, setAberto] = useState(false);
   const { despachar, erros, pendente } = useAcao(acao, () => {
     setAberto(false);
-    router.push(aoConcluirIrPara, { scroll: false });
+    if (aoConcluirIrPara) router.push(aoConcluirIrPara, { scroll: false });
   });
   return (
     <>
-      <Botao variante="perigo" icone={<Ban size={18} aria-hidden />} onClick={() => setAberto(true)}>
+      <Botao variante="perigo" tamanho={tamanho} icone={<Ban size={tamanho === "pequeno" ? 16 : 18} aria-hidden />} onClick={() => setAberto(true)}>
         Cancelar pedido
       </Botao>
       <Confirmacao
         aberto={aberto}
         aoFechar={() => setAberto(false)}
         titulo={`Cancelar o pedido ${referencia}?`}
-        descricao="Avise a SDC pelo canal de sempre. O voo some da copy da pessoa."
+        descricao={descricao}
         rotuloConfirmar="Cancelar pedido"
         rotuloCancelar="Voltar"
         destrutiva

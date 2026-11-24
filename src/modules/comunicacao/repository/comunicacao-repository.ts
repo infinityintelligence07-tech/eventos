@@ -187,7 +187,9 @@ export function criarRepositorioComunicacao(executor: Executor): RepositorioComu
         })
         .from(trechoVoo)
         .innerJoin(pedidoSdc, eq(pedidoSdc.id, trechoVoo.pedidoId))
-        .where(and(inArray(pedidoSdc.eventoId, eventoIds), eq(pedidoSdc.tipo, "VOO"), eq(pedidoSdc.situacao, "EMITIDO")));
+        .where(and(inArray(pedidoSdc.eventoId, eventoIds), eq(pedidoSdc.tipo, "VOO"), eq(pedidoSdc.situacao, "EMITIDO")))
+        // A pessoa pode ter mais de um pedido de voo no evento (0015): a copy usa o primeiro voo de cada sentido.
+        .orderBy(asc(trechoVoo.partidaEm), asc(pedidoSdc.referencia));
       return linhas.flatMap(({ pessoaId, sentido, ...trecho }) =>
         pessoaId === null ? [] : [{ ...trecho, pessoaId, sentido: sentido as VooDaPessoa["sentido"] }],
       );

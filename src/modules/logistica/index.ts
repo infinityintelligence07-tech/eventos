@@ -7,14 +7,14 @@ export {
   DIAS_DO_AVISO_MINIMO,
   diasDoAtraso,
   diasDoAvisoConfigurado,
-  type EventoComPassagensAPedir,
-  eventosComPassagensAPedir,
+  type EventoSemPedidoDeVoo,
+  eventosSemPedidoDeVoo,
   type JanelaDeCompra,
   janelaDeCompra,
   precisaPedir,
-  textoDasPassagensAPedir,
   textoDosDiasQueFaltam,
 } from "./domain/janela";
+export { agruparPorMesEEvento, type GrupoDoMes, rotuloDoMes, rotuloDoTrajeto, type Trajeto, trajetoDosTrechos } from "./domain/planilha-de-voos";
 export {
   aguardandoSdc,
   pedidoAtivo,
@@ -58,6 +58,13 @@ export {
   type CriarHospedagem,
   type DefinirCarona,
   type DefinirPeriodoDoOcupante,
+  type DispensarLogisticaDoEvento,
+  dispensarLogisticaDoEventoSchema,
+  FORMA_DE_PAGAMENTO_PADRAO,
+  type ItemDispensavel,
+  NOVO_HOTEL,
+  type NovoHotel,
+  removerHospedagemSchema,
   destinoDaTroca,
   destinoNoQuarto,
   type MoverDeQuarto,
@@ -98,6 +105,7 @@ export { type ContextoDaAcao } from "./service/pedidos";
 export {
   criarRepositorioPedidos,
   type EventoDaLogistica,
+  type EventoFuturo,
   type PassageiroDeVoo,
   type PedidoDaSdc,
   type TrechoDoPedido,
@@ -111,4 +119,4 @@ export {
   type QuartoDaHospedagem,
 } from "./repository/hospedagem-repository";
 export { type CaronaDoEvento, criarRepositorioCaronas, type PessoaDaCarona } from "./repository/caronas-repository";
-export { transferirLogisticaDaConvocacao } from "./repository/comum";
+export { transferirLogisticaDaConvocacao, vincularPedidosDeVooDaPessoa } from "./repository/comum";
