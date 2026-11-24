@@ -39,18 +39,37 @@ export {
   type UnidadeDaRegra,
   vigenciaNaData,
 } from "./domain/regras";
+export { caminhoDoFormularioDeCusto } from "./domain/caminhos";
 export { CustosMudouError, ErroDosCustos, SolicitacaoJaExisteError } from "./domain/erros";
+export { type CustoAprovado, mensagemDeCustoAprovado, primeiroNome } from "./domain/mensagens";
+export {
+  DIAS_DE_PRAZO_DO_FORMULARIO,
+  DIAS_PARA_CORRIGIR,
+  diaEmSaoPaulo,
+  type PeriodoDoEvento,
+  podeCorrigirNoPrazo,
+  prazoDaCorrecao,
+  prazoDoFormulario,
+  type PrazoDoFormulario,
+  type SituacaoDoPrazo,
+  situacaoDoPrazo,
+  somarDias,
+} from "./domain/prazo";
 export {
   type AprovarSolicitacao,
   aprovarSolicitacaoSchema,
   centavosDoTexto,
+  type CorrigirMeuCusto,
+  corrigirMeuCustoSchema,
   type CorrigirSolicitacao,
   corrigirSolicitacaoSchema,
   type CriarVigenciaDeRegra,
   criarVigenciaDeRegraSchema,
   deslocamentoSchema,
   desativarRegraSchema,
+  despesaSchema,
   type EntradaDeDeslocamento,
+  type EntradaDeDespesa,
   type EntradaDeItem,
   itemSchema,
   type ReabrirAuditoria,
@@ -59,6 +78,8 @@ export {
   registrarSolicitacaoSchema,
   type ReprovarSolicitacao,
   reprovarSolicitacaoSchema,
+  type SolicitarCusto,
+  solicitarCustoSchema,
 } from "./domain/schemas";
 export * as servicoDeSolicitacoes from "./service/solicitacoes";
 export * as servicoDeRegras from "./service/regras";
@@ -66,6 +87,7 @@ export {
   criarRepositorioSolicitacoes,
   type DeslocamentoGravado,
   type DetalheDaSolicitacao,
+  type EventoDaPessoa,
   type EventoParaRegistro,
   type FiltroDaFila,
   type HistoricoDaSolicitacao,
@@ -73,6 +95,7 @@ export {
   type NumerosDaFila,
   type PessoaParaRegistro,
   type SolicitacaoDaFila,
+  type SolicitacaoDaPessoa,
   transferirSolicitacaoDaConvocacao,
 } from "./repository/solicitacoes-repository";
 export { criarRepositorioRegras, type RegraComTipo } from "./repository/regras-repository";

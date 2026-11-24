@@ -3,8 +3,8 @@ import Link from "next/link";
 import { z } from "zod";
 
 import type { FilaCarregada, LinhaDaFila, SolicitacaoCarregada } from "@/fluxos/custos";
-import { type NivelDeExcecao, rotuloDaCategoriaDoItem, type StatusAuditoria, textoDoFinanceiro } from "@/modules/custos";
-import { PainelPelaUrl } from "@/app/(time)/_componentes/ui";
+import { DIAS_DE_PRAZO_DO_FORMULARIO, mensagemDeCustoAprovado, type NivelDeExcecao, primeiroNome, rotuloDaCategoriaDoItem, type StatusAuditoria, textoDoFinanceiro } from "@/modules/custos";
+import { BotaoCopiar, PainelPelaUrl } from "@/app/(time)/_componentes/ui";
 
 import { Aviso, FaixaSomenteLeitura } from "../../_componentes/ui/aviso";
 import { AtalhosDeFiltro, BarraDeFiltros, BuscaDeFiltro, SeletorDeFiltro } from "../../_componentes/ui/barra-de-filtros";
@@ -20,7 +20,7 @@ import { aprovarSolicitacaoAcao, reabrirAuditoriaAcao, reprovarSolicitacaoAcao }
 import { BarraDeAuditada, BarraDeAuditoria } from "./barra-de-auditoria";
 import { ChipDaAuditoria, ChipDoAlerta } from "./situacoes";
 
-export type ParametrosDeCustos = { situacao?: string; evento?: string; alerta?: string; busca?: string; protocolo?: string; registrada?: string; corrigida?: string };
+export type ParametrosDeCustos = { situacao?: string; evento?: string; alerta?: string; busca?: string; protocolo?: string; registrada?: string; corrigida?: string; aprovada?: string };
 
 const SITUACOES: (StatusAuditoria | "TODAS")[] = ["PENDENTE", "APROVADO", "REPROVADO", "TODAS"];
 const NIVEIS: NivelDeExcecao[] = ["CRITICO", "ALERTA", "NENHUM"];
@@ -34,6 +34,7 @@ export function parametrosDeCustos(busca: Record<string, string | string[] | und
     protocolo: parametro(busca.protocolo),
     registrada: parametro(busca.registrada),
     corrigida: parametro(busca.corrigida),
+    aprovada: parametro(busca.aprovada),
   };
 }
 
@@ -50,7 +51,7 @@ function LinhaDaSolicitacao({ linha, base, parametros }: { linha: LinhaDaFila; b
     <LinhaDaTabela>
       <CelulaDaTabela>
         <Link
-          href={enderecoCom(base, parametros, { protocolo: linha.protocolo, registrada: null, corrigida: null })}
+          href={enderecoCom(base, parametros, { protocolo: linha.protocolo, registrada: null, corrigida: null, aprovada: null })}
           scroll={false}
           className="whitespace-nowrap [font-family:var(--ds-font-mono)] text-[13px] font-medium text-[var(--ds-tint-text)] hover:underline"
         >
@@ -84,6 +85,58 @@ function LinhaDaSolicitacao({ linha, base, parametros }: { linha: LinhaDaFila; b
   );
 }
 
+/**
+ * Mensagem de "custo aprovado" pronta para o WhatsApp (doc 08 §11.2). Só copia: o sistema não envia nada, e o envio
+ * automático fica para depois.
+ */
+function MensagemDeAprovado({ solicitacao }: { solicitacao: SolicitacaoCarregada }) {
+  const mensagem = mensagemDeCustoAprovado({
+    nome: solicitacao.pessoaNome,
+    evento: solicitacao.evento.codigo ?? solicitacao.evento.nome,
+    protocolo: solicitacao.protocolo,
+    totalCentavos: solicitacao.totalCentavos,
+  });
+  return (
+    <section aria-labelledby="titulo-mensagem-de-aprovado" className="rounded-[var(--ds-radius-md)] border border-[var(--ds-separator)] p-4">
+      <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h3 id="titulo-mensagem-de-aprovado" className="text-[15px] font-semibold">
+            Mensagem de aprovado
+          </h3>
+          <p className="text-[12px] text-[var(--ds-label-2)]">Copie e mande para a pessoa pelo WhatsApp. O sistema não envia sozinho.</p>
+        </div>
+        <BotaoCopiar texto={mensagem} mensagem={`Mensagem copiada. Mande para ${primeiroNome(solicitacao.pessoaNome)} pelo WhatsApp.`} tamanho="pequeno">
+          Copiar mensagem
+        </BotaoCopiar>
+      </div>
+      <p className="whitespace-pre-wrap rounded-[var(--ds-radius-md)] bg-[var(--ds-surface-2)] px-4 py-3 text-[13px]">{mensagem}</p>
+    </section>
+  );
+}
+
+/** Link do formulário que o próprio staff preenche, para o time copiar e mandar (ou pôr na copy de escalação). */
+function LinkDoFormularioDoStaff({ link, doEvento }: { link: string; doEvento: boolean }) {
+  return (
+    <Cartao
+      id="link-do-formulario"
+      titulo="Formulário de custo do staff"
+      explicacao={
+        doEvento
+          ? `Link direto para este evento. A pessoa entra com a própria conta; o formulário abre no primeiro dia do evento e fecha ${DIAS_DE_PRAZO_DO_FORMULARIO} dias depois do último.`
+          : `Cada pessoa entra com a própria conta e vê os eventos em que está na escala. O formulário de cada evento abre no primeiro dia e fecha ${DIAS_DE_PRAZO_DO_FORMULARIO} dias depois do último; depois disso, registre a solicitação em nome da pessoa.`
+      }
+      acoes={
+        <BotaoCopiar texto={link} mensagem="Link copiado. Envie para o staff.">
+          Copiar link
+        </BotaoCopiar>
+      }
+      className="mb-5"
+    >
+      <p className="break-all rounded-[var(--ds-radius-md)] bg-[var(--ds-surface-2)] px-4 py-3 text-[13px]">{link}</p>
+    </Cartao>
+  );
+}
+
 function PainelDaSolicitacao({
   solicitacao,
   base,
@@ -97,7 +150,7 @@ function PainelDaSolicitacao({
   escrita: boolean;
   podeReabrirAuditoria: boolean;
 }) {
-  const semAviso = { registrada: null, corrigida: null };
+  const semAviso = { registrada: null, corrigida: null, aprovada: null };
   const fechar = enderecoCom(base, parametros, { protocolo: null, ...semAviso });
   const irPara = (protocolo: string | null) => (protocolo ? enderecoCom(base, parametros, { protocolo, ...semAviso }) : fechar);
   const versao = { solicitacaoId: solicitacao.id, atualizadoEm: solicitacao.atualizadoEm };
@@ -113,6 +166,7 @@ function PainelDaSolicitacao({
       critico={solicitacao.nivel === "CRITICO"}
       alertasCriticos={criticos}
       hrefDepois={irPara(solicitacao.proxima)}
+      hrefDepoisDeAprovar={enderecoCom(base, parametros, { protocolo: solicitacao.protocolo, ...semAviso, aprovada: "1" })}
       aprovar={aprovarSolicitacaoAcao}
       reprovar={reprovarSolicitacaoAcao}
     />
@@ -138,6 +192,20 @@ function PainelDaSolicitacao({
       <div className="flex flex-col gap-4 text-[14px]">
         {parametros.registrada === "1" && <Aviso tom="sucesso">Solicitação {solicitacao.protocolo} registrada em nome de {solicitacao.pessoaNome}.</Aviso>}
         {parametros.corrigida === "1" && <Aviso tom="sucesso">Correção registrada. A solicitação voltou para Para auditar.</Aviso>}
+        {parametros.aprovada === "1" && solicitacao.auditoria === "APROVADO" && (
+          <Aviso
+            tom="sucesso"
+            acao={
+              solicitacao.proxima && (
+                <BotaoLink variante="texto" href={irPara(solicitacao.proxima)} scroll={false}>
+                  Próxima da fila
+                </BotaoLink>
+              )
+            }
+          >
+            {solicitacao.protocolo} aprovada. Avise {primeiroNome(solicitacao.pessoaNome)}: copie a mensagem de aprovado abaixo e mande pelo WhatsApp.
+          </Aviso>
+        )}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="flex flex-wrap items-center gap-2">
             <ChipDaAuditoria status={solicitacao.auditoria} />
@@ -171,6 +239,8 @@ function PainelDaSolicitacao({
             {solicitacao.parecer}
           </Aviso>
         )}
+
+        {solicitacao.auditoria === "APROVADO" && <MensagemDeAprovado solicitacao={solicitacao} />}
 
         <section aria-labelledby="titulo-deslocamentos">
           <h3 id="titulo-deslocamentos" className="mb-2 text-[15px] font-semibold">
@@ -295,6 +365,7 @@ export function SecaoDeCustos({
   podeReabrirAuditoria,
   comSeletorDeEvento,
   hrefRegistrar,
+  linkDoFormulario,
 }: {
   dados: FilaCarregada;
   solicitacao: SolicitacaoCarregada | null;
@@ -306,6 +377,8 @@ export function SecaoDeCustos({
   comSeletorDeEvento: boolean;
   /** Sem isto, a ação "Registrar solicitação" fica no cabeçalho da página. */
   hrefRegistrar?: string;
+  /** Endereço completo do formulário que o próprio staff preenche (/solicitar-custo). Nulo = sem como montar o link. */
+  linkDoFormulario?: string | null;
 }) {
   const filtro = filtroDosParametros(parametros);
   return (
@@ -317,6 +390,7 @@ export function SecaoDeCustos({
         {escrita && hrefRegistrar && <BotaoRegistrarSolicitacao href={hrefRegistrar} />}
       </div>
       {!escrita && <FaixaSomenteLeitura />}
+      {linkDoFormulario && <LinkDoFormularioDoStaff link={linkDoFormulario} doEvento={!comSeletorDeEvento} />}
       <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <CartaoDeNumero rotulo="Para auditar" valor={dados.numeros.paraAuditar} href={enderecoCom(base, {}, { situacao: null })} />
         <CartaoDeNumero rotulo="Com alerta crítico" valor={dados.numeros.criticas} href={enderecoCom(base, {}, { alerta: "CRITICO" })} />

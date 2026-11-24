@@ -470,6 +470,99 @@ a[class*="situacao-"]:hover {
 .cadastro-ok { background: rgba(48, 209, 88, 0.14); color: #7ee2a0; }
 .cadastro-sair { margin-top: 16px; }
 .cadastro-sair button { border: 0; background: none; font-size: 13px; color: #9fbcff; cursor: pointer; }
+/* Solicitação de custo do staff (celular; docs/08 §11.4) */
+.custo-secao { display: grid; gap: 10px; margin: 0 0 20px; text-align: left; }
+.custo-secao h2 { margin: 0; font-size: 15px; font-weight: 700; color: #ffffff; }
+.custo-lista { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.custo-evento {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  color: rgba(235, 235, 245, 0.9);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.custo-evento:hover { background: rgba(255, 255, 255, 0.06); }
+.custo-evento strong { font-size: 14.5px; font-weight: 600; color: #ffffff; }
+.custo-evento small { font-size: 12.5px; color: rgba(235, 235, 245, 0.6); }
+.custo-evento-acao { font-size: 13px; font-weight: 600; color: #9fbcff; }
+.custo-situacao {
+  justify-self: start;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(159, 188, 255, 0.16);
+  color: #c7d8ff;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.custo-situacao-ok { background: rgba(48, 209, 88, 0.14); color: #7ee2a0; }
+.custo-situacao-nao { background: rgba(255, 69, 58, 0.14); color: #ffb4ad; }
+.cadastro-form fieldset.custo-bloco,
+.custo-bloco {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  text-align: left;
+}
+.custo-linha {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  font-size: 14px;
+  color: rgba(235, 235, 245, 0.9);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.custo-linha > :last-child { flex: none; font-variant-numeric: tabular-nums; }
+.custo-linha small { font-size: 12.5px; color: rgba(235, 235, 245, 0.6); }
+.custo-enviado { display: grid; gap: 8px; margin: 16px 0 0; }
+.custo-enviado .cadastro-ajuda { margin: 0; }
+.custo-total {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  text-align: left;
+}
+.custo-total span { font-size: 12.5px; font-weight: 600; color: rgba(235, 235, 245, 0.7); }
+.custo-total strong { font-size: 24px; font-weight: 700; color: #ffffff; font-variant-numeric: tabular-nums; }
+.custo-total small { font-size: 12.5px; line-height: 1.4; color: rgba(235, 235, 245, 0.6); }
+.custo-botao-secundario {
+  min-height: 44px;
+  border: 1px solid rgba(159, 188, 255, 0.5);
+  border-radius: 12px;
+  background: none;
+  color: #c7d8ff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.custo-botao-texto {
+  justify-self: start;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #9fbcff;
+  font-size: 13px;
+  cursor: pointer;
+}
+.custo-centro { justify-self: center; display: inline-flex; align-items: center; text-decoration: none; }
+.custo-aviso { margin: 0; }
+.custo-link-botao { box-sizing: border-box; margin: 0 0 10px; text-decoration: none; }
+.custo-voltar { margin: 18px 0 0; font-size: 13px; }
+.custo-voltar a, .login-form .cadastro-ajuda a { color: #9fbcff; }
 .login-error {
   margin: 0 0 14px;
   padding: 10px 12px;

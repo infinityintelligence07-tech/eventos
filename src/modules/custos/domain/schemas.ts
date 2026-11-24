@@ -95,6 +95,30 @@ export const corrigirSolicitacaoSchema = z
   .refine(temAlgumaLinha, MENSAGEM_SEM_LINHA);
 export type CorrigirSolicitacao = z.output<typeof corrigirSolicitacaoSchema>;
 
+// Formulário do próprio staff (/solicitar-custo): a pessoa vem da sessão, nunca do formulário. Os deslocamentos
+// passam pela mesma validação do registro do time; as despesas viram itens "OUTRO" no servidor (a pessoa não
+// escolhe categoria nem lança remuneração).
+export const despesaSchema = z.object({
+  descricao: textoObrigatorio(200, "Descreva a despesa (ex.: estacionamento)."),
+  valorCentavos: dinheiro,
+});
+export type EntradaDeDespesa = z.output<typeof despesaSchema>;
+
+const linhasDoStaff = {
+  deslocamentos: z.array(deslocamentoSchema).max(10, "Até 10 deslocamentos.").default([]),
+  despesas: z.array(despesaSchema).max(10, "Até 10 despesas.").default([]),
+};
+const temAlgumaLinhaDoStaff = (solicitacao: { deslocamentos: unknown[]; despesas: unknown[] }) => solicitacao.deslocamentos.length + solicitacao.despesas.length > 0;
+const MENSAGEM_SEM_LINHA_DO_STAFF = "Informe pelo menos um deslocamento de carro ou uma despesa.";
+
+export const solicitarCustoSchema = z.object({ eventoId: id, ...linhasDoStaff }).refine(temAlgumaLinhaDoStaff, MENSAGEM_SEM_LINHA_DO_STAFF);
+export type SolicitarCusto = z.output<typeof solicitarCustoSchema>;
+
+export const corrigirMeuCustoSchema = z
+  .object({ eventoId: id, atualizadoEm: z.iso.datetime({ offset: true }), ...linhasDoStaff })
+  .refine(temAlgumaLinhaDoStaff, MENSAGEM_SEM_LINHA_DO_STAFF);
+export type CorrigirMeuCusto = z.output<typeof corrigirMeuCustoSchema>;
+
 const versao = { solicitacaoId: id, atualizadoEm: z.iso.datetime({ offset: true }) };
 
 export const aprovarSolicitacaoSchema = z.object({ ...versao, parecer: z.string().trim().max(1000, "Use até 1.000 caracteres.").optional() });

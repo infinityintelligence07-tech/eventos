@@ -613,8 +613,9 @@ pedido, pessoas sem resposta na enquete. "Sem PIX" fica fora (dado em `sensivel`
 | Server action (Zod) | `marcarCopyComoEnviada` ← `{ convocacaoId: uuid, modeloId: uuid, dadosHash: string(64) }` |
 
 - "Copiar" é só no navegador (`navigator.clipboard`), sem gravar. Não existe "marcar todas".
-- `{{link_custos}}`: o staff ainda não tem portal. Enquanto isso o valor vem de configuração (link do formulário de hoje)
-  ou a copy de escalação fica sempre bloqueada (decisão em §11).
+- `{{link_custos}}`: o valor vem de configuração (decisão em §11); vazio, a copy de escalação fica bloqueada. Desde 24/11/2026 o
+  sistema tem o formulário próprio (`/solicitar-custo`, doc 08 §11.4): a líder copia o endereço em Configurações › Modelos de copy
+  e salva no campo. Nenhuma migration muda o valor configurado.
 - Alerta "falta dado" no Início e na lista: contagem de convocações ativas com situação `FALTA_DADO`.
 
 ### 6.4 Disponibilidade — `/disponibilidade`, `/disponibilidade/nova`, `/disponibilidade/[enqueteId]`
@@ -704,6 +705,12 @@ navegador); `corrigirSolicitacao` ← o mesmo + `solicitacaoId` (só `REPROVADO`
   `COMBUSTIVEL` por UF. Consumo vem de `pessoa_veiculo`, editável.
 - Remuneração e alimentação vêm pré-preenchidas da `regra_custo` do tipo do evento.
 - `UNIQUE (evento_id, pessoa_id)`: uma solicitação por pessoa por evento; "Registrar" vira "Abrir" quando já existe.
+- **Formulário do próprio staff** (`src/app/solicitar-custo`, fora do `(time)`; doc 08 §11.4): `carregarCustosDoStaff(pessoaId)`,
+  `carregarFormularioDoStaff(eventoId, pessoaId)`, `solicitarCusto` e `corrigirMeuCusto` (em `src/fluxos/custos/staff.ts`). Usa o mesmo
+  serviço de registro, com `propria: true` no contexto: grava sem `registrado_por`, o `registro_acao` leva `propria: true` e vale o
+  prazo de `domain/prazo.ts` (do primeiro dia do evento até 5 dias depois do último, em São Paulo). As despesas do staff viram
+  `custo_item` "OUTRO"; a pessoa não escolhe categoria.
+- **Mensagem de custo aprovado:** `domain/mensagens.ts` (`mensagemDeCustoAprovado`), copiada pelo time no painel da solicitação aprovada.
 
 ### 6.8 Configurações — `/configuracoes/regras-de-custo`, `/vagas`, `/modelos-de-copy`, `/locais`
 
@@ -969,6 +976,8 @@ Onde a doc 08 diverge, vale o que está aqui.
 | Escala comunicada | Passa a `COMUNICADA` sozinha quando todas as copys de escalação forem marcadas como enviadas. |
 | Aprovação sem login | Registra data/hora e o usuário de teste. |
 | Motivo em custos | Obrigatório para reprovar e para aprovar com alerta crítico; opcional no resto. |
+| Formulário de custo do staff (24/11/2026) | `/solicitar-custo` substitui o Google Forms: aberto do primeiro dia do evento até 5 dias depois do último (inclusive, fuso de São Paulo); fora do prazo, só o time registra. Só deslocamento e despesas (sem remuneração nem alimentação, que continuam entrando pelo registro do time). Tipo de combustível e data do evento ficam de fora; comprovante em arquivo pendente (sem armazenamento). Correção pelo staff só da reprovada, até 5 dias depois da reprovação. Detalhe na doc 08 §11.4. |
+| Custo aprovado (24/11/2026) | Mensagem pronta para copiar e mandar no WhatsApp (primeiro nome, evento, protocolo, valor). O sistema não envia. **Construção futura:** envio automático pelo WhatsApp. |
 | Pessoa nova | Sem botão "Nova pessoa" (cadastro é do GH); no local, usar as 60 pessoas semeadas. |
 | WhatsApp | Só copiar e marcar como enviada; botão do WhatsApp inativo com "em breve". |
 | Permissões por papel | Fora desta rodada (sem login). |

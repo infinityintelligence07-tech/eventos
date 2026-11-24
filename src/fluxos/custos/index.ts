@@ -21,3 +21,17 @@ export {
 } from "./registro";
 export { criarVigenciaDeRegra, desativarRegra, listarRegrasDeCusto, type RegraNaTela, type RegrasPorCategoria } from "./regras";
 export { resumoParaInicio } from "./resumo";
+export {
+  type AtorDoStaff,
+  carregarCustosDoStaff,
+  carregarFormularioDoStaff,
+  corrigirMeuCusto,
+  type CustosDoStaff,
+  type EventoAbertoDoStaff,
+  type EventoDoFormulario,
+  type FormularioDoStaff,
+  previaDoCustoDoStaff,
+  type SolicitacaoDoStaff,
+  solicitarCusto,
+  type SugestoesDoStaff,
+} from "./staff";
