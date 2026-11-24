@@ -5,7 +5,8 @@ import Link from "next/link";
 import {
   type Calendario,
   carregarCalendario,
-  type DiaDoCalendario,
+  RECORTE_PADRAO,
+  type RecorteDoCalendario,
   repositorioCalendario,
   type SituacaoNoCalendario,
 } from "@/modules/eventos";
@@ -14,16 +15,22 @@ import { CabecalhoDaPagina } from "../_componentes/ui/cabecalho";
 import { CARTAO, classesDoBotao } from "../_componentes/ui/classes";
 import { CartaoDeNumero } from "../_componentes/ui/cartao";
 import { ChipDaEscala } from "../_componentes/ui/situacao";
-import { CartaoDoEvento } from "./_componentes/cartao-do-evento";
 import { Filtros } from "./_componentes/filtros";
+import { SemanaDoMes } from "./_componentes/semana-do-mes";
 import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Calendário" };
 
-type Parametros = { mes?: string; polo?: string; tipo?: string };
+type Parametros = { mes?: string; polo?: string; tipo?: string; mostrar?: string };
 
-const DIAS_DA_SEMANA = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+// Segunda a domingo, como no IAM Control: o evento de quinta a domingo vira uma faixa só.
+const DIAS_DA_SEMANA = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+const RECORTES: { recorte: RecorteDoCalendario; rotulo: string }[] = [
+  { recorte: "todos", rotulo: "Todos" },
+  { recorte: "eventos", rotulo: "Eventos" },
+  { recorte: "palestras", rotulo: "Palestras" },
+];
 const LEGENDA: SituacaoNoCalendario[] = [
   "SEM_ESCALA",
   "RASCUNHO",
@@ -35,10 +42,11 @@ const LEGENDA: SituacaoNoCalendario[] = [
 ];
 const BOTAO = classesDoBotao();
 
-function enderecoDoMes(mes: string, { polo, tipo }: Calendario["filtros"]): string {
+function enderecoDoMes(mes: string, { polo, tipo, recorte }: Calendario["filtros"]): string {
   const parametros = new URLSearchParams({ mes });
   if (polo) parametros.set("polo", polo);
   if (tipo) parametros.set("tipo", tipo);
+  if (recorte !== RECORTE_PADRAO) parametros.set("mostrar", recorte);
   return `/calendario?${parametros.toString()}`;
 }
 
@@ -52,46 +60,6 @@ function quandoSincronizou(instante: Date | null): string {
     minute: "2-digit",
   });
   return `Turmas do IAM Control sincronizadas em ${quando.replace(", ", " às ")}.`;
-}
-
-function resumoDasMasterclasses(ativas: number, canceladas: number): string {
-  const plural = (quantidade: number, singular: string, varias: string) => `${quantidade} ${quantidade === 1 ? singular : varias}`;
-  if (ativas === 0) return plural(canceladas, "Masterclass cancelada", "Masterclasses canceladas");
-  const texto = plural(ativas, "Masterclass", "Masterclasses");
-  return canceladas > 0 ? `${texto} (+${plural(canceladas, "cancelada", "canceladas")})` : texto;
-}
-
-function Dia({ dia }: { dia: DiaDoCalendario }) {
-  const ativas = dia.masterclasses.filter((mc) => mc.status !== "CANCELADO").length;
-  const canceladas = dia.masterclasses.length - ativas;
-  return (
-    <td className={`h-[132px] border border-[var(--ds-separator)] p-1.5 align-top ${dia.doMes ? "" : "bg-[var(--ds-surface-2)]"}`}>
-      <p
-        className={`mb-1 inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1.5 text-[12px] font-semibold tabular-nums ${
-          dia.hoje ? "bg-[var(--ds-brand)] text-white" : dia.doMes ? "text-[var(--ds-label)]" : "text-[var(--ds-label-2)]"
-        }`}
-      >
-        {Number(dia.data.slice(8, 10))}
-      </p>
-      <div className="flex flex-col gap-1">
-        {dia.eventos.map((evento) => (
-          <CartaoDoEvento key={evento.id} evento={evento} dia={dia.data} />
-        ))}
-        {dia.masterclasses.length > 0 && (
-          <details className="group rounded-[7px] text-[12px]">
-            <summary className="rounded-[7px] px-1.5 py-0.5 font-medium text-[var(--ds-label-2)] hover:bg-[var(--ds-fill-4)]">
-              {resumoDasMasterclasses(ativas, canceladas)}
-            </summary>
-            <div className="mt-1 flex flex-col gap-1">
-              {dia.masterclasses.map((mc) => (
-                <CartaoDoEvento key={mc.id} evento={mc} dia={dia.data} />
-              ))}
-            </div>
-          </details>
-        )}
-      </div>
-    </td>
-  );
 }
 
 export default async function PaginaCalendario({ searchParams }: { searchParams: Promise<Parametros> }) {
@@ -130,6 +98,7 @@ export default async function PaginaCalendario({ searchParams }: { searchParams:
             )}
           </div>
           <Filtros
+            recortes={RECORTES.map(({ recorte, rotulo }) => ({ valor: recorte === RECORTE_PADRAO ? null : recorte, rotulo }))}
             polos={filtros.polos.map((polo) => ({ valor: polo.codigo, rotulo: `${polo.nome} (${polo.codigo})` }))}
             tipos={filtros.tipos.map((tipo) => ({ valor: tipo.sigla, rotulo: tipo.nome }))}
             polo={filtros.polo}
@@ -157,15 +126,9 @@ export default async function PaginaCalendario({ searchParams }: { searchParams:
                 ))}
               </tr>
             </thead>
-            <tbody>
-              {calendario.semanas.map((semana) => (
-                <tr key={semana[0]!.data}>
-                  {semana.map((dia) => (
-                    <Dia key={dia.data} dia={dia} />
-                  ))}
-                </tr>
-              ))}
-            </tbody>
+            {calendario.semanas.map((semana) => (
+              <SemanaDoMes key={semana.dias[0]!.data} semana={semana} />
+            ))}
           </table>
         </div>
         <p className="mt-3 text-[12px] text-[var(--ds-label-2)]">Clique num evento para abrir. Passe o mouse ou o foco do teclado para ver código, período, público e vagas.</p>

@@ -46,6 +46,77 @@
   }
 }
 
+/* ---------- Negrito = caixa alta ----------
+   Em toda tela, o texto em destaque aparece em MAIÚSCULAS. É só visual (text-transform): o texto em si, o que
+   se digita e o que o botão "Copiar" manda para a área de transferência não mudam. A regra mora só aqui; as
+   telas não precisam de classe nenhuma.
+   - Para tirar um trecho da regra (ele e tudo dentro dele): classe `sem-caixa-alta`. Toda copy pronta para o
+     WhatsApp leva essa classe: se o texto for selecionado e copiado à mão, o navegador copia o que está na tela.
+   - Para forçar num texto que a regra não pega: `uppercase` do Tailwind; para soltar um só elemento: `normal-case`.
+   Fica na camada base e com especificidade zero (:where): qualquer utilitário do Tailwind vence, e entre as
+   duas regras abaixo vale a ordem (a segunda ganha da primeira). */
+@layer base {
+  /* Nunca em caixa alta, nem por herança: peso normal dentro de um destaque (a segunda linha da célula),
+     destaque médio que a regra abaixo não pega (links de ação, etiquetas, avisos), o que a pessoa digita,
+     código, endereço de e-mail ou de site e a copy pronta. */
+  :where(
+      .font-normal,
+      .font-medium,
+      input,
+      select,
+      textarea,
+      button,
+      pre,
+      code,
+      a[href^="mailto:"],
+      a[href^="http"],
+      .sem-caixa-alta
+    ) {
+    text-transform: none;
+  }
+
+  /* O que o olho lê como destaque:
+     1. negrito de fato (peso 600 ou mais): títulos, números dos cartões, nome no cartão do Calendário.
+        Botão e link com cara de botão ficam de fora, para o primário não destoar do secundário;
+     2. o nome da linha nas tabelas (pessoa, evento, função, local);
+     3. destaque médio de corpo de texto (14 px ou mais, na cor do texto): nomes de pessoa e de evento fora de
+        tabela. Com cor própria é link de ação, etiqueta ou aviso; com 13 px ou menos é rótulo de campo;
+     4. títulos das telas do staff (login, Meu cadastro, enquete), que não usam as classes do Tailwind. */
+  :where(
+      :is(
+          strong,
+          b,
+          :is(.font-bold, .font-semibold):not(a, button),
+          th[scope="row"],
+          .font-medium:not(
+              label,
+              legend,
+              summary,
+              mark,
+              [class*="text-[var("],
+              [class*="text-white"],
+              [class*="situacao-"],
+              [class*="text-[13px]"],
+              [class*="text-[12px]"],
+              [class*="text-[11px]"]
+            ),
+          .login-form h1,
+          .login-brand-copy h2,
+          .login-aviso-titulo,
+          .cadastro-form legend
+        ):not(input, select, textarea, button, pre, code, .sem-caixa-alta, .sem-caixa-alta *)
+    ) {
+    text-transform: uppercase;
+  }
+
+  /* No celular a primeira célula de cada cartão de tabela fica em negrito (regra mais abaixo): entra na mesma conta. */
+  @media (max-width: 639px) {
+    :where(.tabela-em-cartoes tr > :first-child:not(.sem-caixa-alta, .sem-caixa-alta *)) {
+      text-transform: uppercase;
+    }
+  }
+}
+
 /* Menu lateral: degradê da marca, como no IAM Control. */
 .app-sidebar {
   background: linear-gradient(180deg, var(--ds-brand) 0%, var(--ds-tint-deep) 100%);

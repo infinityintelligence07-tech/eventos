@@ -127,7 +127,7 @@ export default async function PaginaEnquete({ params, searchParams }: { params: 
             Enquete criada. Copie o convite e envie no grupo do staff.
           </Aviso>
           <Cartao id="convite" titulo="Convite para o WhatsApp" explicacao="Texto pronto para colar no grupo, com o link em que cada pessoa responde. Só copia; o envio é pelo WhatsApp." acoes={botaoCopiar} className="mb-5">
-            <pre className="overflow-x-auto whitespace-pre-wrap rounded-[var(--ds-radius-md)] bg-[var(--ds-surface-2)] p-4 text-[13px] leading-relaxed">{enquete.convite}</pre>
+            <pre className="sem-caixa-alta overflow-x-auto whitespace-pre-wrap rounded-[var(--ds-radius-md)] bg-[var(--ds-surface-2)] p-4 text-[13px] leading-relaxed">{enquete.convite}</pre>
           </Cartao>
         </>
       )}
