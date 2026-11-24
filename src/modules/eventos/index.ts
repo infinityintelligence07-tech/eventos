@@ -4,8 +4,12 @@ export {
   ehMasterclass,
   escalaEmMontagem,
   type EventoNoCalendario,
+  type FaixaDaSemana,
+  faixasDaSemana,
   type Pendencias,
   pendenciasDosEventos,
+  RECORTE_PADRAO,
+  type RecorteDoCalendario,
   somarDias,
   type SituacaoNoCalendario,
   situacaoNoCalendario,
@@ -49,6 +53,7 @@ export {
   carregarCalendario,
   type DiaDoCalendario,
   type PedidoDoCalendario,
+  type SemanaDoCalendario,
 } from "./service/calendario";
 export { type SalvarDadosDoEvento, salvarDadosDoEventoSchema } from "./domain/schemas";
 export { criarRepositorioEvento, type EventoDoResumo, type RepositorioEvento } from "./repository/evento-repository";

@@ -34,7 +34,21 @@ function detalhes(evento: EventoNoCalendario, situacao: SituacaoNoCalendario): s
     .join("\n");
 }
 
-export function CartaoDoEvento({ evento, dia }: { evento: EventoNoCalendario; dia: string }) {
+/**
+ * Cartão do evento num dia ou, na faixa contínua do mês, no trecho que começa em `dia`.
+ * `comecaAntes`/`continuaDepois`: a faixa foi cortada na virada da semana; a ponta cortada fica reta.
+ */
+export function CartaoDoEvento({
+  evento,
+  dia,
+  comecaAntes = false,
+  continuaDepois = false,
+}: {
+  evento: EventoNoCalendario;
+  dia: string;
+  comecaAntes?: boolean;
+  continuaDepois?: boolean;
+}) {
   const situacao = situacaoNoCalendario(evento);
   const primeiroDia = evento.dataInicio === dia;
   const informacoes = [
@@ -43,8 +57,9 @@ export function CartaoDoEvento({ evento, dia }: { evento: EventoNoCalendario; di
     primeiroDia && evento.vagas > 0 ? `${evento.vagas} vagas` : null,
   ].filter(Boolean);
   const texto = detalhes(evento, situacao);
-  // O mesmo evento aparece em vários dias: o id da descrição leva o dia.
+  // O mesmo evento aparece em vários dias (ou semanas): o id da descrição leva o dia.
   const idDosDetalhes = `evento-${evento.id}-${dia}`;
+  const pontas = `${comecaAntes ? "rounded-l-none" : "border-l-[3px]"} ${continuaDepois ? "rounded-r-none" : ""}`;
 
   return (
     <>
@@ -52,7 +67,7 @@ export function CartaoDoEvento({ evento, dia }: { evento: EventoNoCalendario; di
         href={`/eventos/${evento.id}`}
         title={texto}
         aria-describedby={idDosDetalhes}
-        className={`situacao-${situacao} block rounded-[7px] border border-l-[3px] px-2 py-1 text-[12px] leading-[1.35]`}
+        className={`situacao-${situacao} block rounded-[7px] border ${pontas} px-2 py-1 text-[12px] leading-[1.35]`}
       >
         <span className="block font-semibold">{rotuloCurto(evento)}</span>
         {informacoes.length > 0 && <span className="block opacity-80">{informacoes.join(" · ")}</span>}
