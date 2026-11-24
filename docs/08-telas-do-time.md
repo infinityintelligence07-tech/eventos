@@ -793,11 +793,12 @@ Atalhos: "Abertas | Encerradas | Todas".
 | Nome | nome social se houver, senão nome completo (link → ficha) |
 | Funções | até 3 chips neutros ("Staff líder", "Pai/mãe"…; trainee com sufixo "· trainee") + "+2" |
 | Cidade | cidade/UF do endereço (sem rua) |
-| Carro | "4 lugares" ou "—" |
-| Camiseta | "Baby look M" / "—" |
+| Carro | "Sim" para quem tem veículo cadastrado, "Não" para quem não tem (os lugares ficam só na ficha) |
 | Fez Confronto | "Sim" / "Não" / "—" |
 | Último evento | `14/09 · CONF_AM_58` |
 | Cadastro | chip "Completo" (sucesso) ou "Falta PIX" / "Falta endereço" (atenção) |
+
+A camiseta (modelo e tamanho) não aparece na lista: fica só na ficha da pessoa (9.2).
 
 **Estados:** vazio por filtro — "Nenhuma pessoa com esses filtros." + "Limpar filtros". Vazio de verdade — "Nenhuma pessoa cadastrada ainda." / "As pessoas vêm do cadastro do GH e, depois, do cadastro feito pelo próprio staff."
 
