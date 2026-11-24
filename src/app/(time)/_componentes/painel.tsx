@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  BedDouble,
   CalendarCheck,
   CalendarDays,
   Contact,
@@ -36,7 +37,8 @@ const ICONES: Record<ItemDoMenu, LucideIcon> = {
   Comunicação: MessageCircle,
   Disponibilidade: CalendarCheck,
   Pessoas: Contact,
-  "Voos e Hospedagem": Plane,
+  Voos: Plane,
+  Hospedagem: BedDouble,
   Custos: Receipt,
   Configurações: Settings,
 };
