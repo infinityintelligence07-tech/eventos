@@ -70,6 +70,22 @@ Especificação das 8 abas que faltam no app do time de eventos, no mesmo visual
 Números em tabela e cartões usam `tabular-nums` (já aplicado em `th`, `td`, `strong`, `time` dentro de `[data-ds]`)
 e ficam alinhados à direita quando são valores para comparar (dinheiro, km, quantidades).
 
+**Negrito = caixa alta.** Em toda tela, o texto em destaque aparece em MAIÚSCULAS. A regra é uma só, em
+`src/app/globals.css` (bloco "Negrito = caixa alta"), e é só visual (`text-transform`): a tela não escreve em
+maiúsculas nem precisa de classe, e o que vai para a área de transferência não muda.
+
+| Vira caixa alta | Fica como está |
+|---|---|
+| Peso 600 ou mais: `font-semibold`, `font-bold`, `<strong>`, `<b>` (títulos, números dos cartões, nome no cartão do Calendário) | Botões e links com cara de botão (o primário é `font-semibold`), atalho de filtro ativo |
+| Nome da linha nas tabelas (`<th scope="row">`): pessoa, evento, função, local | Dentro dele, o que for `font-normal` (segunda linha) e as etiquetas coloridas |
+| `font-medium` de corpo de texto (14 px ou mais, na cor do texto): nomes de pessoa e de evento fora de tabela | `font-medium` com cor própria (links de ação, chips, avisos, erros) ou de 13 px para baixo (rótulos de campo, cabeçalhos de coluna); `label`, `legend`, `summary` |
+| Títulos das telas do staff (login, Meu cadastro, enquete) | Campos (`input`, `select`, `textarea`), `code`, `pre`, links `mailto:` e `http` |
+| No celular, a primeira célula de cada cartão de tabela (lá ela é negrito) | **Copy pronta** (convite, copy de comunicação, prévia do modelo): sempre com a classe `sem-caixa-alta` |
+
+Para tirar um trecho da regra, com tudo o que há dentro: classe `sem-caixa-alta`. Toda copy pronta leva essa classe,
+porque texto selecionado e copiado à mão sai como está na tela. Para um caso isolado valem os utilitários do Tailwind
+(`uppercase`, `normal-case`), que vencem a regra.
+
 ---
 
 ## 2. Navegação e rotas
@@ -115,6 +131,18 @@ flowchart LR
 - `CartaoDoEvento` vira um `Link` para `/eventos/[id]` (hoje é `div` com `title`). O conteúdo do `title` passa a aparecer
   também no foco do teclado (popover simples ou `aria-describedby` com o texto visível em `sr-only`).
 - Os itens das listas "Precisa de ação" viram links para o evento (e "e mais N" leva para `/escalas` com o filtro certo).
+
+**Calendário do mês (como no IAM Control):**
+- Semana de **segunda a domingo**. Cada evento é **uma faixa contínua** do primeiro ao último dia; na virada da semana a
+  faixa quebra e a ponta cortada fica reta. Eventos simultâneos empilham em linhas (a mais alta livre; quem começa antes
+  escolhe primeiro e, no empate, o mais longo). A regra é `faixasDaSemana` em `modules/eventos/domain/calendario.ts`.
+  A faixa é o mesmo `CartaoDoEvento` (link para o evento, cor da situação, detalhes no `title` e em `sr-only`).
+- Atalho **Todos | Eventos | Palestras** (`?mostrar=eventos|palestras`; sem o parâmetro = Todos). Palestra é a
+  Masterclass (tipo `MC`); evento é todo o resto. Vale junto com Polo e Tipo; o seletor Tipo só oferece os tipos do
+  atalho escolhido (em "Palestras" ele some) e um tipo de fora do atalho é ignorado. Os três números do topo seguem os filtros.
+- Em **Todos**, as Masterclasses continuam recolhidas em cada dia ("3 Masterclasses"), abaixo das faixas; em
+  **Palestras**, cada Masterclass é uma faixa.
+- No celular a grade continua com rolagem horizontal dentro do cartão (largura mínima de 840 px).
 
 **Migalha (breadcrumb)** nas telas internas, acima do título, 13 px `text-[var(--ds-label-2)]`, dentro de
 `<nav aria-label="Você está em">`: `Calendário › CONF_AM_60 › Escala`. O último item tem `aria-current="page"`.
