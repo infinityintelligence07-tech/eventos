@@ -6,7 +6,6 @@ import { convocacao, escala, evento, funcao, pessoaFuncao, registroAcao, tipoEve
 
 import type { StatusConvocacao, StatusEscala } from "../domain/convite";
 import type { LinhaDaMontagem } from "../domain/montagem";
-import { nomeDaPessoa } from "./montagem-repository";
 
 // Leituras das telas da escala (Montar escala, lista, aprovação, Início). Lê também pessoa_evento,
 // pessoa_funcao, disponibilidade e pedido_sdc só para consulta (docs/07 §2.3).
@@ -47,19 +46,21 @@ export type ConvocacaoDaTela = {
   nome: string;
   status: StatusConvocacao;
   nivel: "HABILITADO" | "TRAINEE" | null;
-  convidadaEm: Date | null;
-  respondidaEm: Date | null;
   motivoRecusa: string | null;
-  registradoPor: string | null;
+  /** Já soube que está na escala (recebeu copy ou respondeu): ao sair, o time precisa avisar. Mesma regra do serviço. */
+  avisada: boolean;
   deslocamento: string | null;
   montagem: boolean;
-  observacao: string | null;
+  /** Marcada na escala: a pessoa vai precisar de hotel (é quem a Hospedagem aloca em quarto). */
+  precisaHotel: boolean;
   distanciaKm: number | null;
   conflitos: string[];
-  /** Falso = segunda função da pessoa neste evento: o deslocamento fica na principal. */
+  /** Falso = segunda função da pessoa neste evento: o deslocamento e o hotel ficam na principal. */
   principal: boolean;
   /** Outras funções da pessoa neste evento. */
   outrasFuncoes: string[];
+  /** A função é um cargo do evento (Pai / mãe): não existe habilitação, então não há "não habilitado". */
+  cargoDoEvento: boolean;
 };
 
 export type RegistroDaEscala = {
@@ -92,6 +93,8 @@ export type LinhaParaSugestao = {
   eventoId: string;
   funcaoId: string | null;
   nomeDaFuncao: string;
+  /** Cargo do evento (Pai / mãe): qualquer staff pode ocupar. */
+  cargoDoEvento: boolean;
   quantidade: number;
   ativas: number;
   localLat: number | null;
@@ -117,9 +120,6 @@ export type EventoDaLista = {
   statusEscala: StatusEscala;
   vagas: number;
   preenchidas: number;
-  confirmaram: number;
-  aguardando: number;
-  naoPodem: number;
   /** Último envio para aprovação e última devolução (registro_acao). */
   enviadaEm: Date | null;
   devolvidaEm: Date | null;
@@ -133,8 +133,6 @@ export type SituacaoDoEventoParaAtencao = {
   vooSemPedido: number;
   trainees: { funcao: string; quantidade: number }[];
 };
-
-export type SemResposta = { convocacaoId: string; nome: string; eventoId: string; codigo: string | null; funcao: string; convidadaEm: Date };
 
 const numero = (valor: string | number | null): number | null => (valor === null ? null : Number(valor));
 
@@ -198,22 +196,23 @@ export function criarConsultaDaEscala(executor: Executor) {
         nome: string;
         status: string;
         nivel: string | null;
-        convidada_em: string | null;
-        respondida_em: string | null;
         motivo_recusa: string | null;
-        registrado_por: string | null;
+        avisada: boolean;
         deslocamento: string | null;
         montagem: boolean;
-        observacao: string | null;
+        precisa_hotel: boolean;
         distancia_km: string | null;
         conflitos: string[] | null;
         principal: boolean;
         outras_funcoes: string[] | null;
-        deslocamento_da_principal: string | null;
+        da_principal: { deslocamento: string | null; precisa_hotel: boolean } | null;
+        cargo_do_evento: boolean | null;
       }>(sql`
         select c.id, c.escala_id, c.pessoa_id, coalesce(p.nome_social, p.nome_completo) as nome, c.status, pf.nivel,
-               c.convidada_em, c.respondida_em, c.motivo_recusa, coalesce(u.nome_usuario, u.email) as registrado_por,
-               c.deslocamento, c.montagem, c.observacao, c.distancia_km,
+               c.motivo_recusa,
+               (c.convidada_em is not null or c.respondida_em is not null
+                 or exists (select 1 from eventos.mensagem m where m.convocacao_id = c.id and m.status = 'ENVIADA')) as avisada,
+               c.deslocamento, c.montagem, c.precisa_hotel, c.distancia_km, f.cargo_do_evento,
                (select array_agg(distinct coalesce(outro.codigo, outro.nome))
                   from ${convocacao} c2
                   join ${escala} e2 on e2.id = c2.escala_id and e2.deleted_at is null
@@ -227,18 +226,18 @@ export function criarConsultaDaEscala(executor: Executor) {
                   left join ${funcao} f3 on f3.id = e3.funcao_id
                  where c3.pessoa_id = c.pessoa_id and e3.evento_id = e.evento_id and c3.id <> c.id
                    and c3.status in ('SUGERIDA', 'CONVIDADA', 'ACEITA')) as outras_funcoes,
-               (select c4.deslocamento
+               (select json_build_object('deslocamento', c4.deslocamento, 'precisa_hotel', c4.precisa_hotel)
                   from ${convocacao} c4
                   join ${escala} e4 on e4.id = c4.escala_id and e4.deleted_at is null
                  where c4.pessoa_id = c.pessoa_id and e4.evento_id = e.evento_id and c4.principal
                    and c4.status in ('SUGERIDA', 'CONVIDADA', 'ACEITA')
-                 limit 1) as deslocamento_da_principal
+                 limit 1) as da_principal
           from ${convocacao} c
           join ${escala} e on e.id = c.escala_id and e.deleted_at is null
           join ${evento} ev on ev.id = e.evento_id
           join ${pessoa} p on p.id = c.pessoa_id
+          left join ${funcao} f on f.id = e.funcao_id
           left join ${pessoaFuncao} pf on pf.pessoa_id = c.pessoa_id and pf.funcao_id = e.funcao_id
-          left join ${usuario} u on u.id = c.registrado_por
          where e.evento_id = ${eventoId}
          order by c.criado_em, c.id`);
       return resultado.rows.map((linha) => ({
@@ -248,18 +247,17 @@ export function criarConsultaDaEscala(executor: Executor) {
         nome: linha.nome,
         status: linha.status as StatusConvocacao,
         nivel: linha.nivel as ConvocacaoDaTela["nivel"],
-        convidadaEm: linha.convidada_em ? new Date(linha.convidada_em) : null,
-        respondidaEm: linha.respondida_em ? new Date(linha.respondida_em) : null,
         motivoRecusa: linha.motivo_recusa,
-        registradoPor: linha.registrado_por,
-        // Na segunda função, mostra o deslocamento da pessoa (que fica na principal).
-        deslocamento: linha.principal ? linha.deslocamento : linha.deslocamento_da_principal,
+        avisada: linha.avisada,
+        // Na segunda função, mostra o deslocamento e o hotel da pessoa (que ficam na principal).
+        deslocamento: linha.principal ? linha.deslocamento : (linha.da_principal?.deslocamento ?? null),
         montagem: linha.montagem,
-        observacao: linha.observacao,
+        precisaHotel: linha.principal ? linha.precisa_hotel : (linha.da_principal?.precisa_hotel ?? false),
         distanciaKm: numero(linha.distancia_km),
         conflitos: linha.conflitos ?? [],
         principal: linha.principal,
         outrasFuncoes: linha.outras_funcoes ?? [],
+        cargoDoEvento: linha.cargo_do_evento ?? false,
       }));
     },
 
@@ -294,6 +292,7 @@ export function criarConsultaDaEscala(executor: Executor) {
         evento_id: string;
         funcao_id: string | null;
         nome_da_funcao: string;
+        cargo_do_evento: boolean;
         quantidade: number;
         ativas: number;
         local_lat: number | null;
@@ -303,6 +302,7 @@ export function criarConsultaDaEscala(executor: Executor) {
         data_fim: string;
       }>(sql`
         select e.id as escala_id, e.evento_id, e.funcao_id, coalesce(f.nome, 'Função sem nome') as nome_da_funcao,
+               coalesce(f.cargo_do_evento, false) as cargo_do_evento,
                e.quantidade_vagas as quantidade,
                (select count(*)::int from ${convocacao} c where c.escala_id = e.id and c.status in ('SUGERIDA', 'CONVIDADA', 'ACEITA')) as ativas,
                l.lat as local_lat, l.lng as local_lng,
@@ -321,6 +321,7 @@ export function criarConsultaDaEscala(executor: Executor) {
         eventoId: linha.evento_id,
         funcaoId: linha.funcao_id,
         nomeDaFuncao: linha.nome_da_funcao,
+        cargoDoEvento: linha.cargo_do_evento,
         quantidade: linha.quantidade,
         ativas: linha.ativas,
         localLat: linha.local_lat,
@@ -400,7 +401,7 @@ export function criarConsultaDaEscala(executor: Executor) {
       }));
     },
 
-    /** Eventos com início no intervalo (AAAA-MM-DD, São Paulo), com vagas, preenchidas, respostas e o último envio/devolução. */
+    /** Eventos com início no intervalo (AAAA-MM-DD, São Paulo), com vagas, preenchidas e o último envio/devolução. */
     async eventosDaLista({ de, ate, statusEscala }: { de?: string; ate?: string; statusEscala?: StatusEscala[] }): Promise<EventoDaLista[]> {
       const resultado = await executor.execute<{
         id: string;
@@ -419,19 +420,13 @@ export function criarConsultaDaEscala(executor: Executor) {
         status_escala: string;
         vagas: number;
         preenchidas: number;
-        confirmaram: number;
-        aguardando: number;
-        nao_podem: number;
         enviada_em: string | null;
         devolvida_em: string | null;
         comentario_da_devolucao: string | null;
       }>(sql`
         with linhas as (
           select e.evento_id, e.quantidade_vagas,
-                 count(c.id) filter (where c.status in ('SUGERIDA', 'CONVIDADA', 'ACEITA'))::int as ativas,
-                 count(c.id) filter (where c.status = 'ACEITA')::int as aceitas,
-                 count(c.id) filter (where c.status = 'CONVIDADA')::int as convidadas,
-                 count(c.id) filter (where c.status = 'RECUSADA')::int as recusadas
+                 count(c.id) filter (where c.status in ('SUGERIDA', 'CONVIDADA', 'ACEITA'))::int as ativas
             from ${escala} e
             left join ${convocacao} c on c.escala_id = e.id
            where e.deleted_at is null
@@ -444,9 +439,6 @@ export function criarConsultaDaEscala(executor: Executor) {
                ev.status, ev.status_escala,
                coalesce(sum(l.quantidade_vagas), 0)::int as vagas,
                coalesce(sum(least(l.ativas, l.quantidade_vagas)), 0)::int as preenchidas,
-               coalesce(sum(l.aceitas), 0)::int as confirmaram,
-               coalesce(sum(l.convidadas), 0)::int as aguardando,
-               coalesce(sum(l.recusadas), 0)::int as nao_podem,
                (select max(r.criado_em) from ${registroAcao} r
                  where r.entidade = 'ESCALA_DO_EVENTO' and r.entidade_id = ev.id and r.acao = 'ENVIADA_APROVACAO') as enviada_em,
                dev.criado_em as devolvida_em, dev.comentario as comentario_da_devolucao
@@ -484,9 +476,6 @@ export function criarConsultaDaEscala(executor: Executor) {
         statusEscala: linha.status_escala as StatusEscala,
         vagas: linha.vagas,
         preenchidas: linha.preenchidas,
-        confirmaram: linha.confirmaram,
-        aguardando: linha.aguardando,
-        naoPodem: linha.nao_podem,
         enviadaEm: linha.enviada_em ? new Date(linha.enviada_em) : null,
         devolvidaEm: linha.devolvida_em ? new Date(linha.devolvida_em) : null,
         comentarioDaDevolucao: linha.comentario_da_devolucao,
@@ -572,34 +561,6 @@ export function criarConsultaDaEscala(executor: Executor) {
         .where(and(inArray(escala.eventoId, eventoIds), isNull(escala.deletedAt)))
         .orderBy(escala.data, escala.criadoEm);
       return linhas.map((linha) => ({ ...linha, origem: linha.origem as LinhaDaMontagem["origem"] }));
-    },
-
-    /** Convidadas antes de `limite` e ainda sem resposta, em eventos que não acabaram. */
-    async semResposta(limite: Date, hoje: string): Promise<SemResposta[]> {
-      const linhas = await executor
-        .select({
-          convocacaoId: convocacao.id,
-          nome: nomeDaPessoa,
-          eventoId: evento.id,
-          codigo: evento.codigo,
-          funcao: sql<string>`coalesce(${funcao.nome}, 'Função sem nome')`,
-          convidadaEm: convocacao.convidadaEm,
-        })
-        .from(convocacao)
-        .innerJoin(escala, and(eq(escala.id, convocacao.escalaId), isNull(escala.deletedAt)))
-        .innerJoin(evento, and(eq(evento.id, escala.eventoId), isNull(evento.deletedAt)))
-        .innerJoin(pessoa, eq(pessoa.id, convocacao.pessoaId))
-        .leftJoin(funcao, eq(funcao.id, escala.funcaoId))
-        .where(
-          and(
-            eq(convocacao.status, "CONVIDADA"),
-            sql`${convocacao.convidadaEm} < ${limite}`,
-            sql`${evento.status} <> 'CANCELADO'`,
-            sql`to_char(${evento.fim} at time zone 'America/Sao_Paulo', 'YYYY-MM-DD') >= ${hoje}`,
-          ),
-        )
-        .orderBy(asc(evento.inicio), asc(convocacao.convidadaEm));
-      return linhas.map((linha) => ({ ...linha, convidadaEm: linha.convidadaEm! }));
     },
   };
 }

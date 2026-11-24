@@ -1,4 +1,4 @@
-import { CircleCheck, CircleX, Clock, Hourglass } from "lucide-react";
+import { Hourglass } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -181,7 +181,6 @@ export default async function PaginaEscalas({ searchParams }: Parametros) {
             <ColunaDaTabela>Datas</ColunaDaTabela>
             <ColunaDaTabela>Polo</ColunaDaTabela>
             <ColunaDaTabela>Vagas</ColunaDaTabela>
-            <ColunaDaTabela>Respostas</ColunaDaTabela>
             <ColunaDaTabela>Situação</ColunaDaTabela>
             <ColunaDaTabela numero>
               <span className="sr-only">Ação</span>
@@ -191,7 +190,6 @@ export default async function PaginaEscalas({ searchParams }: Parametros) {
             {lista.eventos.map((evento) => {
               const href = `/eventos/${evento.id}/escala`;
               const percentual = evento.vagas > 0 ? Math.round((evento.preenchidas / evento.vagas) * 100) : 0;
-              const respondeu = evento.confirmaram + evento.aguardando + evento.naoPodem > 0;
               return (
                 <LinhaDaTabela key={evento.id}>
                   <CelulaDaTabela>
@@ -209,26 +207,6 @@ export default async function PaginaEscalas({ searchParams }: Parametros) {
                     <span className="text-[13px] tabular-nums">
                       {evento.preenchidas} de {evento.vagas}
                     </span>
-                  </CelulaDaTabela>
-                  <CelulaDaTabela className="text-[13px]">
-                    {respondeu ? (
-                      <span className="inline-flex flex-wrap items-center gap-2 tabular-nums">
-                        <span className="inline-flex items-center gap-1">
-                          <CircleCheck size={14} aria-hidden className="text-[var(--ds-green-deep)]" />
-                          {evento.confirmaram} confirmaram
-                        </span>
-                        <span className="inline-flex items-center gap-1">
-                          <Clock size={14} aria-hidden className="text-[var(--ds-tint-text)]" />
-                          {evento.aguardando} aguardando
-                        </span>
-                        <span className="inline-flex items-center gap-1">
-                          <CircleX size={14} aria-hidden className="text-[var(--ds-red-deep)]" />
-                          {evento.naoPodem} não {evento.naoPodem === 1 ? "pode" : "podem"}
-                        </span>
-                      </span>
-                    ) : (
-                      <span className="text-[var(--ds-label-2)]">—</span>
-                    )}
                   </CelulaDaTabela>
                   <CelulaDaTabela>
                     <ChipDaEscala situacao={evento.situacao} />

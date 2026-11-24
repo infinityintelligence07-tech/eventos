@@ -408,7 +408,6 @@ Acrescentar `scroll-padding-bottom` no `main` com a altura da barra, para o foco
 | Aguardando aprovação | "Escalas enviadas para a líder aprovar." | código · data · "enviada há 2 dias" | Aprovação |
 | Escalas devolvidas | "A líder devolveu para ajustar." | código · comentário (1 linha, se houver) | Montar escala |
 | Escalas a montar | "Eventos nos próximos 30 dias com a escala ainda não aprovada." | código · data · "12 de 22 vagas" | Montar escala |
-| Pessoas sem resposta | "Convidadas há mais de 2 dias sem confirmar." | nome · código · função | Montar escala, com a pessoa destacada |
 | Copys desatualizadas | "Os dados mudaram depois do envio. Copie e envie de novo." | nome · código · o que mudou | Comunicação do evento |
 | Confronto sem fila | (texto atual do Calendário) | código · data | Evento · Resumo, foco no campo "Pessoas na fila" |
 | Pendências da sincronização | "Eventos sem polo cadastrado ou com código repetido no IAM Control." | código ou nome da turma · motivo | Evento · Resumo |
@@ -518,7 +517,6 @@ stateDiagram-v2
 | Datas | `12/11 a 14/11` |
 | Polo | código |
 | Vagas | barra de progresso fina (`h-1.5 rounded-full bg-[var(--ds-fill-3)]` com preenchimento `bg-[var(--ds-brand)]`) + "18 de 22" (o texto é o que vale; a barra é `aria-hidden`) |
-| Respostas | "15 confirmaram · 2 aguardando · 1 não pode" (ícones + números; só aparece depois de convidar) |
 | Situação | chip `situacao-*` |
 | Ação | botão pequeno: "Começar escala" (sem escala) / "Continuar" (em andamento, devolvida) / "Ver" (demais) |
 
@@ -560,15 +558,18 @@ stateDiagram-v2
 
 | Coluna | Conteúdo |
 |---|---|
-| Pessoa | nome (link para a ficha em nova aba, com ícone e `aria-label` "abre em nova aba") + selo "Trainee" quando o nível for TRAINEE |
-| Dias | "Todos" ou `12/11, 13/11` |
-| Situação | chip da convocação (seção 13) + selo "Registrado pelo time" quando for o caso + "alterada depois da aprovação" quando for o caso |
-| Distância | "32,4 km · 40 min" |
-| Deslocamento | seletor compacto: Carro próprio, Carona, Carro da IAM, Uber, Ônibus, Avião, Não se aplica |
-| Ações | "Registrar resposta" (pequeno, secundário; só depois de convidada) + menu "Mais ações": Trocar pessoa, Editar dias, Observação, Remover da escala |
+| Pessoa | nome (link para a ficha em nova aba, com ícone e `aria-label` "abre em nova aba") + selo "Trainee" quando o nível for TRAINEE ou "Não habilitado" quando a pessoa não tem a função (não vale para cargo do evento, como Pai / mãe). Abaixo do nome: chip "Também: DJ" (outras funções no evento) e chip de atenção "Também em MC_POA_POA" (conflito de agenda) |
+| Distância | "32,4 km" |
+| Deslocamento | seletor compacto: Não definido, Carro próprio, Carona, Carro da IAM, Uber, Ônibus, Avião (Moto, A pé e Não se aplica saíram em nov/2026) |
+| Montagem | caixa de seleção: a pessoa participa da montagem |
+| Hotel | caixa de seleção: a pessoa vai precisar de hotel. É a lista de quem a Hospedagem aloca em quarto (seção 10.2). Com a pessoa já num quarto, desmarcar é recusado: "Tire a pessoa do quarto em Hospedagem antes de desmarcar o hotel." |
+| (remover) | só o ícone de lixeira (`aria-label` "Remover [nome] da escala"), com confirmação |
 
+   **Não existe coluna de situação:** quem está na escala conta como confirmado (decisão de nov/2026). A pessoa entra já como `ACEITA`; a tela não mostra nem pede "confirmou / aguardando / não pode", e não há mais campo de observação.
+   Deslocamento, montagem e hotel salvam ao mudar. Deslocamento e hotel são da pessoa no evento: em quem tem duas funções, valem para as duas linhas.
+   Remover: quem nunca recebeu copy some da escala; quem já foi avisada fica guardada como removida, e a confirmação lembra de avisar a pessoa. Depois de aprovada, remover exige reabrir a escala.
+   Dados antigos de quem saiu (não pode / removida) aparecem numa linha discreta abaixo da tabela: "Saíram desta função: [Staff 12] (não pode: motivo); [Staff 15] (removida)."
    Vagas ainda abertas aparecem como linhas tracejadas no fim de cada função: "Vaga aberta" + botão primário pequeno **"Adicionar pessoa"** (abre o painel de sugestões).
-   Conflito de agenda: se a pessoa já está em outra escala no mesmo dia, chip de atenção "Também em MC_POA_POA no dia 12/11".
 
 5. **Barra de ação fixa** (3.12):
    - À esquerda, resumo em texto: "18 de 22 vagas preenchidas · 1 função sem número confirmado".
@@ -595,11 +596,9 @@ stateDiagram-v2
 - Ao adicionar: a pessoa sai da lista, o contador "2 vagas abertas" diminui e o toast diz "[Staff 07] adicionada em Staff líder." com "Desfazer". O painel continua aberto até preencher as vagas ou fechar.
 - Escolher os dias: se o evento tem mais de um dia, cada item tem "Todos os dias" marcado; "Escolher dias" abre checkboxes.
 
-**Painel "Registrar resposta"** (em nome da pessoa):
-- Faixa neutra (3.11): "Você está registrando a resposta de [Staff 07]. Fica marcado como registrado pelo time."
-- Rádio: "Confirmou" / "Não pode". Se "Não pode": campo "Motivo (opcional)".
-- Botão primário "Registrar resposta". Toast: "Resposta de [Staff 07] registrada: não pode."
-- Depois de "Não pode", a linha mostra o botão "Trocar pessoa", que abre o painel de sugestões já filtrado para essa função e dia (substituto conforme a disponibilidade).
+- **Cargo do evento** (Pai / mãe no Confronto): não é função da pessoa, então qualquer staff pode ocupar. O painel troca a linha de explicação ("Pai / mãe é um cargo deste evento: qualquer pessoa do staff pode ocupar…"), não mostra "Habilitado / Não habilitado" e esconde o filtro "Só habilitados nesta função".
+
+**Painel "Registrar resposta":** saiu da tela em nov/2026, junto com a coluna de situação. Para tirar alguém que avisou que não pode, use a lixeira (reabrindo a escala, se já estiver aprovada).
 
 **Remover da escala:** confirmação "Remover [Staff 07] da escala?" — texto: "A vaga volta a ficar aberta." Se a copy já tinha sido enviada: "A copy já foi enviada para essa pessoa. Avise que ela saiu da escala." Botão "Remover".
 
@@ -794,7 +793,7 @@ Atalhos: "Abertas | Encerradas | Todas".
 | Coluna | Conteúdo |
 |---|---|
 | Nome | nome social se houver, senão nome completo (link → ficha) |
-| Funções | até 3 chips neutros ("Staff líder", "Pai/mãe"…; trainee com sufixo "· trainee") + "+2" |
+| Funções | até 3 chips neutros ("Staff líder", "Trainee de líder"…; trainee com sufixo "· trainee") + "+2". Pai / mãe não aparece: é cargo do evento, escolhido na escala do Confronto, e não função da pessoa |
 | Cidade | cidade/UF do endereço (sem rua) |
 | Carro | "4 lugares" ou "—" |
 | Camiseta | "Baby look M" / "—" |
@@ -867,7 +866,7 @@ Toast: "Voo de [Staff 07] registrado. A copy dela foi atualizada." (o voo libera
 
 **Layout por evento** (seletor de evento obrigatório nesta aba):
 1. Cartão "Hotel": nome, endereço, check-in/check-out, reserva. Ação "Editar hotel". Sem hotel: estado vazio "Nenhum hotel definido para este evento." + "Definir hotel".
-2. **Sem quarto** (cartão): pessoas escaladas que precisam de hotel e ainda não têm quarto; cada uma com o seletor "Colocar no quarto…".
+2. **Sem quarto** (cartão): pessoas marcadas com "Hotel" na escala do evento (seção 6.2) que ainda não têm quarto; cada uma com o seletor "Colocar no quarto…". Só quem está marcado entra em quarto e na distribuição por sexo. Ninguém marcado: "Ninguém marcado para hotel. Marque na escala do evento quem vai hospedar." Quem já está num quarto continua aparecendo no quarto.
 3. **Quartos** (grade de cartões `md:grid-cols-2 xl:grid-cols-3`): "Quarto 1 · duplo · 2 de 2"; lista de ocupantes com "Mover para…" e "Tirar do quarto". Aviso de atenção no cartão quando misturar sexos: "Quarto com pessoas de sexos diferentes." "+ Novo quarto" no fim.
 4. Ação no cabeçalho da seção: secundário "Copiar rooming list" (texto pronto para o hotel: quarto, nomes, check-in/out).
 
@@ -1025,7 +1024,7 @@ Use sempre estes rótulos. Os `switch` sobre esses valores devem ter o caso `def
 | APROVADA | Escala aprovada | `BadgeCheck` |
 | COMUNICADA | Escala comunicada | `Send` |
 
-**Pessoa na escala** (`convocacao.status`):
+**Pessoa na escala** (`convocacao.status`): desde nov/2026 a Montar escala não mostra estes chips (quem está na escala conta como confirmado e entra como `ACEITA`). Os rótulos continuam valendo no histórico da ficha da pessoa, onde há dados antigos.
 
 | Valor | Rótulo | Tom | Ícone |
 |---|---|---|---|

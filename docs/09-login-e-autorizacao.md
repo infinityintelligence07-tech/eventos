@@ -214,7 +214,7 @@ A leitura de todas as telas vale para os dois perfis. Não há permissão só de
 |---|:-:|:-:|---|
 | `evento.editar` | ✓ | ✓ | escala fora de `AGUARDANDO_APROVACAO` (já existe) |
 | `escala.montar` | ✓ | ✓ | — |
-| `escala.registrar_resposta` | ✓ | ✓ | grava `registrado_por` (já existe) |
+| `escala.registrar_resposta` | ✓ | ✓ | grava `registrado_por` (já existe). Sem action desde nov/2026: a escala não pede mais situação (quem entra já entra confirmado) |
 | `escala.aprovar` (aprovar e devolver) | — | ✓ | **SoD-1:** o aprovador não está entre os montadores do ciclo |
 | `escala.reabrir` | — | ✓ | — |
 | `comunicacao.enviar` | ✓ | ✓ | — |
@@ -237,7 +237,7 @@ A leitura de todas as telas vale para os dois perfis. Não há permissão só de
 | Arquivo | Action → permissão |
 |---|---|
 | `eventos/[eventoId]/acoes.ts` | `salvarDadosDoEvento` → `evento.editar` |
-| `eventos/[eventoId]/escala/acoes.ts` | `confirmarVagas`, `alterarVagas`, `definirVagaDigitada`, `adicionarVagaManual`, `removerVagaManual`, `porNaVaga`, `tirarDaVaga`, `atualizarConvocacao`, `enviarParaAprovacao` → `escala.montar`; `registrarRespostaDoStaff` → `escala.registrar_resposta`; `aprovarEscala`, `devolverEscala` → `escala.aprovar`; `reabrirEscala` → `escala.reabrir` |
+| `eventos/[eventoId]/escala/acoes.ts` | `confirmarVagas`, `alterarVagas`, `definirVagaDigitada`, `adicionarVagaManual`, `removerVagaManual`, `porNaVaga`, `tirarDaVaga`, `atualizarConvocacao`, `enviarParaAprovacao` → `escala.montar`; `aprovarEscala`, `devolverEscala` → `escala.aprovar`; `reabrirEscala` → `escala.reabrir` |
 | `escalas/aprovacao/acoes.ts` | `aprovarEscala`, `devolverEscala` → `escala.aprovar` |
 | `eventos/[eventoId]/comunicacao/acoes.ts` | `marcarCopyComoEnviada` → `comunicacao.enviar` |
 | `disponibilidade/nova/acoes.ts` | `abrirEnqueteAcao` → `disponibilidade.gerir` |

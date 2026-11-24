@@ -165,7 +165,48 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da escala no banco", () => {
     await expect(escalas.porNaVaga({ eventoId, escalaId: staff.id, pessoaId: pessoas["Duda Ocupada"]! }, quem())).rejects.toThrow(/MC_SOBREPOSTA/);
   });
 
-  it("põe e tira pessoas: vaga esgotada, repetida e tirar quem não foi avisado apaga a linha", async () => {
+  it("Pai / mãe é cargo do evento: qualquer staff é sugerido como apto, sem ter a função no cadastro", async () => {
+    const staff = (await escalas.sugerirPessoas(eventoId, (await linhaDa("STAFF")).id, agora))!;
+    expect(staff.cargoDoEvento).toBe(false);
+    expect(staff.sugeridos.find((candidato) => candidato.nome === "Caio Sem Funcao")!.nivel).toBe("SEM_FUNCAO");
+
+    const paiMae = (await escalas.sugerirPessoas(eventoId, (await linhaDa("PAI_MAE")).id, agora))!;
+    expect(paiMae).toMatchObject({ nomeDaFuncao: "Pai / mãe", cargoDoEvento: true, vagasAbertas: 6 });
+    expect(paiMae.sugeridos.map((candidato) => candidato.nome).sort()).toEqual(["Ana Perto", "Bia Longe", "Caio Sem Funcao", "Duda Ocupada"]);
+    expect(new Set(paiMae.sugeridos.map((candidato) => candidato.nivel))).toEqual(new Set(["HABILITADO"]));
+    // Ninguém tem (nem pode ter) Pai / mãe como função: quem não tem função nenhuma empata com quem é Staff e está perto.
+    const pontos = Object.fromEntries(paiMae.sugeridos.map((candidato) => [candidato.nome, candidato.pontuacao]));
+    expect(pontos["Caio Sem Funcao"]).toBe(pontos["Ana Perto"]);
+
+    // Entra na vaga e a tela não a marca como "não habilitada".
+    const caio = await escalas.porNaVaga({ eventoId, escalaId: (await linhaDa("PAI_MAE")).id, pessoaId: pessoas["Caio Sem Funcao"]! }, quem());
+    const naTela = (await escalas.carregarMontagem(eventoId))!.linhas.flatMap((linha) => linha.convocacoes).find((convocacao) => convocacao.id === caio.convocacaoId);
+    expect(naTela).toMatchObject({ nivel: null, cargoDoEvento: true, status: "ACEITA" });
+    await escalas.tirarDaVaga({ eventoId, convocacaoId: caio.convocacaoId }, quem());
+    expect(await banco.sql(`select 1 from eventos.convocacao where id = $1`, [caio.convocacaoId])).toEqual([]);
+  });
+
+  it("Trainee de líder é função do cadastro: entra em Adicionar função e é sugerida como qualquer outra", async () => {
+    const montagem = (await escalas.carregarMontagem(eventoId))!;
+    const codigos = montagem.funcoes.map((funcao) => funcao.codigo);
+    // Pai / mãe continua disponível para a escala (é cargo do evento); só saiu das funções da pessoa.
+    expect(codigos).toEqual(expect.arrayContaining(["TRAINEE_LIDER", "PAI_MAE", "STAFF"]));
+    const traineeDeLider = montagem.funcoes.find((funcao) => funcao.codigo === "TRAINEE_LIDER")!;
+    expect(traineeDeLider.nome).toBe("Trainee de líder");
+
+    await expect(escalas.adicionarVagaManual({ eventoId, funcaoId: traineeDeLider.id, data: "2026-11-12", quantidade: 1 }, quem())).resolves.toMatchObject({ nomeDaFuncao: "Trainee de líder" });
+    const linha = await linhaDa("TRAINEE_LIDER");
+    // Sem regra de vaga automática: a linha é manual e ninguém a tem ainda, então todos aparecem como não habilitados.
+    const sugestoes = (await escalas.sugerirPessoas(eventoId, linha.id, agora))!;
+    expect(sugestoes).toMatchObject({ nomeDaFuncao: "Trainee de líder", cargoDoEvento: false, vagasAbertas: 1 });
+    expect(new Set(sugestoes.sugeridos.map((candidato) => candidato.nivel))).toEqual(new Set(["SEM_FUNCAO"]));
+    const regra = (await um(`select regra_vagas::text as regra from eventos.tipo_evento where id = $1`, [tipoConfronto])).regra as string;
+    expect(regra).not.toContain("TRAINEE_LIDER");
+    expect(await banco.sql(`select 1 from eventos.regra_custo where parametros::text like '%TRAINEE_LIDER%' or codigo like '%TRAINEE_LIDER%'`)).toEqual([]);
+    await escalas.removerVagaManual({ eventoId, escalaId: linha.id }, quem());
+  });
+
+  it("põe e tira pessoas: entra confirmada; vaga esgotada, repetida; hotel e deslocamento são da pessoa no evento", async () => {
     const staff = await linhaDa("STAFF");
     const ana = await escalas.porNaVaga({ eventoId, escalaId: staff.id, pessoaId: pessoas["Ana Perto"]!, sugestaoScore: 90 }, quem());
     await expect(escalas.porNaVaga({ eventoId, escalaId: staff.id, pessoaId: pessoas["Ana Perto"]! }, quem())).rejects.toThrow(/já está/);
@@ -174,56 +215,78 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da escala no banco", () => {
 
     const dj = await linhaDa("DJ");
 
-    expect(await um(`select status, criado_por, sugestao_score from eventos.convocacao where id = $1`, [ana.convocacaoId])).toEqual({
-      status: "SUGERIDA",
+    // Quem entra na escala já entra confirmada (a tela não pede situação) e ainda não foi avisada.
+    expect(await um(`select status, criado_por, sugestao_score, convidada_em, precisa_hotel from eventos.convocacao where id = $1`, [ana.convocacaoId])).toEqual({
+      status: "ACEITA",
       criado_por: usuarioId,
       sugestao_score: "90.00",
+      convidada_em: null,
+      precisa_hotel: false,
+    });
+    expect(await um(`select status_de, status_para from eventos.registro_acao where entidade_id = $1 and acao = 'CONVOCACAO_INCLUIDA'`, [ana.convocacaoId])).toEqual({
+      status_de: null,
+      status_para: "ACEITA",
     });
 
-    // Deslocamento, montagem e observação: um campo por vez, sem mexer nos outros.
+    // Deslocamento, montagem e hotel: um campo por vez, sem mexer nos outros.
     const daAna = { eventoId, convocacaoId: ana.convocacaoId };
-    await escalas.atualizarConvocacao({ ...daAna, mudanca: { campo: "deslocamento", deslocamento: "MOTO" } }, quem());
+    await escalas.atualizarConvocacao({ ...daAna, mudanca: { campo: "deslocamento", deslocamento: "ONIBUS" } }, quem());
     await escalas.atualizarConvocacao({ ...daAna, mudanca: { campo: "montagem", montagem: true } }, quem());
-    await escalas.atualizarConvocacao({ ...daAna, mudanca: { campo: "observacao", observacao: "Ida de ônibus, volta de carona" } }, quem());
-    expect(await um(`select deslocamento, montagem, observacao from eventos.convocacao where id = $1`, [ana.convocacaoId])).toEqual({
-      deslocamento: "MOTO",
+    await escalas.atualizarConvocacao({ ...daAna, mudanca: { campo: "hotel", precisaHotel: true } }, quem());
+    expect(await um(`select deslocamento, montagem, precisa_hotel from eventos.convocacao where id = $1`, [ana.convocacaoId])).toEqual({
+      deslocamento: "ONIBUS",
       montagem: true,
-      observacao: "Ida de ônibus, volta de carona",
+      precisa_hotel: true,
     });
-    // O histórico leva o valor da logística, nunca o texto da observação.
     const historico = await banco.sql(`select dados from eventos.registro_acao where entidade_id = $1 and acao = 'CONVOCACAO_ATUALIZADA' order by criado_em, id`, [ana.convocacaoId]);
     expect(historico.map((linha) => (linha as { dados: unknown }).dados)).toEqual([
-      { campos: ["deslocamento"], deslocamento: "MOTO" },
+      { campos: ["deslocamento"], deslocamento: "ONIBUS" },
       { campos: ["montagem"], montagem: true },
-      { campos: ["observacao"] },
+      { campos: ["hotel"], precisaHotel: true },
     ]);
     const naTela = (await escalas.carregarMontagem(eventoId))!.linhas.flatMap((linha) => linha.convocacoes).find((convocacao) => convocacao.id === ana.convocacaoId);
-    expect(naTela).toMatchObject({ deslocamento: "MOTO", montagem: true, observacao: "Ida de ônibus, volta de carona" });
+    expect(naTela).toMatchObject({ status: "ACEITA", deslocamento: "ONIBUS", montagem: true, precisaHotel: true, avisada: false, cargoDoEvento: false });
+    // A observação saiu da escala e não vai mais para a tela (a coluna continua no banco).
+    expect(naTela).not.toHaveProperty("observacao");
 
     // Segunda função no mesmo evento: Ana, que é Staff, também entra como DJ. A primeira convocação é a principal.
-    const naVaga = async (convocacaoId: string) => um(`select principal, deslocamento from eventos.convocacao where id = $1`, [convocacaoId]);
+    const naVaga = async (convocacaoId: string) => um(`select principal, deslocamento, precisa_hotel from eventos.convocacao where id = $1`, [convocacaoId]);
     const candidataAoDj = (await escalas.sugerirPessoas(eventoId, dj.id, agora))!;
     expect([...candidataAoDj.sugeridos, ...candidataAoDj.naoPodem].find((candidato) => candidato.pessoaId === pessoas["Ana Perto"])).toMatchObject({ funcoesNoEvento: ["Staff"] });
     const anaDj = await escalas.porNaVaga({ eventoId, escalaId: dj.id, pessoaId: pessoas["Ana Perto"]! }, quem());
-    expect(await naVaga(ana.convocacaoId)).toEqual({ principal: true, deslocamento: "MOTO" });
-    expect(await naVaga(anaDj.convocacaoId)).toEqual({ principal: false, deslocamento: null });
+    expect(await naVaga(ana.convocacaoId)).toEqual({ principal: true, deslocamento: "ONIBUS", precisa_hotel: true });
+    expect(await naVaga(anaDj.convocacaoId)).toEqual({ principal: false, deslocamento: null, precisa_hotel: false });
     await expect(escalas.porNaVaga({ eventoId, escalaId: dj.id, pessoaId: pessoas["Ana Perto"]! }, quem())).rejects.toThrow(/já está/);
-    // O deslocamento é da pessoa no evento: pedido pela linha do DJ, grava na principal e aparece nas duas linhas.
+    // O deslocamento e o hotel são da pessoa no evento: pedidos pela linha do DJ, gravam na principal e aparecem nas duas linhas.
     await escalas.atualizarConvocacao({ eventoId, convocacaoId: anaDj.convocacaoId, mudanca: { campo: "deslocamento", deslocamento: "CARONA" } }, quem());
-    expect(await naVaga(ana.convocacaoId)).toEqual({ principal: true, deslocamento: "CARONA" });
-    expect(await naVaga(anaDj.convocacaoId)).toEqual({ principal: false, deslocamento: null });
+    await escalas.atualizarConvocacao({ eventoId, convocacaoId: anaDj.convocacaoId, mudanca: { campo: "hotel", precisaHotel: false } }, quem());
+    expect(await naVaga(ana.convocacaoId)).toEqual({ principal: true, deslocamento: "CARONA", precisa_hotel: false });
+    await escalas.atualizarConvocacao({ eventoId, convocacaoId: anaDj.convocacaoId, mudanca: { campo: "hotel", precisaHotel: true } }, quem());
+    expect(await naVaga(ana.convocacaoId)).toEqual({ principal: true, deslocamento: "CARONA", precisa_hotel: true });
+    expect(await naVaga(anaDj.convocacaoId)).toEqual({ principal: false, deslocamento: null, precisa_hotel: false });
     const linhasDaAna = (await escalas.carregarMontagem(eventoId))!.linhas.flatMap((linha) => linha.convocacoes).filter((convocacao) => convocacao.pessoaId === pessoas["Ana Perto"]);
-    expect(linhasDaAna.map(({ id, principal, outrasFuncoes, deslocamento }) => ({ id, principal, outrasFuncoes, deslocamento })).sort((a, b) => Number(b.principal) - Number(a.principal))).toEqual([
-      { id: ana.convocacaoId, principal: true, outrasFuncoes: ["DJ"], deslocamento: "CARONA" },
-      { id: anaDj.convocacaoId, principal: false, outrasFuncoes: ["Staff"], deslocamento: "CARONA" },
+    expect(
+      linhasDaAna
+        .map(({ id, principal, outrasFuncoes, deslocamento, precisaHotel }) => ({ id, principal, outrasFuncoes, deslocamento, precisaHotel }))
+        .sort((a, b) => Number(b.principal) - Number(a.principal)),
+    ).toEqual([
+      { id: ana.convocacaoId, principal: true, outrasFuncoes: ["DJ"], deslocamento: "CARONA", precisaHotel: true },
+      { id: anaDj.convocacaoId, principal: false, outrasFuncoes: ["Staff"], deslocamento: "CARONA", precisaHotel: true },
     ]);
-    // Ana sai de Staff e continua DJ: o DJ herda a principal, com o deslocamento, o quarto e a solicitação de custo.
+    // Com a pessoa já num quarto, desmarcar o hotel é recusado (por qualquer uma das linhas dela) e nada muda.
     const { id: hotelId } = await um(`insert into eventos.local (nome, tipo, cidade, uf) values ('Hotel da Ana', 'HOTEL', 'Porto Alegre', 'RS') returning id`);
     const { id: hospedagemId } = await um(`insert into eventos.hospedagem (evento_id, local_id, check_in, check_out) values ($1, $2, '2026-11-11', '2026-11-16') returning id`, [eventoId, hotelId]);
     const { id: quartoId } = await um(`insert into eventos.quarto (hospedagem_id, nome, capacidade) values ($1, 'Quarto 1', 2) returning id`, [hospedagemId]);
     await banco.sql(`insert into eventos.quarto_ocupante (quarto_id, convocacao_id) values ($1, $2)`, [quartoId, ana.convocacaoId]);
+    for (const convocacaoId of [ana.convocacaoId, anaDj.convocacaoId]) {
+      const recusa = escalas.atualizarConvocacao({ eventoId, convocacaoId, mudanca: { campo: "hotel", precisaHotel: false } }, quem());
+      await expect(recusa).rejects.toBeInstanceOf(RegraDeNegocioError);
+      await expect(recusa).rejects.toThrow(/já está num quarto/);
+    }
+    expect(await naVaga(ana.convocacaoId)).toMatchObject({ precisa_hotel: true });
+    // Ana sai de Staff e continua DJ: o DJ herda a principal, com o deslocamento, o hotel, o quarto e a solicitação de custo.
     await escalas.tirarDaVaga({ eventoId, convocacaoId: ana.convocacaoId }, quem());
-    expect(await naVaga(anaDj.convocacaoId)).toEqual({ principal: true, deslocamento: "CARONA" });
+    expect(await naVaga(anaDj.convocacaoId)).toEqual({ principal: true, deslocamento: "CARONA", precisa_hotel: true });
     expect(await banco.sql(`select convocacao_id from eventos.quarto_ocupante where quarto_id = $1`, [quartoId])).toEqual([{ convocacao_id: anaDj.convocacaoId }]);
     expect(await um(`select dados from eventos.registro_acao where entidade_id = $1 and dados->'campos' ? 'principal'`, [anaDj.convocacaoId])).toEqual({
       dados: { campos: ["principal"], herdouDe: ana.convocacaoId },
@@ -240,6 +303,48 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da escala no banco", () => {
     await escalas.tirarDaVaga({ eventoId, convocacaoId: bia.convocacaoId }, quem());
     expect(await banco.sql(`select 1 from eventos.convocacao where id = $1`, [bia.convocacaoId])).toEqual([]);
     await escalas.porNaVaga({ eventoId, escalaId: staff.id, pessoaId: pessoas["Bia Longe"]! }, quem());
+  });
+
+  it("tirar da escala: quem nunca foi avisada some; quem já recebeu copy fica como removida e pode voltar", async () => {
+    const staff = await linhaDa("STAFF");
+    const daBia = async () =>
+      (await banco.sql(`select id, status, convidada_em is not null as com_data from eventos.convocacao where escala_id = $1 and pessoa_id = $2`, [staff.id, pessoas["Bia Longe"]])) as {
+        id: string;
+        status: string;
+        com_data: boolean;
+      }[];
+    const [bia] = await daBia();
+    expect(bia).toMatchObject({ status: "ACEITA", com_data: false });
+
+    // Nunca avisada: a linha some.
+    await expect(escalas.tirarDaVaga({ eventoId, convocacaoId: bia!.id }, quem())).resolves.toEqual({ nome: "Bia Longe", jaAvisada: false });
+    expect(await daBia()).toEqual([]);
+
+    // Recebeu a copy de escalação (a Comunicação grava a mensagem e a data do aviso): fica CANCELADA, com o histórico.
+    const { convocacaoId } = await escalas.porNaVaga({ eventoId, escalaId: staff.id, pessoaId: pessoas["Bia Longe"]! }, quem());
+    const { id: modeloId } = await um(`select id from eventos.modelo_copy where tipo = 'ESCALACAO' and ativo`);
+    await banco.sql(
+      `insert into eventos.mensagem (convocacao_id, modelo_id, texto, dados_hash, canal, status, enviada_em) values ($1, $2, 'copy', repeat('a', 64), 'COPIADO', 'ENVIADA', now())`,
+      [convocacaoId, modeloId],
+    );
+    const naTela = async () => (await escalas.carregarMontagem(eventoId))!.linhas.flatMap((linha) => linha.convocacoes).find((convocacao) => convocacao.id === convocacaoId);
+    expect(await naTela()).toMatchObject({ status: "ACEITA", avisada: true });
+    await expect(escalas.tirarDaVaga({ eventoId, convocacaoId }, quem())).resolves.toEqual({ nome: "Bia Longe", jaAvisada: true });
+    expect(await daBia()).toEqual([{ id: convocacaoId, status: "CANCELADA", com_data: false }]);
+    expect(await banco.sql(`select 1 as tem from eventos.mensagem where convocacao_id = $1`, [convocacaoId])).toEqual([{ tem: 1 }]);
+    expect(await um(`select status_de, status_para from eventos.registro_acao where entidade_id = $1 and acao = 'CANCELADA'`, [convocacaoId])).toEqual({
+      status_de: "ACEITA",
+      status_para: "CANCELADA",
+    });
+    await expect(escalas.tirarDaVaga({ eventoId, convocacaoId }, quem())).rejects.toThrow(/já não ocupa a vaga/);
+    // Removida não muda hotel nem deslocamento.
+    await expect(escalas.atualizarConvocacao({ eventoId, convocacaoId, mudanca: { campo: "hotel", precisaHotel: true } }, quem())).rejects.toThrow(/não está mais nesta escala/);
+
+    // Volta para a mesma linha, de novo confirmada.
+    await expect(escalas.porNaVaga({ eventoId, escalaId: staff.id, pessoaId: pessoas["Bia Longe"]! }, quem())).resolves.toMatchObject({ convocacaoId });
+    expect(await daBia()).toEqual([{ id: convocacaoId, status: "ACEITA", com_data: false }]);
+    // A mensagem enviada continua lá, então ela segue contando como avisada.
+    expect(await naTela()).toMatchObject({ status: "ACEITA", avisada: true });
   });
 
   it("envia, a líder devolve com comentário, reenvia e aprova; travada enquanto está com a líder", async () => {
@@ -277,11 +382,10 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da escala no banco", () => {
     ]);
   });
 
-  it("registra a resposta em nome do staff só depois do convite; mudança exige reabrir", async () => {
-    const ana = (await um(`select id from eventos.convocacao where pessoa_id = $1 and status = 'SUGERIDA'`, [pessoas["Ana Perto"]])).id as string;
-    await expect(escalas.registrarRespostaDoStaff({ eventoId, convocacaoId: ana, resposta: "ACEITA" }, quem())).rejects.toThrow(/ainda não recebeu a copy/);
+  it("resposta em nome do staff (fluxo sem tela desde a 0013): quem está na escala já está confirmada; mudança exige reabrir", async () => {
+    const ana = (await um(`select id from eventos.convocacao where pessoa_id = $1 and status = 'ACEITA'`, [pessoas["Ana Perto"]])).id as string;
+    await expect(escalas.registrarRespostaDoStaff({ eventoId, convocacaoId: ana, resposta: "ACEITA" }, quem())).rejects.toThrow(/já está registrada assim/);
 
-    await banco.sql(`update eventos.convocacao set status = 'CONVIDADA', convidada_em = now() where id = $1`, [ana]);
     await escalas.registrarRespostaDoStaff({ eventoId, convocacaoId: ana, resposta: "RECUSADA", motivoRecusa: "Viagem" }, quem());
     expect(await um(`select status, motivo_recusa, registrado_por, respondida_em is not null as respondida from eventos.convocacao where id = $1`, [ana])).toEqual({
       status: "RECUSADA",
@@ -296,7 +400,7 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da escala no banco", () => {
       ),
     ).toEqual({
       acao: "RESPOSTA_REGISTRADA",
-      status_de: "CONVIDADA",
+      status_de: "ACEITA",
       status_para: "RECUSADA",
       em_nome_de_pessoa_id: pessoas["Ana Perto"],
       // O motivo ("Viagem") fica só na convocação.
@@ -318,7 +422,31 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da escala no banco", () => {
     expect(lista.contagem["a-montar"]).toBeGreaterThanOrEqual(1);
 
     const itens = await escalas.resumoParaInicio(agora);
-    expect(itens.map((item) => item.chave)).toEqual(["escalas-a-montar", "escalas-aguardando-aprovacao", "escalas-devolvidas", "escalas-sem-resposta"]);
+    // "Pessoas sem resposta" saiu do Início: quem está na escala já conta como confirmada.
+    expect(itens.map((item) => item.chave)).toEqual(["escalas-a-montar", "escalas-aguardando-aprovacao", "escalas-devolvidas"]);
     expect(itens[0]!.exemplos[0]!.href).toBe(`/eventos/${eventoId}/escala`);
+  });
+
+  it("cartão Escalas a montar: só quem começa em 30 dias e não foi aprovado, com início, término, local e vagas", async () => {
+    const longe = await novoEvento("Conf longe", "2026-12-20T03:00:00Z", "2026-12-22T02:59:59Z");
+    const aMontar = await escalas.escalasAMontar(agora);
+    expect(aMontar.map((evento) => evento.id)).toContain(eventoId);
+    expect(aMontar.map((evento) => evento.id)).not.toContain(longe);
+    const doTeste = aMontar.find((evento) => evento.id === eventoId)!;
+    expect(doTeste).toMatchObject({
+      codigo: "CONF_TESTE",
+      dataInicio: "2026-11-12",
+      dataFim: "2026-11-14",
+      statusEscala: "RASCUNHO",
+      local: { nome: "Centro de Eventos", cidade: "Porto Alegre", uf: "RS" },
+    });
+    expect(doTeste.vagas).toBeGreaterThan(0);
+    expect(doTeste.preenchidas).toBeGreaterThanOrEqual(1);
+    expect(doTeste.preenchidas).toBeLessThanOrEqual(doTeste.vagas);
+
+    // Aprovada sai do cartão.
+    await banco.sql(`update eventos.evento set status_escala = 'APROVADA', aprovado_em = now() where id = $1`, [eventoId]);
+    expect((await escalas.escalasAMontar(agora)).map((evento) => evento.id)).not.toContain(eventoId);
+    await banco.sql(`update eventos.evento set status_escala = 'RASCUNHO', aprovado_em = null where id = $1`, [eventoId]);
   });
 });

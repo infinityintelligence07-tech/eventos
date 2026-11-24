@@ -3,7 +3,7 @@ import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { pessoa } from "@/core/db/schema/core";
 import type { Executor } from "@/core/db/database";
 import { registrarAcao } from "@/core/db/registro-acao";
-import { convocacao, escala, evento, funcao, pessoaEvento, tipoEvento } from "@/core/db/schema/eventos";
+import { convocacao, escala, evento, funcao, mensagem, pessoaEvento, quartoOcupante, tipoEvento } from "@/core/db/schema/eventos";
 
 import type { StatusConvocacao, StatusEscala } from "../domain/convite";
 import type { LinhaTravada, RepositorioMontagem } from "../service/portas";
@@ -198,7 +198,8 @@ export function criarRepositorioMontagem(executor: Executor): RepositorioMontage
         .values({
           escalaId,
           pessoaId,
-          status: "SUGERIDA",
+          // Quem entra na escala já conta como confirmado: a tela não pede situação.
+          status: "ACEITA",
           principal,
           criadoPor: usuarioId,
           sugestaoScore: sugestaoScore === null ? null : sugestaoScore.toFixed(2),
@@ -213,10 +214,10 @@ export function criarRepositorioMontagem(executor: Executor): RepositorioMontage
       const alteradas = await executor
         .update(convocacao)
         .set({
-          status: "SUGERIDA",
+          status: "ACEITA",
           principal,
           // Voltando como segunda função, o que é da pessoa no evento fica só na principal.
-          ...(principal ? {} : { deslocamento: null, caronaId: null }),
+          ...(principal ? {} : { deslocamento: null, caronaId: null, precisaHotel: false }),
           convidadaEm: null,
           respondidaEm: null,
           motivoRecusa: null,
@@ -242,6 +243,9 @@ export function criarRepositorioMontagem(executor: Executor): RepositorioMontage
           nome: nomeDaPessoa,
           status: convocacao.status,
           principal: convocacao.principal,
+          // Mensagem enviada conta mesmo sem convidada_em: apagar a convocação levaria o histórico das copys junto.
+          avisada: sql<boolean>`(${convocacao.convidadaEm} is not null or ${convocacao.respondidaEm} is not null or exists (
+            select 1 from ${mensagem} where ${mensagem.convocacaoId} = ${convocacao.id} and ${mensagem.status} = 'ENVIADA'))`,
         })
         .from(convocacao)
         .innerJoin(escala, and(eq(escala.id, convocacao.escalaId), isNull(escala.deletedAt)))
@@ -284,7 +288,13 @@ export function criarRepositorioMontagem(executor: Executor): RepositorioMontage
 
     async passarPrincipal(de, para, instante) {
       const [antiga] = await executor
-        .select({ deslocamento: convocacao.deslocamento, caronaId: convocacao.caronaId, distanciaKm: convocacao.distanciaKm, tempoTrajetoMin: convocacao.tempoTrajetoMin })
+        .select({
+          deslocamento: convocacao.deslocamento,
+          caronaId: convocacao.caronaId,
+          precisaHotel: convocacao.precisaHotel,
+          distanciaKm: convocacao.distanciaKm,
+          tempoTrajetoMin: convocacao.tempoTrajetoMin,
+        })
         .from(convocacao)
         .where(eq(convocacao.id, de));
       await executor.update(convocacao).set({ principal: false, caronaId: null, atualizadoEm: instante }).where(eq(convocacao.id, de));
@@ -320,6 +330,11 @@ export function criarRepositorioMontagem(executor: Executor): RepositorioMontage
         .update(convocacao)
         .set({ ...campos, atualizadoEm: instante })
         .where(eq(convocacao.id, convocacaoId));
+    },
+
+    async temQuarto(convocacaoId) {
+      const [linha] = await executor.select({ quartoId: quartoOcupante.quartoId }).from(quartoOcupante).where(eq(quartoOcupante.convocacaoId, convocacaoId)).limit(1);
+      return linha !== undefined;
     },
 
     async mudarStatusDaEscala(eventoId, { de, para, instante, aprovadoPor, limparAprovacao }) {

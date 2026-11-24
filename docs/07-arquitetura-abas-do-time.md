@@ -580,12 +580,12 @@ Server actions (Zod):
 | `adicionarVagaManual` / `removerVagaManual` | `{ eventoId, funcaoId, quantidade }` / `{ escalaId }` (origem `MANUAL`, já confirmada) |
 | `porNaVaga` | `{ escalaId, pessoaId, sugestaoScore?: number }` |
 | `tirarDaVaga` | `{ convocacaoId }` |
-| `atualizarConvocacao` | `{ convocacaoId, campo: deslocamento \| montagem \| observacao, deslocamento?: enum do CHECK (inclui MOTO e A_PE desde a 0007), montagem?: "sim", observacao?: string ≤ 500 }` — um campo por envio; os outros não mudam |
+| `atualizarConvocacao` | `{ convocacaoId, campo: deslocamento \| montagem \| hotel, deslocamento?: enum do CHECK (carro próprio, carona, carro da IAM, Uber, ônibus e voo; Moto, A pé e Não se aplica saíram na 0013), montagem?: "sim", hotel?: "sim" }` — um campo por envio; os outros não mudam. `hotel` grava `convocacao.precisa_hotel` (quem a Hospedagem aloca). A observação saiu da tela na 0013 (a coluna fica) |
 | `enviarParaAprovacao` | `{ eventoId, statusEsperado: 'RASCUNHO' \| 'DEVOLVIDA' }` |
 | `aprovarEscala` | `{ eventoId }` (esperado `AGUARDANDO_APROVACAO`) |
 | `devolverEscala` | `{ eventoId, comentario?: string ≤ 1000 }` |
 | `reabrirEscala` | `{ eventoId, motivo?: string ≤ 1000 }` |
-| `registrarRespostaDoStaff` | `{ convocacaoId, resposta: 'ACEITA' \| 'RECUSADA', motivoRecusa?: string ≤ 500 }` |
+| `registrarRespostaDoStaff` | `{ convocacaoId, resposta: 'ACEITA' \| 'RECUSADA', motivoRecusa?: string ≤ 500 }` — sem tela nem server action desde a 0013 (quem entra na escala já entra `ACEITA`); o fluxo ficou no código |
 
 **Sugestão de pessoas** (`escala/domain/sugestao.ts`, pura). Entrada por candidato: disponibilidade para o evento
 (`PODE`, `SEM_RESPOSTA`, `NAO_PODE`), nível na função (`HABILITADO`, `TRAINEE`, sem a função), distância em km até o
@@ -721,7 +721,7 @@ Cada sub-tela é do módulo dono do dado (e da frente dona desse módulo). O `la
 | | |
 |---|---|
 | Rota | `inicio/page.tsx`; `src/app/page.tsx` passa a redirecionar para `/inicio` |
-| Lê | escalas a montar (30 dias), aguardando aprovação, devolvidas, Confronto sem fila, eventos sem código, convocações sem resposta há mais de 2 dias, copys bloqueadas e desatualizadas, voos na janela D-90 sem pedido, custos para auditar (com críticos) |
+| Lê | escalas a montar (30 dias), aguardando aprovação, devolvidas, Confronto sem fila, eventos sem código, copys bloqueadas e desatualizadas, voos na janela D-90 sem pedido, custos para auditar (com críticos) |
 | Escreve | nada |
 | Fluxo | `carregarInicio(agora)` combina os `resumoParaInicio(agora)` de cada fluxo (contrato em §7.1) |
 
@@ -783,7 +783,7 @@ type ItemDoInicio = { chave: string; titulo: string; quantidade: number; href: s
 
 | Fluxo | Itens |
 |---|---|
-| `escalas` (B) | escalas a montar (30 dias), aguardando aprovação, devolvidas, sem resposta há mais de 2 dias |
+| `escalas` (B) | escalas a montar (30 dias), aguardando aprovação, devolvidas ("sem resposta há mais de 2 dias" saiu na 0013: quem está na escala já conta como confirmado) |
 | `eventos` (B) | Confronto sem fila, eventos sem código (reaproveita `pendenciasDosEventos`) |
 | `comunicacao` (C) | copys com falta de dado, copys desatualizadas |
 | `logistica` (D) | voos a pedir na janela D-90, pedidos alterados sem novo retorno da SDC |
@@ -913,9 +913,10 @@ transferência é API do navegador).
 3. Evento (Confronto): informar a fila → vagas de pai/mãe aparecem; digitar o número de Staff; confirmar todas as funções.
 4. Montar escala: sugestões ordenadas por disponibilidade; pôr pessoas; tentar passar do número de vagas (recusa).
 5. Enviar para aprovação → Aprovação: devolver com comentário → corrigir → reenviar → aprovar.
-6. Comunicação: uma pessoa sem sexo aparece "Falta dado"; corrigir em Pessoas; copiar e marcar como enviada; a pessoa
-   vira "Aguardando resposta"; ao enviar a última, a escala fica "Comunicada".
-7. Escala: registrar "Confirmou" e "Não pode"; reabrir para trocar quem não pode; aprovar de novo; comunicar o substituto.
+6. Comunicação: uma pessoa sem sexo aparece "Falta dado"; corrigir em Pessoas; copiar e marcar como enviada; ao enviar
+   a última, a escala fica "Comunicada". (Desde a 0013 quem está na escala já conta como confirmado: não há mais
+   "Aguardando resposta".)
+7. Escala: reabrir para trocar quem avisou que não pode (lixeira na linha da pessoa); aprovar de novo; comunicar o substituto.
 8. Logística: registrar pedido de voo (ida e volta) → registrar retorno da SDC → copy de hospedagem fica "Desatualizada".
    Montar quartos por sexo e alocar.
 9. Custos: registrar solicitação em nome do staff (alerta de consumo aparece); reprovar com motivo; corrigir; aprovar.

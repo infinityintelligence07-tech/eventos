@@ -1,6 +1,7 @@
 import type { StatusConvocacao } from "./convite";
 
-// Máquina de estado de convocacao.status (docs/07 §4.2). O convite (SUGERIDA → CONVIDADA) fica em convite.ts.
+// Máquina de estado de convocacao.status (docs/07 §4.2). Quem entra na escala já entra confirmado (ACEITA): a tela
+// não pede mais situação. SUGERIDA e CONVIDADA só existem em dados antigos; as regras continuam valendo para eles.
 
 export type AcaoDaConvocacao = "POR_NA_VAGA" | "TIRAR_DA_VAGA" | "REGISTRAR_ACEITA" | "REGISTRAR_RECUSADA";
 
@@ -11,15 +12,21 @@ export type TransicaoDaConvocacao =
   | { apagar: true }
   | { erro: "TRANSICAO_INVALIDA" };
 
-export function transicaoDaConvocacao(atual: StatusConvocacao | null, acao: AcaoDaConvocacao): TransicaoDaConvocacao {
+/**
+ * @param avisada a pessoa já soube que está na escala (recebeu copy ou respondeu). Só importa em TIRAR_DA_VAGA:
+ *   quem nunca foi avisada some da escala sem deixar linha; quem foi fica como CANCELADA, com o histórico.
+ */
+export function transicaoDaConvocacao(atual: StatusConvocacao | null, acao: AcaoDaConvocacao, { avisada = false }: { avisada?: boolean } = {}): TransicaoDaConvocacao {
   const invalida: TransicaoDaConvocacao = { erro: "TRANSICAO_INVALIDA" };
   switch (acao) {
     case "POR_NA_VAGA":
       // Pôr de volta reaproveita a linha (UNIQUE escala_id + pessoa_id).
-      return atual === null || atual === "CANCELADA" || atual === "RECUSADA" ? { para: "SUGERIDA" } : invalida;
+      return atual === null || atual === "CANCELADA" || atual === "RECUSADA" ? { para: "ACEITA" } : invalida;
     case "TIRAR_DA_VAGA":
       if (atual === "SUGERIDA") return { apagar: true };
-      return atual === "CONVIDADA" || atual === "ACEITA" ? { para: "CANCELADA" } : invalida;
+      if (atual === "CONVIDADA") return { para: "CANCELADA" };
+      if (atual === "ACEITA") return avisada ? { para: "CANCELADA" } : { apagar: true };
+      return invalida;
     case "REGISTRAR_ACEITA":
       return atual === "CONVIDADA" || atual === "RECUSADA" ? { para: "ACEITA" } : invalida;
     case "REGISTRAR_RECUSADA":

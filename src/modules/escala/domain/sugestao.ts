@@ -24,6 +24,15 @@ export type Candidato = {
 
 export const FAIXA_DE_DISTANCIA_KM = 50;
 
+/**
+ * Nível da pessoa para a vaga. Cargo do evento (Pai / mãe no Confronto) não é habilitação: qualquer staff serve,
+ * então todos entram iguais e a ordem fica com a disponibilidade, a distância e o rodízio.
+ */
+export function nivelParaSugestao(nivelNoCadastro: "HABILITADO" | "TRAINEE" | null, cargoDoEvento: boolean): NivelNaFuncao {
+  if (cargoDoEvento) return "HABILITADO";
+  return nivelNoCadastro ?? "SEM_FUNCAO";
+}
+
 function pesoDaDisponibilidade(disponibilidade: Disponibilidade): number {
   switch (disponibilidade) {
     case "PODE":

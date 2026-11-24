@@ -4,7 +4,7 @@ import type { AdicionarQuarto, AlterarHospedagem, CriarHospedagem, DefinirPeriod
 import type { ContextoDaAcao } from "./pedidos";
 
 // Hospedagem e rooming list (docs/07 §5.3): ocupantes < capacidade, sexo do quarto, convocação ativa do mesmo
-// evento. O quarto é travado (FOR UPDATE) antes de contar as camas.
+// evento e marcada para hotel na escala. O quarto é travado (FOR UPDATE) antes de contar as camas.
 
 export type QuartoTravado = QuartoDoRooming & { nome: string; hospedagemId: string; eventoId: string };
 
@@ -30,7 +30,10 @@ export type RepositorioHospedagem = {
   travarQuarto(quartoId: string): Promise<QuartoTravado | null>;
   travarQuartosDoEvento(eventoId: string): Promise<QuartoTravado[]>;
   removerQuarto(quartoId: string): Promise<void>;
-  travarConvocacao(convocacaoId: string): Promise<{ convocacaoId: string; eventoId: string; ativa: boolean; sexo: Sexo | null; quartoId: string | null } | null>;
+  travarConvocacao(
+    convocacaoId: string,
+  ): Promise<{ convocacaoId: string; eventoId: string; ativa: boolean; precisaHotel: boolean; sexo: Sexo | null; quartoId: string | null } | null>;
+  /** Marcadas para hotel na escala e ainda sem quarto. */
   semQuartoDoEvento(eventoId: string): Promise<{ convocacaoId: string; sexo: Sexo | null }[]>;
   /** Tira a convocação do quarto em que estiver e põe neste (uma cama por convocação). */
   porOcupante(quartoId: string, convocacaoId: string): Promise<void>;
@@ -106,6 +109,7 @@ export async function porNoQuarto(
   const convocacao = await repo.travarConvocacao(entrada.convocacaoId);
   if (!convocacao || convocacao.eventoId !== quarto.eventoId) throw new ErroDaLogistica("Esta pessoa não está na escala deste evento.");
   if (!convocacao.ativa) throw new ErroDaLogistica("A pessoa saiu da escala deste evento: não dá para pôr no quarto.");
+  if (!convocacao.precisaHotel) throw new ErroDaLogistica("Esta pessoa não está marcada para hotel. Marque \"Hotel\" na escala do evento antes de pôr no quarto.");
   if (convocacao.quartoId === quarto.id) return { eventoId: quarto.eventoId, mudou: false, nomeDoQuarto: quarto.nome };
 
   const verificacao = podeOcupar(quarto, convocacao);

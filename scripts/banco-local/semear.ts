@@ -157,6 +157,8 @@ export async function semear({ sql: db, drizzle }: Banco): Promise<void> {
       ],
     );
     for (const codigo of pessoa.funcoes) {
+      // Pai / mãe é cargo do evento (migration 0013), não habilitação: a pessoa só ocupa a vaga nos cenários.
+      if (codigo === "PAI_MAE") continue;
       await db.query(`INSERT INTO eventos.pessoa_funcao (pessoa_id, funcao_id, nivel) VALUES ($1, $2, $3)`, [
         pessoa.id,
         funcoes.get(codigo),

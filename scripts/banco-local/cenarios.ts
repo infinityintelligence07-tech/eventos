@@ -187,7 +187,8 @@ export async function semearCenarios(banco: Banco, pessoas: Pessoa[], aleatorio:
           [
             vaga.id,
             pessoa.id,
-            status,
+            // Desde a 0013 quem está na escala já conta como confirmada; a data do aviso continua dizendo quem recebeu copy.
+            status === "SUGERIDA" || status === "CONVIDADA" ? "ACEITA" : status,
             AVISADA.has(status),
             horasAvisada,
             RESPONDIDA.has(status),
@@ -390,6 +391,8 @@ async function semearLogistica(db: Executor, evento: EventoCenario, voando: Conv
     if (!quarto) continue;
     quarto.vagas -= 1;
     await db.query(`INSERT INTO eventos.quarto_ocupante (quarto_id, convocacao_id) VALUES ($1, $2)`, [quarto.id, c.id]);
+    // A Hospedagem só aloca quem o time marcou "precisa de hotel" na escala.
+    await db.query(`UPDATE eventos.convocacao SET precisa_hotel = true WHERE id = $1`, [c.id]);
   }
 }
 

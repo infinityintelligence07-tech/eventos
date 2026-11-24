@@ -15,7 +15,6 @@ import {
   mudancaDaConvocacao,
   porNaVagaSchema,
   reabrirEscalaSchema,
-  registrarRespostaDoStaffSchema,
   removerVagaManualSchema,
   tirarDaVagaSchema,
 } from "@/modules/escala";
@@ -100,21 +99,13 @@ export async function atualizarConvocacao(_estado: ResultadoAcao, form: FormData
         return "Deslocamento salvo.";
       case "montagem":
         return mudanca.montagem ? "Marcada para a montagem." : "Tirada da montagem.";
-      case "observacao":
-        return mudanca.observacao ? "Observação salva." : "Observação apagada.";
+      case "hotel":
+        return mudanca.precisaHotel ? "Marcada para hotel." : "Tirada do hotel.";
       default: {
         const desconhecida: never = mudanca;
         throw new Error(`mudança desconhecida: ${String(desconhecida)}`);
       }
     }
-  });
-}
-
-export async function registrarRespostaDoStaff(_estado: ResultadoAcao, form: FormData): Promise<ResultadoAcao> {
-  return executarAcao(form, registrarRespostaDoStaffSchema, "escala.registrar_resposta", async (dados, ator) => {
-    const { nome } = await fluxo.registrarRespostaDoStaff(dados, quem(ator));
-    atualizarTelas(dados.eventoId);
-    return `Resposta de ${nome} registrada: ${dados.resposta === "ACEITA" ? "confirmou" : "não pode"}.`;
   });
 }
 

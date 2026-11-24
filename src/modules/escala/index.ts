@@ -46,7 +46,7 @@ export {
   transicaoDaEscala,
 } from "./domain/status-escala";
 export { type AcaoDaConvocacao, rotuloDaConvocacao, transicaoDaConvocacao } from "./domain/convocacao";
-export { type Candidato, type Disponibilidade, type NivelNaFuncao, ordenarSugestoes, pontuacaoDaSugestao, type Sugestoes } from "./domain/sugestao";
+export { type Candidato, type Disponibilidade, type NivelNaFuncao, nivelParaSugestao, ordenarSugestoes, pontuacaoDaSugestao, type Sugestoes } from "./domain/sugestao";
 export { type Coordenada, distanciaKm } from "./domain/distancia";
 export { type LinhaDaMontagem, type LinhaResumida, type ResumoDaMontagem, resumoDaMontagem } from "./domain/montagem";
 export { type PontoDeAtencao, pontosDeAtencao, type SituacaoParaAtencao } from "./domain/atencao";
@@ -73,7 +73,6 @@ export {
   DESLOCAMENTOS,
   devolverEscalaSchema,
   enviarParaAprovacaoSchema,
-  LIMITE_DA_OBSERVACAO,
   type MudancaDaConvocacao,
   mudancaDaConvocacao,
   porNaVagaSchema,
@@ -108,7 +107,6 @@ export {
   type LinhaDaTela,
   type LinhaParaSugestao,
   type RegistroDaEscala,
-  type SemResposta,
   type SituacaoDoEventoParaAtencao,
 } from "./repository/consulta-repository";
 export { criarRepositorioRegras, type RepositorioRegras, type TipoComRegra } from "./repository/regras-repository";

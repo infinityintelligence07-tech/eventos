@@ -60,7 +60,22 @@ describe.skipIf(!TEST_DATABASE_URL)("convite e comunicação da escala no banco"
     await banco?.encerrar();
   });
 
-  it("registrarConvite: SUGERIDA vira CONVIDADA uma vez; inativa é recusada", async () => {
+  it("registrarConvite: quem já está confirmada continua ACEITA e ganha a data do aviso uma vez só", async () => {
+    const { escalaId } = await eventoAprovado();
+    const aceita = await convocar(escalaId, "ACEITA");
+    const lida = () => um(`select status, convidada_em from eventos.convocacao where id = $1`, [aceita]);
+    expect((await lida()).convidada_em).toBeNull();
+
+    await expect(comRepositorio((repo) => registrarConvite(repo, { convocacaoId: aceita, instante }))).resolves.toBe("CONVIDADA");
+    expect((await lida()).status).toBe("ACEITA");
+    expect(new Date((await lida()).convidada_em!).toISOString()).toBe(instante.toISOString());
+
+    // Reenvio da copy: a data do primeiro aviso fica.
+    await expect(comRepositorio((repo) => registrarConvite(repo, { convocacaoId: aceita, instante: new Date("2026-11-06T12:00:00Z") }))).resolves.toBe("SEM_MUDANCA");
+    expect(new Date((await lida()).convidada_em!).toISOString()).toBe(instante.toISOString());
+  });
+
+  it("registrarConvite (dado antigo): SUGERIDA vira CONVIDADA uma vez; inativa é recusada", async () => {
     const { escalaId } = await eventoAprovado();
     const sugerida = await convocar(escalaId, "SUGERIDA");
     const cancelada = await convocar(escalaId, "CANCELADA");
