@@ -12,6 +12,7 @@ export type EntidadeRegistrada =
   | "MENSAGEM"
   | "DISPONIBILIDADE"
   | "SOLICITACAO_CUSTO"
+  | "COMPROVANTE_CUSTO"
   | "PEDIDO_SDC"
   | "HOSPEDAGEM"
   | "CARONA"

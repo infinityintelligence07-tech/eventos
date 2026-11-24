@@ -36,7 +36,7 @@ export const registroAcao = eventosSchema.table(
     index("registro_acao_usuario_idx").on(table.usuarioId),
     check(
       "registro_acao_entidade_check",
-      sql`${table.entidade} IN ('ESCALA_DO_EVENTO', 'CONVOCACAO', 'MENSAGEM', 'DISPONIBILIDADE', 'SOLICITACAO_CUSTO', 'PEDIDO_SDC', 'HOSPEDAGEM', 'CARONA', 'REGRA_CUSTO', 'MODELO_COPY', 'TIPO_EVENTO', 'CONFIGURACAO', 'PESSOA', 'LOCAL', 'ENQUETE', 'EVENTO', 'VAGA')`,
+      sql`${table.entidade} IN ('ESCALA_DO_EVENTO', 'CONVOCACAO', 'MENSAGEM', 'DISPONIBILIDADE', 'SOLICITACAO_CUSTO', 'COMPROVANTE_CUSTO', 'PEDIDO_SDC', 'HOSPEDAGEM', 'CARONA', 'REGRA_CUSTO', 'MODELO_COPY', 'TIPO_EVENTO', 'CONFIGURACAO', 'PESSOA', 'LOCAL', 'ENQUETE', 'EVENTO', 'VAGA')`,
     ),
     check("registro_acao_acao_check", sql`${table.acao} ~ '^[A-Z_]{3,40}$'`),
     check("registro_acao_comentario_check", sql`${table.comentario} IS NULL OR length(${table.comentario}) <= 2000`),

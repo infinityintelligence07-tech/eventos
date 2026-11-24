@@ -29,6 +29,8 @@ export {
   CATEGORIAS_DA_REGRA,
   type CategoriaDaRegra,
   descricaoDosParametros,
+  type ItemFixo,
+  itensFixosDasRegras,
   precoDoLitro,
   type RegraDeCusto,
   type RegrasDoCalculo,
@@ -40,6 +42,16 @@ export {
   vigenciaNaData,
 } from "./domain/regras";
 export { caminhoDoFormularioDeCusto } from "./domain/caminhos";
+export {
+  conferirArquivo,
+  MAXIMO_DE_COMPROVANTES,
+  mensagemDaRecusa,
+  TAMANHO_MAXIMO_DO_COMPROVANTE,
+  tamanhoLegivel,
+  type TipoDeComprovante,
+  TIPOS_DE_COMPROVANTE,
+  tipoPelosBytes,
+} from "./domain/comprovantes";
 export { CustosMudouError, ErroDosCustos, SolicitacaoJaExisteError } from "./domain/erros";
 export { type CustoAprovado, mensagemDeCustoAprovado, primeiroNome } from "./domain/mensagens";
 export {
@@ -82,8 +94,12 @@ export {
   solicitarCustoSchema,
 } from "./domain/schemas";
 export * as servicoDeSolicitacoes from "./service/solicitacoes";
+export * as servicoDeComprovantes from "./service/comprovantes";
+export { type ComprovanteGravado } from "./service/comprovantes";
+export { criarRepositorioComprovantes } from "./repository/comprovantes-repository";
 export * as servicoDeRegras from "./service/regras";
 export {
+  type ComprovanteDaTela,
   criarRepositorioSolicitacoes,
   type DeslocamentoGravado,
   type DetalheDaSolicitacao,

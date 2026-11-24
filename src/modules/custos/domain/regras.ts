@@ -96,6 +96,36 @@ export function regrasDoCalculo(aplicaveis: RegraDeCusto[]): RegrasDoCalculo {
   };
 }
 
+/** Item que a regra de custo dá ao evento: remuneração e alimentação, com valor fixo por tipo de evento. */
+export type ItemFixo = {
+  categoria: "REMUNERACAO" | "ALIMENTACAO";
+  regraCustoId: string;
+  descricao: string;
+  unidade: UnidadeDaRegra;
+  /** Sempre 1: o valor inicial da tela do time, que não sabe dias nem horas de cada pessoa. */
+  quantidade: number;
+  valorCentavos: number;
+};
+
+/**
+ * Remuneração e alimentação das regras que valem para o evento, na ordem em que aparecem (remuneração primeiro).
+ * É a mesma lista que o registro do time sugere e que entra sozinha na solicitação enviada pelo próprio staff.
+ * Sem regra com valor para o evento, a lista vem vazia.
+ */
+export function itensFixosDasRegras(aplicaveis: RegraDeCusto[]): ItemFixo[] {
+  return aplicaveis
+    .filter((regra) => (regra.categoria === "REMUNERACAO" || regra.categoria === "ALIMENTACAO") && regra.valorCentavos !== null)
+    .sort((a, b) => a.categoria.localeCompare(b.categoria) * -1)
+    .map((regra) => ({
+      categoria: regra.categoria as ItemFixo["categoria"],
+      regraCustoId: regra.id,
+      descricao: regra.nome,
+      unidade: regra.unidade,
+      quantidade: 1,
+      valorCentavos: regra.valorCentavos!,
+    }));
+}
+
 /** Preço do litro da UF (regra COMBUSTIVEL), quando houver. */
 export function precoDoLitro(aplicaveis: RegraDeCusto[]): number | null {
   return aplicaveis.find((regra) => regra.categoria === "COMBUSTIVEL" && regra.valorCentavos !== null)?.valorCentavos ?? null;

@@ -983,6 +983,9 @@ O staff envia a solicitação pelo **formulário dele** (`/solicitar-custo`, §1
 3. **Deslocamentos** (tabela): # | Trecho ("Canoas → Porto Alegre", "ida e volta") | Km | Consumo | Preço do litro | Combustível | Pedágio | Depreciação | Total | Alerta | Comprovante (link "Ver comprovante", nova aba).
    Rodapé: "Km total: 412,0 km" (decisão do doc 03: cada deslocamento conta separado na depreciação, com a soma mostrada).
 4. **Outros itens** (tabela): Categoria (Remuneração, Alimentação, Adicional, Montagem, Outro) | Descrição | Quantidade | Valor | Comprovante. Item que veio da regra: ícone `Calculator` + `sr-only` "valor da regra".
+   **Comprovantes** (seção própria, antes do total): os arquivos que a pessoa anexou à solicitação (§11.4), cada um com nome,
+   tamanho e data. O link abre em nova aba por `/custos/comprovantes/[id]`, que confere o perfil do Eventos e redireciona para um
+   endereço do armazenamento que vale 5 minutos. Sem anexo: "Nenhum comprovante anexado." O visitante da demo não abre anexo.
 5. **Total** em destaque (20 px semibold, direita).
 6. **Parecer anterior** (se reprovada antes e reenviada): "Reprovada em 15/11: falta o comprovante do pedágio."
 7. **Barra de ação fixa do painel:** perigo contorno **"Reprovar"** e primário **"Aprovar"**.
@@ -1041,7 +1044,8 @@ login e que o usuário seja staff, sem perfil do Eventos. Visual do login (`Mold
   time) vê o protocolo, a situação ("Em conferência pelo time", "Aprovada · aguardando pagamento", "Reprovada: motivo") e o que foi enviado.
 - **Correção:** como no registro do time, só a solicitação **reprovada** é corrigida (pendente não se altera). A pessoa vê o motivo,
   usa "Corrigir e reenviar" e a solicitação volta para a fila. Prazo da correção: 5 dias depois da reprovação (`DIAS_PARA_CORRIGIR`)
-  ou o prazo do evento, o que acabar depois. Os itens lançados pelo time (remuneração, alimentação…) ficam como estão.
+  ou o prazo do evento, o que acabar depois. Os valores fixos do evento e os itens lançados pelo time ficam como estão; os
+  comprovantes são da solicitação e sobrevivem à correção (a pessoa pode acrescentar ou trocar).
 
 **Campos (o que o sistema não sabe):**
 1. "Você foi com o seu carro?" Sim / Não.
@@ -1049,7 +1053,18 @@ login e que o usuário seja staff, sem perfil do Eventos. Visual do login (`Mold
    preço do litro (vem da regra da UF, se houver), pedágio de um sentido, "Ida e volta". Combustível, depreciação e total são
    calculados pelo servidor e mostrados ao vivo.
 3. **Outras despesas do deslocamento** (repetível, até 10): o que foi + valor (estacionamento, ônibus, aplicativo). Entram como itens "Outro".
-4. Total da solicitação (calculado) e botão "Enviar solicitação".
+4. **Comprovantes** (só com o anexo ligado): botão "Anexar comprovante" (foto ou PDF; no celular abre câmera, galeria ou arquivos).
+   Até 3 arquivos de 8 MB; JPEG, PNG, WebP ou PDF, conferidos no servidor pelos primeiros bytes do arquivo. Cada arquivo sobe
+   sozinho, assim que é escolhido, e aparece na lista com "Remover"; foto grande é reduzida no navegador (lado maior de 2.000 px)
+   antes de enviar. **Obrigatório** quando há deslocamento ou despesa: sem comprovante o envio é recusado ("Anexe pelo menos um
+   comprovante…"). O que já foi anexado continua lá se a pessoa sair e voltar.
+5. **Valores fixos do evento** (só leitura): remuneração e alimentação da regra de custo do tipo do evento. O staff não pede:
+   entram sozinhos na solicitação, como itens da regra, com o mesmo valor que o registro do time sugere (quantidade 1; regra por
+   hora ou por dia aparece com o aviso "entra 1 hora; o time confere as horas"). Sem regra para o evento, a seção não aparece.
+6. Total da solicitação (calculado, já com os fixos) e botão "Enviar solicitação".
+
+**Sem carro e sem despesa:** a solicitação leva só os valores fixos do evento e não pede comprovante (não há gasto a comprovar).
+Se o evento também não tiver valor fixo, não há o que enviar ("Informe pelo menos um deslocamento de carro ou uma despesa.").
 
 É o mesmo registro do time (validação, cálculo pelas regras, protocolo `STF-…`, fila de auditoria). Grava sem `registrado_por` e o
 `registro_acao` leva `propria: true`; na fila aparece sem o selo "Registrado pelo time".
@@ -1066,7 +1081,15 @@ login e que o usuário seja staff, sem perfil do Eventos. Visual do login (`Mold
 | Valor do custo do seu deslocamento | Não se digita: o sistema calcula (combustível, pedágio e depreciação pelas regras) e soma as despesas. |
 | Descrição do lançamento | A descrição de cada despesa; combustível e pedágio saem do deslocamento. |
 | Se utilizou seu veículo, qual a distância (faixas) | Os km de um sentido; a faixa de depreciação sai deles. "Não se aplica" = "Não fui com o meu carro". |
-| Comprovante do deslocamento (arquivo) | **Pendente.** O sistema não tem onde guardar arquivo (as colunas `comprovante_url` existem, sem armazenamento por trás). |
+| Comprovante do deslocamento (arquivo) | Anexo da solicitação (até 3 arquivos), obrigatório quando há deslocamento ou despesa. Tabela `eventos.comprovante_custo`; as colunas antigas `comprovante_url` ficam como estão. |
+
+**Onde ficam os arquivos:** no Storage do Supabase do projeto, bucket **privado** `eventos-comprovantes`, acessado só pelo servidor
+pelo protocolo S3, com uma chave de acesso S3 (que só alcança o Storage; nunca a `service_role`). O nome do objeto é gerado no
+servidor (`custos/<evento>/<id>.<extensão>`), sem nada do nome original. A pessoa abre os próprios anexos e o time abre na
+auditoria, sempre por rota autenticada que redireciona para um endereço pré-assinado de 5 minutos; trocar o id na URL não abre
+anexo de outra pessoa (404). Sem as variáveis `COMPROVANTES_S3_*` o anexo fica **desligado**: o formulário funciona sem o campo e
+sem exigir comprovante. No modo local (`npm run dev:local`) os arquivos vão para `.banco-local/comprovantes`. Para conferir a
+credencial em produção: `npm run comprovantes:testar` (imprime só "ok" ou a etapa que falhou).
 
 **Para o time usar o link:** botão "Copiar link" em Custos (§11.1). Em Configurações › Modelos de copy, o cartão do link de custos
 mostra o endereço do formulário do sistema para copiar e salvar em `link_custos` (a copy de escalação continua usando o valor configurado).

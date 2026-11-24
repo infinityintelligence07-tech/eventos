@@ -11,6 +11,7 @@ import {
   carregarFormularioDoStaff,
   carregarSolicitacao,
   corrigirMeuCusto,
+  prepararSolicitacao,
   previaDoCustoDoStaff,
   registrarSolicitacao,
   reprovarSolicitacao,
@@ -23,6 +24,10 @@ vi.mock("@/core/autorizacao", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/core/autorizacao")>();
   return { ...original, ehDonoDoSistema: () => false };
 });
+
+// Anexo desligado (produção sem as variáveis COMPROVANTES_S3_*): o formulário funciona sem comprovante. Os testes
+// do anexo ligado ficam em comprovantes.integracao.test.ts.
+vi.mock("@/core/integrations/armazenamento", () => ({ armazenamentoDeComprovantes: () => null }));
 
 vi.mock("@/fluxos/_base", async (importOriginal) => {
   const original = await importOriginal<Record<string, unknown>>();
@@ -116,8 +121,18 @@ describe.skipIf(!TEST_DATABASE_URL)("formulário de custo do staff no banco", ()
     ]);
 
     // 120 km ÷ 12 × 6,00 = 60,00; pedágio 10,00 × 2; faixa de 100 a 249 km = 80,00; estacionamento 25,00.
-    const esperado = 6000 + 2000 + 8000 + 2500;
-    expect((await previaDoCustoDoStaff(envio()))?.totalCentavos).toBe(esperado);
+    const doStaff = 6000 + 2000 + 8000 + 2500;
+    // Remuneração (600,00) e alimentação (270,00) do ASM são fixas pela regra: entram sozinhas, sem a pessoa pedir.
+    const esperado = doStaff + 60000 + 27000;
+    expect(aberto).toMatchObject({
+      anexo: null,
+      fixos: [
+        { descricao: "Remuneração", totalCentavos: 60000, origem: "REGRA", observacao: null },
+        { descricao: "Alimentação", totalCentavos: 27000, origem: "REGRA", observacao: null },
+      ],
+    });
+    // A prévia calcula o que a pessoa digitou; a tela soma os fixos que recebeu acima.
+    expect((await previaDoCustoDoStaff(envio()))?.totalCentavos).toBe(doStaff);
 
     const enviada = await solicitarCusto(envio(), ana.ator, DURANTE_O_PRAZO);
     expect(enviada.protocolo).toMatch(/^STF-\d{6}-\d{4}$/);
@@ -130,9 +145,16 @@ describe.skipIf(!TEST_DATABASE_URL)("formulário de custo do staff no banco", ()
       propria: "true",
     });
     // A despesa entra como item "OUTRO": a pessoa não escolhe categoria nem lança remuneração.
-    expect(await teste.sql(`select categoria, descricao, quantidade::float as quantidade, valor_centavos from eventos.custo_item where solicitacao_id = $1`, [enviada.id])).toEqual([
-      { categoria: "OUTRO", descricao: "Estacionamento", quantidade: 1, valor_centavos: 2500 },
+    // E os fixos entram como itens da regra (com regra_custo_id), iguais aos que o registro do time sugere.
+    const sugeridos = (await prepararSolicitacao({ eventoId, pessoaId: ana.pessoaId }, DURANTE_O_PRAZO)).sugestoes.itens;
+    expect(
+      await teste.sql(`select categoria, descricao, quantidade::float as quantidade, valor_centavos, regra_custo_id from eventos.custo_item where solicitacao_id = $1 order by criado_em, categoria desc`, [enviada.id]),
+    ).toEqual([
+      { categoria: "REMUNERACAO", descricao: "Remuneração", quantidade: 1, valor_centavos: 60000, regra_custo_id: sugeridos[0]!.regraCustoId },
+      { categoria: "OUTRO", descricao: "Estacionamento", quantidade: 1, valor_centavos: 2500, regra_custo_id: null },
+      { categoria: "ALIMENTACAO", descricao: "Alimentação", quantidade: 1, valor_centavos: 27000, regra_custo_id: sugeridos[1]!.regraCustoId },
     ]);
+    expect(sugeridos.map(({ categoria, valorCentavos, quantidade }) => [categoria, valorCentavos, quantidade])).toEqual([["REMUNERACAO", 60000, 1], ["ALIMENTACAO", 27000, 1]]);
 
     // Na fila do time aparece sem o selo "Registrado pelo time".
     const naFila = (await carregarFilaDeAuditoria({}, DURANTE_O_PRAZO)).linhas.find((linha) => linha.protocolo === enviada.protocolo);
@@ -143,7 +165,7 @@ describe.skipIf(!TEST_DATABASE_URL)("formulário de custo do staff no banco", ()
     expect(depois).toMatchObject({
       situacao: "ENVIADA",
       correcao: { pode: false, ate: null },
-      solicitacao: { protocolo: enviada.protocolo, auditoria: "PENDENTE", registradaPeloTime: false, totalCentavos: esperado, despesas: [estacionamento], itensDoTime: [], motivoDaReprovacao: null },
+      solicitacao: { protocolo: enviada.protocolo, auditoria: "PENDENTE", registradaPeloTime: false, totalCentavos: esperado, despesas: [estacionamento], motivoDaReprovacao: null, comprovantes: [] },
     });
     const lista = await carregarCustosDoStaff(ana.pessoaId, DURANTE_O_PRAZO);
     expect(lista.abertos[0]?.solicitacao).toEqual({ protocolo: enviada.protocolo, auditoria: "PENDENTE" });
@@ -205,6 +227,56 @@ describe.skipIf(!TEST_DATABASE_URL)("formulário de custo do staff no banco", ()
     expect(await carregarFormularioDoStaff("0192f0c0-0000-7000-8000-00000000dead", fora.pessoaId, DURANTE_O_PRAZO)).toEqual({ situacao: "NAO_ENCONTRADO" });
   });
 
+  it("itens fixos: sem deslocamento nem despesa a solicitação leva só eles; sem regra para o evento, não há o que enviar", async () => {
+    const soFixos = await staff("Só Fixos");
+    const enviada = await solicitarCusto(envio({ deslocamentos: [], despesas: [] }), soFixos.ator, DURANTE_O_PRAZO);
+    expect(enviada.totalCentavos).toBe(87000);
+    expect(await carregarFormularioDoStaff(eventoId, soFixos.pessoaId, DURANTE_O_PRAZO)).toMatchObject({
+      situacao: "ENVIADA",
+      solicitacao: { despesas: [], deslocamentos: [], itensFixos: [{ descricao: "Remuneração", origem: "REGRA" }, { descricao: "Alimentação", origem: "REGRA" }] },
+    });
+    // Na correção de uma reprovada os fixos continuam; a pessoa só acrescenta o que é dela.
+    const versao = async () => (await carregarSolicitacao(enviada.protocolo))!.atualizadoEm;
+    await reprovarSolicitacao({ solicitacaoId: enviada.id, atualizadoEm: await versao(), motivo: "Faltou o ônibus" }, auditor(), DURANTE_O_PRAZO);
+    await corrigirMeuCusto({ eventoId, atualizadoEm: await versao(), deslocamentos: [], despesas: [{ descricao: "Ônibus", valorCentavos: 8000 }] }, soFixos.ator, DURANTE_O_PRAZO);
+    expect(await solicitacaoNoBanco(enviada.id)).toMatchObject({ status_auditoria: "PENDENTE", total_centavos: 87000 + 8000 });
+
+    // Masterclass: a regra é "Remuneração por hora" e não há alimentação. Entra 1 hora, o valor inicial da tela do time.
+    const mc = (
+      await um(
+        `insert into eventos.evento (nome, codigo, inicio, fim, status, local_id, tipo_evento_id)
+         select 'MC_AM_MANAUS', 'MC_AM_MANAUS', '2026-12-16T22:00:00Z', '2026-12-17T01:00:00Z', 'PLANEJADO', (select id from eventos.local where nome = 'Centro'), id from eventos.tipo_evento where sigla = 'MC'
+         returning id`,
+      )
+    ).id as string;
+    const escalaDaMc = (await um(`insert into eventos.escala (evento_id, data, hora_inicio, hora_fim, quantidade_vagas, status) values ($1, '2026-12-16', '19:00', '22:00', 5, 'ABERTA') returning id`, [mc])).id as string;
+    const daMc = await staff("Da Masterclass", "ACEITA", escalaDaMc);
+    expect(await carregarFormularioDoStaff(mc, daMc.pessoaId, DURANTE_O_PRAZO)).toMatchObject({
+      situacao: "ABERTO",
+      fixos: [{ descricao: "Remuneração por hora", totalCentavos: 7000, origem: "REGRA", observacao: "entra 1 hora; o time confere as horas" }],
+    });
+    expect((await solicitarCusto({ eventoId: mc, deslocamentos: [], despesas: [] }, daMc.ator, DURANTE_O_PRAZO)).totalCentavos).toBe(7000);
+
+    // Tipo de evento sem regra de remuneração nem de alimentação: nada entra sozinho, e vazio não se envia.
+    await teste.sql(`insert into eventos.tipo_evento (sigla, nome) values ('SEM_REGRA', 'Sem regra')`);
+    const semRegra = (
+      await um(
+        `insert into eventos.evento (nome, codigo, inicio, fim, status, local_id, tipo_evento_id)
+         select 'SEM_REGRA_1', 'SEM_REGRA_1', '2026-12-16T12:00:00Z', '2026-12-16T22:00:00Z', 'PLANEJADO', (select id from eventos.local where nome = 'Centro'), id from eventos.tipo_evento where sigla = 'SEM_REGRA'
+         returning id`,
+      )
+    ).id as string;
+    const escalaSemRegra = (await um(`insert into eventos.escala (evento_id, data, hora_inicio, hora_fim, quantidade_vagas, status) values ($1, '2026-12-16', '08:00', '18:00', 5, 'ABERTA') returning id`, [semRegra])).id as string;
+    const semFixo = await staff("Sem Fixo", "ACEITA", escalaSemRegra);
+    expect(await carregarFormularioDoStaff(semRegra, semFixo.pessoaId, DURANTE_O_PRAZO)).toMatchObject({ situacao: "ABERTO", fixos: [] });
+    const vazia = solicitarCusto({ eventoId: semRegra, deslocamentos: [], despesas: [] }, semFixo.ator, DURANTE_O_PRAZO);
+    await expect(vazia).rejects.toBeInstanceOf(RegraDeNegocioError);
+    await expect(vazia).rejects.toThrow("Informe pelo menos um deslocamento de carro ou uma despesa.");
+    const comDespesa = await solicitarCusto({ eventoId: semRegra, deslocamentos: [], despesas: [estacionamento] }, semFixo.ator, DURANTE_O_PRAZO);
+    expect(comDespesa.totalCentavos).toBe(2500);
+    expect(await teste.sql(`select categoria from eventos.custo_item where solicitacao_id = $1`, [comDespesa.id])).toEqual([{ categoria: "OUTRO" }]);
+  });
+
   it("não duplica: uma solicitação por pessoa e evento, enviada por ela ou registrada pelo time", async () => {
     const bia = await staff("Bia Duplicada");
     const primeira = await solicitarCusto(envio(), bia.ator, DURANTE_O_PRAZO);
@@ -246,7 +318,8 @@ describe.skipIf(!TEST_DATABASE_URL)("formulário de custo do staff no banco", ()
     const noPrazo = new Date("2027-01-10T02:59:59Z");
     await expect(corrigirMeuCusto(await correcao({ atualizadoEm: "2020-01-01T00:00:00.000Z" }), duda.ator, noPrazo)).rejects.toBeInstanceOf(ConflitoDeVersaoError);
     await corrigirMeuCusto(await correcao(), duda.ator, noPrazo);
-    expect(await solicitacaoNoBanco(id)).toEqual({ status_auditoria: "PENDENTE", registrado_por: null, total_centavos: 8000 });
+    // Sai o deslocamento, entra o ônibus; os fixos que entraram no envio (870,00) continuam como estão.
+    expect(await solicitacaoNoBanco(id)).toEqual({ status_auditoria: "PENDENTE", registrado_por: null, total_centavos: 8000 + 87000 });
     expect(await um(`select count(*)::int as n from eventos.deslocamento where solicitacao_id = $1`, [id])).toEqual({ n: 0 });
     expect(
       await teste.sql(`select acao, usuario_id, em_nome_de_pessoa_id, dados->>'propria' as propria from eventos.registro_acao where entidade_id = $1 and acao = 'CORRECAO_REGISTRADA'`, [id]),
@@ -279,7 +352,7 @@ describe.skipIf(!TEST_DATABASE_URL)("formulário de custo do staff no banco", ()
     expect(reprovada).toMatchObject({
       situacao: "ENVIADA",
       correcao: { pode: true },
-      solicitacao: { registradaPeloTime: true, despesas: [{ descricao: "Estacionamento", valorCentavos: 5000 }], itensDoTime: [{ categoria: "REMUNERACAO", totalCentavos: 60000 }] },
+      solicitacao: { registradaPeloTime: true, despesas: [{ descricao: "Estacionamento", valorCentavos: 5000 }], itensFixos: [{ descricao: "Remuneração", totalCentavos: 60000, origem: "TIME" }] },
     });
 
     await corrigirMeuCusto({ eventoId, atualizadoEm: await versao(), deslocamentos: [deslocamento], despesas: [estacionamento] }, edu.ator, DURANTE_O_PRAZO);

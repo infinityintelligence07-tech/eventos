@@ -1,5 +1,7 @@
 import { type AtorDaEscrita, bancoParaLeitura, transacao } from "@/fluxos/_base";
 import {
+  CATEGORIAS_DO_ITEM,
+  type ComprovanteDaTela,
   type CorrigirMeuCusto,
   criarRepositorioSolicitacoes,
   type DeslocamentoGravado,
@@ -8,11 +10,13 @@ import {
   type EntradaDeDeslocamento,
   type EntradaDeDespesa,
   type EventoDaPessoa,
+  type ItemFixo,
   type ItemGravado,
   podeCorrigirNoPrazo,
   prazoDaCorrecao,
   prazoDoFormulario,
   type PrazoDoFormulario,
+  itensFixosDasRegras,
   precoDoLitro,
   regrasAplicaveis,
   servicoDeSolicitacoes,
@@ -25,6 +29,7 @@ import {
   totalDoItem,
 } from "@/modules/custos";
 
+import { anexoDeComprovantesLigado, comprovantesDoStaff } from "./comprovantes";
 import { traduzirErros } from "./comum";
 import { previaDaSolicitacao, type PreviaDaSolicitacao } from "./registro";
 
@@ -91,9 +96,34 @@ export type SolicitacaoDoStaff = {
   deslocamentos: DeslocamentoGravado[];
   /** Despesas declaradas pela pessoa (o que ela pode corrigir), já com o total de cada uma. */
   despesas: { descricao: string; valorCentavos: number }[];
-  /** Itens lançados pelo time (remuneração, alimentação…): a pessoa vê, não altera. */
-  itensDoTime: (ItemGravado & { totalCentavos: number })[];
+  /** Valores fixos do evento (pela regra de custo) e itens lançados pelo time: a pessoa vê, não altera. */
+  itensFixos: ItemFixoDoStaff[];
+  /** Comprovantes anexados à solicitação. */
+  comprovantes: ComprovanteDaTela[];
 };
+
+/**
+ * Item que a pessoa vê e não edita. `REGRA`: remuneração ou alimentação fixas do evento (entram sozinhas no envio).
+ * `TIME`: item que o time lançou à mão. `observacao`: aviso quando a regra é por hora ou por dia (entra 1 unidade).
+ */
+export type ItemFixoDoStaff = { descricao: string; totalCentavos: number; origem: "REGRA" | "TIME"; observacao: string | null };
+
+function observacaoDaUnidade(unidade: ItemFixo["unidade"]): string | null {
+  switch (unidade) {
+    case "HORA":
+      return "entra 1 hora; o time confere as horas";
+    case "DIA":
+      return "entra 1 dia; o time confere os dias";
+    default:
+      return null;
+  }
+}
+
+const fixoDaRegra = (item: ItemFixo): ItemFixoDoStaff => ({ descricao: item.descricao, totalCentavos: totalDoItem(item), origem: "REGRA", observacao: observacaoDaUnidade(item.unidade) });
+const fixoGravado = (item: ItemGravado): ItemFixoDoStaff => ({ descricao: item.descricao, totalCentavos: totalDoItem(item), origem: item.regraCustoId ? "REGRA" : "TIME", observacao: null });
+
+/** Anexo de comprovantes neste ambiente: nulo = desligado (o formulário funciona sem o campo). */
+export type AnexoDoStaff = { comprovantes: ComprovanteDaTela[] } | null;
 
 export type SugestoesDoStaff = { consumoKmL: number | null; precoLitroCentavos: number | null };
 
@@ -101,7 +131,15 @@ export type FormularioDoStaff =
   | { situacao: "NAO_ENCONTRADO" }
   | { situacao: "FORA_DA_ESCALA" | "CANCELADO"; evento: EventoDoFormulario }
   | { situacao: "AINDA_NAO_ABRIU" | "ENCERRADO"; evento: EventoDoFormulario; prazo: PrazoDoFormulario }
-  | { situacao: "ABERTO"; evento: EventoDoFormulario; prazo: PrazoDoFormulario; sugestoes: SugestoesDoStaff }
+  | {
+      situacao: "ABERTO";
+      evento: EventoDoFormulario;
+      prazo: PrazoDoFormulario;
+      sugestoes: SugestoesDoStaff;
+      /** Remuneração e alimentação fixas do evento: entram sozinhas na solicitação. */
+      fixos: ItemFixoDoStaff[];
+      anexo: AnexoDoStaff;
+    }
   | {
       situacao: "ENVIADA";
       evento: EventoDoFormulario;
@@ -109,6 +147,7 @@ export type FormularioDoStaff =
       /** Reprovada e ainda no prazo de correção: a pessoa corrige e reenvia. `ate` = último dia (AAAA-MM-DD). */
       correcao: { pode: boolean; ate: string | null };
       sugestoes: SugestoesDoStaff;
+      anexoLigado: boolean;
     };
 
 /** A página do evento para a pessoa: o formulário, o que ela já enviou ou por que não dá para enviar. */
@@ -126,10 +165,9 @@ export async function carregarFormularioDoStaff(eventoId: string, pessoaId: stri
     repo.consumoDaPessoa(pessoaId),
     repo.regras(),
   ]);
-  const sugestoes: SugestoesDoStaff = {
-    consumoKmL,
-    precoLitroCentavos: precoDoLitro(regrasAplicaveis(regras, { tipoEventoId: dados.tipoEventoId, uf: dados.uf, data: dados.data })),
-  };
+  const aplicaveis = regrasAplicaveis(regras, { tipoEventoId: dados.tipoEventoId, uf: dados.uf, data: dados.data });
+  const sugestoes: SugestoesDoStaff = { consumoKmL, precoLitroCentavos: precoDoLitro(aplicaveis) };
+  const anexoLigado = anexoDeComprovantesLigado();
 
   // Quem já tem solicitação vê a situação dela, mesmo fora do prazo ou depois de sair da escala.
   const detalhe = enviada ? await repo.detalhe(enviada.protocolo) : null;
@@ -140,6 +178,7 @@ export async function carregarFormularioDoStaff(eventoId: string, pessoaId: stri
       situacao: "ENVIADA",
       evento,
       sugestoes,
+      anexoLigado,
       correcao: {
         pode: reprovada && podeCorrigirNoPrazo(evento, detalhe.auditadoEm, agora),
         ate: reprovada ? (detalhe.auditadoEm ? prazoDaCorrecao(evento, detalhe.auditadoEm) : prazo.fechaEm) : null,
@@ -158,7 +197,12 @@ export async function carregarFormularioDoStaff(eventoId: string, pessoaId: stri
         auditadoEm: detalhe.auditadoEm,
         deslocamentos: detalhe.deslocamentos,
         despesas: detalhe.itens.filter(despesaDoStaff).map((item) => ({ descricao: item.descricao, valorCentavos: totalDoItem(item) })),
-        itensDoTime: detalhe.itens.filter((item) => !despesaDoStaff(item)).map((item) => ({ ...item, totalCentavos: totalDoItem(item) })),
+        // Gravados juntos, os itens saem do banco sem ordem garantida: aqui, sempre remuneração antes de alimentação.
+        itensFixos: detalhe.itens
+          .filter((item) => !despesaDoStaff(item))
+          .sort((a, b) => CATEGORIAS_DO_ITEM.indexOf(a.categoria) - CATEGORIAS_DO_ITEM.indexOf(b.categoria))
+          .map(fixoGravado),
+        comprovantes: detalhe.comprovantes,
       },
     };
   }
@@ -166,7 +210,16 @@ export async function carregarFormularioDoStaff(eventoId: string, pessoaId: stri
   if (!convocacaoId) return { situacao: "FORA_DA_ESCALA", evento };
   if (dados.cancelado) return { situacao: "CANCELADO", evento };
   const situacao = situacaoDoPrazo(evento, agora);
-  return situacao === "ABERTO" ? { situacao, evento, prazo, sugestoes } : { situacao, evento, prazo };
+  if (situacao !== "ABERTO") return { situacao, evento, prazo };
+  return {
+    situacao,
+    evento,
+    prazo,
+    sugestoes,
+    fixos: itensFixosDasRegras(aplicaveis).map(fixoDaRegra),
+    // O que a pessoa já anexou antes de enviar (voltou à página, trocou de aparelho) continua lá.
+    anexo: anexoLigado ? { comprovantes: await comprovantesDoStaff(eventoId, pessoaId) } : null,
+  };
 }
 
 /** Resumo ao vivo do formulário do staff: o mesmo cálculo do envio, sem gravar. */
@@ -178,9 +231,12 @@ export function previaDoCustoDoStaff(entrada: { eventoId: string; deslocamentos:
   });
 }
 
-const contexto = (ator: AtorDoStaff, agora: Date) => ({ usuarioId: ator.usuarioId, pessoaId: ator.pessoaId, instante: agora });
+const contexto = (ator: AtorDoStaff, agora: Date) => ({ usuarioId: ator.usuarioId, pessoaId: ator.pessoaId, instante: agora, comprovanteObrigatorio: anexoDeComprovantesLigado() });
 
-/** A própria pessoa envia a solicitação: grava sem `registrado_por` e o registro_acao leva `propria: true`. */
+/**
+ * A própria pessoa envia a solicitação: grava sem `registrado_por` e o registro_acao leva `propria: true`. Os itens
+ * fixos do evento entram sozinhos; com o anexo ligado, deslocamento ou despesa exigem um comprovante já anexado.
+ */
 export function solicitarCusto(entrada: SolicitarCusto, ator: AtorDoStaff, agora: Date) {
   return traduzirErros(() => transacao(ator, (tx) => servicoDeSolicitacoes.solicitarCusto(criarRepositorioSolicitacoes(tx), entrada, contexto(ator, agora))));
 }

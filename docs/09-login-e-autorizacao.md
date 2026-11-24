@@ -355,6 +355,11 @@ O worker (sincronização de turmas, pg-boss) continua no papel atual nesta roda
   no Supavisor porque a conexão ao Postgres é feita com o próprio papel. O worker continua no modo sessão (5432).
 - **Chaves do Supabase:** o Eventos usa só a URL e a chave pública (anon/publishable) para o Auth. **Sem `service_role`**
   (quem cria usuário é o GH).
+- **Storage (comprovantes de custo, doc 08 §11.4):** o servidor fala com o bucket privado `eventos-comprovantes` pelo protocolo
+  S3, com uma **chave de acesso S3** (`COMPROVANTES_S3_CHAVE_ID` e `COMPROVANTES_S3_CHAVE_SEGREDO`). Essa chave só alcança o
+  Storage: não lê nem grava no banco, então o privilégio mínimo dos papéis acima continua valendo. Fica só no ambiente do
+  serviço web, nunca no navegador nem em log. O navegador recebe apenas um endereço pré-assinado de 5 minutos, depois de a
+  rota conferir quem está pedindo.
 
 ### 6.3 O que é migration e o que é manual
 

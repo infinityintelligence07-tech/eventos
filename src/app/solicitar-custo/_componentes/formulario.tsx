@@ -4,12 +4,17 @@ import Link from "next/link";
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 
 import type { PreviaDoStaff, ResultadoDoCusto } from "../acoes";
+import { type ComprovanteDoFormulario, Comprovantes, type LimitesDoAnexo } from "./comprovantes";
 
 // Formulário de custo do próprio staff (docs/08 §11.4), pensado para o celular. O resumo vem do servidor (o mesmo
 // cálculo do envio); o total gravado é sempre recalculado lá.
 
 export type DeslocamentoDoFormulario = { origem: string; destino: string; idaVolta: boolean; km: string; consumoKmL: string; precoLitroCentavos: string; pedagioCentavos: string };
 export type DespesaDoFormulario = { descricao: string; valorCentavos: string };
+/** Valor que a pessoa vê e não edita: fixo do evento (pela regra de custo) ou lançado pelo time. */
+export type FixoDoFormulario = { descricao: string; totalCentavos: number; origem: "REGRA" | "TIME"; observacao: string | null };
+/** Anexo de comprovantes ligado neste ambiente: onde enviar, o que já foi anexado e os limites. */
+export type AnexoDoFormulario = { endereco: string; comprovantes: ComprovanteDoFormulario[]; limites: LimitesDoAnexo };
 
 type ComChave<T> = T & { chave: number };
 
@@ -35,7 +40,8 @@ export function FormularioDeCusto({
   deslocamentosIniciais,
   despesasIniciais,
   deslocamentoNovo,
-  totalDoTimeCentavos = 0,
+  fixos,
+  anexo,
   cancelarHref,
 }: {
   acao: (anterior: ResultadoDoCusto, form: FormData) => Promise<ResultadoDoCusto>;
@@ -47,8 +53,10 @@ export function FormularioDeCusto({
   despesasIniciais: DespesaDoFormulario[];
   /** Linha em branco, já com o consumo do cadastro e o preço do litro da regra. */
   deslocamentoNovo: DeslocamentoDoFormulario;
-  /** Itens lançados pelo time (remuneração…), que a correção não altera: entram no total mostrado. */
-  totalDoTimeCentavos?: number;
+  /** Remuneração e alimentação fixas do evento e itens do time: entram sozinhos na solicitação e no total mostrado. */
+  fixos: FixoDoFormulario[];
+  /** Nulo = anexo desligado neste ambiente: o formulário funciona sem o campo. */
+  anexo: AnexoDoFormulario | null;
   cancelarHref?: string;
 }) {
   const [resultado, enviar, enviando] = useActionState<ResultadoDoCusto, FormData>(acao, null);
@@ -58,8 +66,12 @@ export function FormularioDeCusto({
   const [despesas, setDespesas] = useState(() => despesasIniciais.map(comChave));
   const [previa, setPrevia] = useState<PreviaDoStaff>(null);
   const [, iniciar] = useTransition();
+  const [anexos, setAnexos] = useState({ quantidade: anexo?.comprovantes.length ?? 0, enviando: false });
   const erros = resultado && !resultado.ok ? resultado.erros : undefined;
   const foiDeCarro = deslocamentos.length > 0;
+  const temGasto = deslocamentos.length + despesas.length > 0;
+  const totalFixoCentavos = fixos.reduce((soma, item) => soma + item.totalCentavos, 0);
+  const faltaComprovante = anexo !== null && temGasto && anexos.quantidade === 0;
 
   useEffect(() => {
     const espera = setTimeout(() => {
@@ -228,22 +240,48 @@ export function FormularioDeCusto({
         )}
       </fieldset>
 
+      {anexo && <Comprovantes endereco={anexo.endereco} iniciais={anexo.comprovantes} limites={anexo.limites} obrigatorio={temGasto} aoMudar={setAnexos} />}
+
+      {fixos.length > 0 && (
+        <fieldset>
+          <legend>Valores fixos do evento</legend>
+          <p className="cadastro-ajuda">Entram sozinhos na sua solicitação. Você não precisa pedir nem pode alterar.</p>
+          {fixos.map((item, indice) => (
+            <p key={indice} className="custo-bloco custo-linha">
+              <span>
+                {item.descricao}
+                <small> · {item.origem === "REGRA" ? "valor fixo do evento" : "lançado pelo time"}{item.observacao ? ` (${item.observacao})` : ""}</small>
+              </span>
+              <span>{reais(item.totalCentavos)}</span>
+            </p>
+          ))}
+        </fieldset>
+      )}
+
       <div className="custo-total" aria-live="polite">
         <span>Total da solicitação</span>
-        <strong>{reais((previa?.totalCentavos ?? 0) + totalDoTimeCentavos)}</strong>
+        <strong>{reais((previa?.totalCentavos ?? 0) + totalFixoCentavos)}</strong>
         <small>
-          {totalDoTimeCentavos > 0 ? `Inclui ${reais(totalDoTimeCentavos)} lançados pelo time. ` : ""}
+          {totalFixoCentavos > 0 ? `Inclui ${reais(totalFixoCentavos)} de valores fixos. ` : ""}
           Calculado pelas regras de custo do evento. O time confere antes de aprovar.
         </small>
       </div>
+      {!temGasto && (
+        <p className="cadastro-ajuda">
+          {fixos.length > 0
+            ? "Sem deslocamento de carro e sem despesa, a solicitação leva só os valores fixos do evento."
+            : "Informe um deslocamento de carro ou uma despesa para enviar."}
+        </p>
+      )}
+      {faltaComprovante && !anexos.enviando && <p className="cadastro-pendencias custo-aviso">Falta anexar pelo menos um comprovante do deslocamento ou das despesas.</p>}
 
       {resultado && !resultado.ok && (
         <p className="login-error" role="alert">
           {resultado.mensagem}
         </p>
       )}
-      <button type="submit" className="login-submit" disabled={enviando}>
-        {enviando ? "Enviando..." : correcao ? "Reenviar a solicitação corrigida" : "Enviar solicitação"}
+      <button type="submit" className="login-submit" disabled={enviando || anexos.enviando}>
+        {enviando ? "Enviando..." : anexos.enviando ? "Aguarde o envio dos comprovantes..." : correcao ? "Reenviar a solicitação corrigida" : "Enviar solicitação"}
       </button>
       {cancelarHref && (
         <Link href={cancelarHref} className="custo-botao-texto custo-centro">

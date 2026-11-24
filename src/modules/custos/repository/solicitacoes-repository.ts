@@ -22,7 +22,9 @@ import type { CategoriaDoItem, StatusAuditoria, StatusFinanceiro } from "../doma
 import type { NivelDeExcecao } from "../domain/calculo";
 import type { CategoriaDaRegra, RegraDeCusto, UnidadeDaRegra } from "../domain/regras";
 import type { EntradaDeItem } from "../domain/schemas";
+import type { TipoDeComprovante } from "../domain/comprovantes";
 import type { RepositorioSolicitacoes } from "../service/solicitacoes";
+import { comprovantesDaSolicitacao, contarComprovantes, travarPessoaNoEvento, vincularComprovantes } from "./comprovantes-repository";
 
 const NA_ESCALA = ["SUGERIDA", "CONVIDADA", "ACEITA"];
 const registrador = alias(usuario, "registrador");
@@ -78,6 +80,9 @@ export type ItemGravado = {
 
 export type HistoricoDaSolicitacao = { acao: string; statusPara: string | null; comentario: string | null; criadoEm: Date; usuarioNome: string | null };
 
+/** O que as telas mostram de um comprovante. A chave do arquivo no armazenamento não sai do servidor. */
+export type ComprovanteDaTela = { id: string; nome: string; tipo: TipoDeComprovante; tamanhoBytes: number; criadoEm: Date };
+
 export type DetalheDaSolicitacao = SolicitacaoDaFila & {
   funcao: string | null;
   parecer: string | null;
@@ -86,6 +91,7 @@ export type DetalheDaSolicitacao = SolicitacaoDaFila & {
   registradoPorNome: string | null;
   deslocamentos: DeslocamentoGravado[];
   itens: ItemGravado[];
+  comprovantes: ComprovanteDaTela[];
   historico: HistoricoDaSolicitacao[];
 };
 
@@ -310,6 +316,7 @@ export function criarRepositorioSolicitacoes(executor: Executor): RepositorioSol
           valorCentavos: item.valorCentavos,
           comprovanteUrl: item.comprovanteUrl,
         })),
+        comprovantes: (await comprovantesDaSolicitacao(executor, base.id)).map(({ id, nome, tipo, tamanhoBytes, criadoEm }) => ({ id, nome, tipo, tamanhoBytes, criadoEm })),
         historico,
       };
     },
@@ -443,6 +450,18 @@ export function criarRepositorioSolicitacoes(executor: Executor): RepositorioSol
         .for("update");
       return linha ?? null;
     },
+
+    async situacaoDaSolicitacaoDaPessoa(eventoId, pessoaId) {
+      const [linha] = await executor
+        .select({ id: solicitacaoCusto.id, auditoria: solicitacaoCusto.statusAuditoria, auditadoEm: solicitacaoCusto.auditadoEm })
+        .from(solicitacaoCusto)
+        .where(and(eq(solicitacaoCusto.eventoId, eventoId), eq(solicitacaoCusto.pessoaId, pessoaId)));
+      return linha ? { ...linha, auditoria: linha.auditoria as StatusAuditoria } : null;
+    },
+
+    travarPessoaNoEvento: (eventoId, pessoaId) => travarPessoaNoEvento(executor, eventoId, pessoaId),
+    contarComprovantes: (eventoId, pessoaId) => contarComprovantes(executor, eventoId, pessoaId),
+    vincularComprovantes: (eventoId, pessoaId, solicitacaoId) => vincularComprovantes(executor, eventoId, pessoaId, solicitacaoId),
 
     async regras() {
       return (await executor.select().from(regraCusto)).map(lerRegra);

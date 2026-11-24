@@ -5,27 +5,18 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { lerFormulario } from "@/app/(time)/_servidor/formulario";
-import { identidadeDaSessao } from "@/app/(time)/_servidor/usuario-atual";
 import { logger } from "@/core/logging";
 import { mensagemDoErro, RegraDeNegocioError } from "@/fluxos/_base";
-import { type AtorDoStaff, corrigirMeuCusto, previaDoCustoDoStaff, solicitarCusto } from "@/fluxos/custos";
-import { staffDaIdentidade } from "@/fluxos/pessoas";
+import { corrigirMeuCusto, previaDoCustoDoStaff, solicitarCusto } from "@/fluxos/custos";
 import { caminhoDoFormularioDeCusto, corrigirMeuCustoSchema, deslocamentoSchema, despesaSchema, type EntradaDeDeslocamento, type EntradaDeDespesa, solicitarCustoSchema } from "@/modules/custos";
 
+import { staffDaSessao } from "./_servidor/sessao";
+
 // Formulário de custo do próprio staff (docs/08 §11.4). Fora do (time): não pede perfil do Eventos, só que o usuário
-// logado seja staff. Quem envia sai da sessão a cada envio; do formulário vêm só o evento e os valores.
+// logado seja staff. Quem envia sai da sessão a cada envio; do formulário vêm só o evento e os valores. Os comprovantes
+// sobem antes, um por vez, pela rota [eventoId]/comprovantes (arquivo não cabe no limite de 1 MB das server actions).
 
 export type ResultadoDoCusto = { ok: false; mensagem: string; erros?: Record<string, string> } | null;
-
-type Sessao = { ok: true; ator: AtorDoStaff } | { ok: false; mensagem: string };
-
-async function staffDaSessao(): Promise<Sessao> {
-  const sessao = await identidadeDaSessao();
-  if (!sessao) return { ok: false, mensagem: "Sua sessão terminou. Entre de novo." };
-  const staff = await staffDaIdentidade(sessao.identidade);
-  if (!staff) return { ok: false, mensagem: "Seu usuário não está no cadastro de staff." };
-  return { ok: true, ator: { usuarioId: staff.usuarioId, pessoaId: staff.pessoaId, origem: sessao.origem } };
-}
 
 function falha(erro: unknown): ResultadoDoCusto {
   // Recusa esperada (prazo, escala, duplicada) não é falha do sistema: não vai para o log de erro.
@@ -45,7 +36,7 @@ const primeiraMensagem = (campos?: Record<string, string[]>) => Object.fromEntri
 
 export async function solicitarCustoAcao(_anterior: ResultadoDoCusto, form: FormData): Promise<ResultadoDoCusto> {
   const sessao = await staffDaSessao();
-  if (!sessao.ok) return sessao;
+  if (!sessao.ok) return { ok: false, mensagem: sessao.mensagem };
   const lido = lerFormulario(form, solicitarCustoSchema);
   if (!lido.ok) return { ok: false, mensagem: lido.erro, erros: primeiraMensagem(lido.campos) };
 
@@ -60,7 +51,7 @@ export async function solicitarCustoAcao(_anterior: ResultadoDoCusto, form: Form
 
 export async function corrigirMeuCustoAcao(_anterior: ResultadoDoCusto, form: FormData): Promise<ResultadoDoCusto> {
   const sessao = await staffDaSessao();
-  if (!sessao.ok) return sessao;
+  if (!sessao.ok) return { ok: false, mensagem: sessao.mensagem };
   const lido = lerFormulario(form, corrigirMeuCustoSchema);
   if (!lido.ok) return { ok: false, mensagem: lido.erro, erros: primeiraMensagem(lido.campos) };
 

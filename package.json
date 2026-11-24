@@ -21,7 +21,8 @@
     "db:check": "drizzle-kit check",
     "sync:turmas": "node --env-file-if-exists=.env --import tsx src/jobs/cli-sincronizar-turmas.ts",
     "sync:colaboradores": "node --env-file-if-exists=.env --import tsx src/jobs/cli-sincronizar-colaboradores.ts",
-    "sync:turmas:local": "node --import tsx scripts/sync-turmas-local.ts"
+    "sync:turmas:local": "node --import tsx scripts/sync-turmas-local.ts",
+    "comprovantes:testar": "node --env-file-if-exists=.env --import tsx scripts/comprovantes-testar.ts"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.10.0",

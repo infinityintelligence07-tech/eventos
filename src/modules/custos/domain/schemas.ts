@@ -108,15 +108,12 @@ const linhasDoStaff = {
   deslocamentos: z.array(deslocamentoSchema).max(10, "Até 10 deslocamentos.").default([]),
   despesas: z.array(despesaSchema).max(10, "Até 10 despesas.").default([]),
 };
-const temAlgumaLinhaDoStaff = (solicitacao: { deslocamentos: unknown[]; despesas: unknown[] }) => solicitacao.deslocamentos.length + solicitacao.despesas.length > 0;
-const MENSAGEM_SEM_LINHA_DO_STAFF = "Informe pelo menos um deslocamento de carro ou uma despesa.";
-
-export const solicitarCustoSchema = z.object({ eventoId: id, ...linhasDoStaff }).refine(temAlgumaLinhaDoStaff, MENSAGEM_SEM_LINHA_DO_STAFF);
+// Sem deslocamento e sem despesa é válido aqui: a solicitação pode levar só os itens fixos do evento. Quem recusa o
+// envio vazio é o serviço, que sabe se o evento tem item fixo.
+export const solicitarCustoSchema = z.object({ eventoId: id, ...linhasDoStaff });
 export type SolicitarCusto = z.output<typeof solicitarCustoSchema>;
 
-export const corrigirMeuCustoSchema = z
-  .object({ eventoId: id, atualizadoEm: z.iso.datetime({ offset: true }), ...linhasDoStaff })
-  .refine(temAlgumaLinhaDoStaff, MENSAGEM_SEM_LINHA_DO_STAFF);
+export const corrigirMeuCustoSchema = z.object({ eventoId: id, atualizadoEm: z.iso.datetime({ offset: true }), ...linhasDoStaff });
 export type CorrigirMeuCusto = z.output<typeof corrigirMeuCustoSchema>;
 
 const versao = { solicitacaoId: id, atualizadoEm: z.iso.datetime({ offset: true }) };

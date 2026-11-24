@@ -80,8 +80,8 @@ describe("campos do formulário de custo do staff", () => {
     ]);
   });
 
-  it("formulário vazio: mensagem geral; a correção exige a versão", () => {
-    expect(lerFormulario(formulario([["eventoId", eventoId], ["foiDeCarro", "on"]]), solicitarCustoSchema)).toMatchObject({ ok: false, erro: "Informe pelo menos um deslocamento de carro ou uma despesa." });
+  it("formulário sem linhas passa (pode levar só os itens fixos; o serviço recusa o vazio); a correção exige a versão", () => {
+    expect(lerFormulario(formulario([["eventoId", eventoId], ["foiDeCarro", "on"]]), solicitarCustoSchema)).toEqual({ ok: true, dados: { eventoId, deslocamentos: [], despesas: [] } });
     const campos: [string, string][] = [["eventoId", eventoId], ["despesas[0].descricao", "Ônibus"], ["despesas[0].valorCentavos", "80"]];
     expect(lerFormulario(formulario(campos), corrigirMeuCustoSchema).ok).toBe(false);
     expect(lerFormulario(formulario([...campos, ["atualizadoEm", "2026-12-20T15:00:00.000Z"]]), corrigirMeuCustoSchema).ok).toBe(true);
