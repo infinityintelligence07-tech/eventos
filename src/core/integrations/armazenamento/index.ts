@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { lerConfig } from "@/core/config";
+import { lerConfig } from "@/core/config/leitura";
 import { lerConfigDosComprovantes } from "@/core/config/comprovantes";
 import { logger } from "@/core/logging";
 
