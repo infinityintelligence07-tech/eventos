@@ -215,8 +215,6 @@ export function escalaEmMontagem(status: StatusEscala): boolean {
 }
 
 export type Pendencias = {
-  /** Confronto sem o número de pessoas na fila: pai e mãe não são calculados. */
-  confrontoSemFila: EventoNoCalendario[];
   /** Eventos (sem Masterclass) nos próximos dias com a escala ainda não aprovada. */
   escalasAMontar: EventoNoCalendario[];
   /** Eventos (sem Masterclass) sem código: edição ou polo faltando no IAM Control. */
@@ -232,7 +230,6 @@ export function pendenciasDosEventos(eventos: EventoNoCalendario[], hoje: string
   const escalaAberta = (evento: EventoNoCalendario) => escalaEmMontagem(evento.statusEscala);
 
   return {
-    confrontoSemFila: ativos.filter((evento) => evento.tipoSigla === "CONF" && evento.pessoasNaFila === null && escalaAberta(evento)),
     escalasAMontar: ativos.filter((evento) => evento.dataInicio <= limiteEscala && escalaAberta(evento)),
     semCodigo: ativos.filter((evento) => evento.codigo === null),
   };
