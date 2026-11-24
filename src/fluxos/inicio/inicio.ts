@@ -66,7 +66,6 @@ const ORDEM_DOS_CARTOES = [
   "escalas-devolvidas",
   "escalas-a-montar",
   "comunicacao-desatualizadas",
-  "confronto-sem-fila",
   "eventos-sem-codigo",
   "custos-para-auditar",
   "custos-criticos",

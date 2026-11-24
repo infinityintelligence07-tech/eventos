@@ -221,7 +221,7 @@ describe("situação do evento no calendário", () => {
 describe("precisa de ação", () => {
   const hoje = "2026-10-28";
 
-  it("Confronto sem fila, escalas a montar em 30 dias e eventos sem código", () => {
+  it("escalas a montar em 30 dias e eventos sem código", () => {
     const pendencias = pendenciasDosEventos(
       [
         evento({ id: "conf" }),
@@ -235,7 +235,6 @@ describe("precisa de ação", () => {
       hoje,
     );
     const ids = (lista: EventoNoCalendario[]) => lista.map((item) => item.id);
-    expect(ids(pendencias.confrontoSemFila)).toEqual(["conf"]);
     expect(ids(pendencias.escalasAMontar)).toEqual(["conf", "conf-com-fila"]);
     expect(ids(pendencias.semCodigo)).toEqual(["longe"]);
   });
@@ -250,6 +249,5 @@ describe("precisa de ação", () => {
     );
     const ids = (lista: EventoNoCalendario[]) => lista.map((item) => item.id);
     expect(ids(pendencias.escalasAMontar)).toEqual(["devolvida"]);
-    expect(ids(pendencias.confrontoSemFila)).toEqual(["devolvida"]);
   });
 });

@@ -663,7 +663,7 @@ Endereço, CPF e PIX ficam no `sensivel` (GH) e não aparecem nesta rodada.
 
 | | |
 |---|---|
-| Rotas | `logistica/voos` (pedidos entre eventos + aviso de passagens a pedir na janela configurada, padrão D-90; painel do pedido `?ref=SDC-…`), `logistica/hospedagem` (rooming por evento), `logistica/caronas` (onda 2), `logistica/creditos` ("em breve"), `eventos/[eventoId]/logistica` (o mesmo, filtrado), `configuracoes/voos` (dias do aviso). No menu são dois itens, Voos (`voos`, `caronas`) e Hospedagem (`hospedagem`, `creditos`) |
+| Rotas | `logistica/voos` (pedidos entre eventos + aviso de passagens a pedir na janela configurada, padrão D-90; painel do pedido `?ref=SDC-…`), `logistica/hospedagem` (rooming e, logo abaixo, as caronas do mesmo evento), `logistica/caronas` (redireciona para a hospedagem, na seção de caronas), `logistica/creditos` ("em breve"), `eventos/[eventoId]/logistica` (o mesmo, filtrado), `configuracoes/voos` (dias do aviso). No menu são dois itens, Voos (`voos`) e Hospedagem (`hospedagem` com quartos e caronas, `creditos`); a escala do evento tem o atalho "Montar quartos e caronas" |
 | Lê | convocações ativas com deslocamento, pedidos e trechos, hospedagens, quartos e ocupantes, locais `HOTEL`/`APARTAMENTO`, caronas |
 | Escreve | `pedido_sdc`, `trecho_voo`, `hospedagem`, `quarto`, `quarto_ocupante`, `carona`, `convocacao.carona_id`, `registro_acao` |
 | Módulo | `logistica` (novo) |
@@ -732,7 +732,7 @@ Cada sub-tela é do módulo dono do dado (e da frente dona desse módulo). O `la
 | | |
 |---|---|
 | Rota | `inicio/page.tsx`; `src/app/page.tsx` passa a redirecionar para `/inicio` |
-| Lê | escalas a montar (30 dias), aguardando aprovação, devolvidas, Confronto sem fila, eventos sem código, copys bloqueadas e desatualizadas, voos na janela D-90 sem pedido, custos para auditar (com críticos) |
+| Lê | escalas a montar (30 dias), aguardando aprovação, devolvidas, eventos sem código ("Confronto sem fila" saiu do Início em 24/11/2026), copys bloqueadas e desatualizadas, voos na janela D-90 sem pedido, custos para auditar (com críticos) |
 | Escreve | nada |
 | Fluxo | `carregarInicio(agora)` combina os `resumoParaInicio(agora)` de cada fluxo (contrato em §7.1) |
 
@@ -795,7 +795,7 @@ type ItemDoInicio = { chave: string; titulo: string; quantidade: number; href: s
 | Fluxo | Itens |
 |---|---|
 | `escalas` (B) | escalas a montar (30 dias), aguardando aprovação, devolvidas ("sem resposta há mais de 2 dias" saiu na 0013: quem está na escala já conta como confirmado) |
-| `eventos` (B) | Confronto sem fila, eventos sem código (reaproveita `pendenciasDosEventos`) |
+| `eventos` (B) | eventos sem código (reaproveita `pendenciasDosEventos`). "Confronto sem fila" saiu do Início em 24/11/2026; a falta da fila aparece só na escala do evento |
 | `comunicacao` (C) | copys com falta de dado, copys desatualizadas |
 | `logistica` (D) | voos a pedir na janela do aviso (padrão D-90, configurável): por evento, passagens a pedir e dias que faltam; pedidos alterados sem novo retorno da SDC |
 | `custos` (D) | solicitações para auditar (destaque para as críticas) |

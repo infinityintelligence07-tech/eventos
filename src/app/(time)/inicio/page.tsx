@@ -25,7 +25,6 @@ const EXPLICACAO: Record<string, string> = {
   "escalas-devolvidas": "A líder devolveu para ajustar.",
   "escalas-a-montar": "Eventos nos próximos 30 dias com a escala ainda não aprovada.",
   "comunicacao-desatualizadas": "Os dados mudaram depois do envio. Copie e envie de novo.",
-  "confronto-sem-fila": "Sem o número de pessoas na fila, as vagas de pai e mãe não são calculadas.",
   "eventos-sem-codigo": "Eventos sem polo cadastrado ou com código repetido no IAM Control.",
   "custos-para-auditar": "Solicitações de custo esperando aprovação do time.",
   "custos-criticos": "Solicitações com alerta crítico de consumo ou distância.",

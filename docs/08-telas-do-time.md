@@ -101,8 +101,8 @@ O logo passa a levar para `/inicio` quando a tela Início existir.
 | Comunicação | `/comunicacao` | — |
 | Disponibilidade | `/disponibilidade` | `/disponibilidade/nova`, `/disponibilidade/[enqueteId]` |
 | Pessoas | `/pessoas` | `/pessoas/[pessoaId]` |
-| Voos | `/logistica/voos` | `/logistica/caronas` |
-| Hospedagem | `/logistica/hospedagem` | `/logistica/creditos` |
+| Voos | `/logistica/voos` | — |
+| Hospedagem | `/logistica/hospedagem` (quartos e caronas) | `/logistica/creditos`; `/logistica/caronas` redireciona para a Hospedagem, na seção de caronas |
 | Custos | `/custos` | `/custos/nova`; detalhe em painel lateral com `?protocolo=STF-…` |
 | Configurações | `/configuracoes/regras-de-custo` | `/configuracoes/vagas`, `/configuracoes/modelos-de-copy`, `/configuracoes/locais`, `/configuracoes/voos` |
 | (sem item no menu) | `/eventos/[eventoId]` | `/eventos/[eventoId]/escala`, `/comunicacao`, `/logistica`, `/custos` |
@@ -438,7 +438,6 @@ Acrescentar `scroll-padding-bottom` no `main` com a altura da barra, para o foco
 | Escalas devolvidas | "A líder devolveu para ajustar." | código · comentário (1 linha, se houver) | Montar escala |
 | Escalas a montar | "Eventos nos próximos 30 dias com a escala ainda não aprovada." | código · data · "12 de 22 vagas" | Montar escala |
 | Copys desatualizadas | "Os dados mudaram depois do envio. Copie e envie de novo." | nome · código · o que mudou | Comunicação do evento |
-| Confronto sem fila | (texto atual do Calendário) | código · data | Evento · Resumo, foco no campo "Pessoas na fila" |
 | Pendências da sincronização | "Eventos sem polo cadastrado ou com código repetido no IAM Control." | código ou nome da turma · motivo | Evento · Resumo |
 | Custos para auditar | "Solicitações de custo esperando aprovação do time." | protocolo · nome · chip "Crítico"/"Alerta" | Custos, com o painel aberto |
 | Voos a pedir à SDC | "Eventos em 90 dias ou menos com pessoas que vão de avião e ainda sem pedido à SDC." (os dias são os de Configurações › Aviso de voos, §12.5) | por evento na janela: código · "4 passagens a pedir" · "faltam 75 dias" (ou "atrasado · faltam 48 dias"); o contador é o total de passagens | Voos, filtrado pelo evento e por "A pedir". Aparece para a líder e para o time; é o aviso de voos, só na tela |
@@ -535,7 +534,7 @@ stateDiagram-v2
 1. Cabeçalho: "Escalas" / subtítulo "Monte e acompanhe a escala de cada evento." Ação secundária à direita: "Fila de aprovação" com contador (pílula) → `/escalas/aprovacao`.
    Abaixo, "Precisa de ação" com um cartão só, de largura total: **"Escalas a montar"** (eventos, sem Masterclass, que começam nos próximos 30 dias com a escala ainda não aprovada) + contador.
    Os eventos ficam em grade (`sm:grid-cols-2 xl:grid-cols-3`); cada um mostra nome curto (link para a escala), código, chip da situação, **Início**, **Término**, local (quando houver) e vagas preenchidas.
-   Sem evento: "Nenhuma escala a montar nos próximos 30 dias." "Confronto sem fila" e "Eventos sem código" não aparecem mais aqui (continuam no Início).
+   Sem evento: "Nenhuma escala a montar nos próximos 30 dias." "Confronto sem fila" e "Eventos sem código" não aparecem mais aqui. "Eventos sem código" continua no Início ("Pendências da sincronização"); "Confronto sem fila" saiu também do Início (24/11/2026): a falta da fila aparece só na escala do próprio evento (faixa "Falta o número de pessoas na fila", §6.2).
 2. Barra de filtros: atalhos de situação **"A montar (N) | Aguardando aprovação (N) | Devolvidas (N) | Aprovadas | Comunicadas | Todas"**; seletores Polo, Tipo e Período ("Próximos 30 dias" padrão, "Próximos 60 dias", "Próximos 90 dias", "Mês…"); busca por código ou nome.
    "A montar" = sem escala + em andamento. Masterclasses entram, mas podem ser escondidas com o chip "Esconder Masterclasses".
 3. Tabela (ordem: data mais próxima primeiro):
@@ -583,7 +582,7 @@ stateDiagram-v2
    Evento de vários dias: por padrão cada função vale para todos os dias. Link por linha "Ajustar por dia" expande sub-linhas `12/11`, `13/11`… com o mesmo campo de vagas.
    Uma ação no cabeçalho do cartão: "Confirmar todas as sugestões" (secundário) — confirma de uma vez as funções que têm sugestão e não foram alteradas; **não** confirma Staff do Confronto.
 
-4. **Equipe** (`h2`), uma seção por função (ordem da tabela de vagas), cada uma num cartão com título "Staff líder · 6 de 8" e tabela:
+4. **Equipe** (`h2`, com o atalho **"Montar quartos e caronas"** à direita do título: leva para a Hospedagem daquele evento, `/logistica/hospedagem?evento=…`, onde quem foi marcado com Hotel e com Carona é distribuído em quartos e carros, §10.2 e §10.3), uma seção por função (ordem da tabela de vagas), cada uma num cartão com título "Staff líder · 6 de 8" e tabela:
 
 | Coluna | Conteúdo |
 |---|---|
@@ -865,13 +864,13 @@ A SDC ainda não tem portal: o time registra o pedido, envia pelo canal de sempr
 
 | Item do menu | Abre | Abas internas | Acende em |
 |---|---|---|---|
-| **Voos** ("Passagens pela SDC e caronas do staff.") | `/logistica/voos` | **Voos (SDC) \| Caronas** | `/logistica/voos`, `/logistica/caronas` e a aba Logística do evento |
-| **Hospedagem** ("Hotéis, quartos e quem divide com quem.") | `/logistica/hospedagem` | **Hotéis e quartos \| Créditos de hotel** | `/logistica/hospedagem`, `/logistica/creditos` |
+| **Voos** ("Passagens do staff pela SDC.") | `/logistica/voos` | nenhuma (é uma tela só, sem migalha) | `/logistica/voos` e a aba Logística do evento |
+| **Hospedagem** ("Quartos e caronas de cada evento: quem dorme com quem e quem vai com quem.") | `/logistica/hospedagem` | **Quartos e caronas \| Créditos de hotel** | `/logistica/hospedagem`, `/logistica/caronas`, `/logistica/creditos` |
 
-Caronas fica com Voos porque as duas tratam de como a pessoa chega ao evento; Créditos de hotel fica com Hospedagem.
+**Caronas ficam com a Hospedagem** (decisão do Vitor, 24/11/2026: "caronas podemos montar na escala, talvez junto com a montagem de quarto mesmo"). A tela de Hospedagem mostra, para o evento escolhido, os quartos (§10.2) e logo abaixo as caronas (§10.3): o time resolve quem dorme com quem e quem vai com quem numa passada. Não existe mais uma tela só de caronas: `/logistica/caronas` (com ou sem `?evento=`) redireciona para `/logistica/hospedagem…#titulo-caronas`. O cabeçalho da Hospedagem tem o atalho "Ir para as caronas". Chega-se ali pela escala do evento, no atalho "Montar quartos e caronas" (§6.2); as duas faixas da tela têm o link de volta "Abrir a escala".
 `/logistica` continua redirecionando para `/logistica/voos`. No evento, `/eventos/[id]/logistica` mostra as três seções
 (Voos, Hospedagem, Caronas) filtradas pelo evento, uma abaixo da outra, e acende **Voos** no menu (é a seção que abre a página).
-Títulos da aba do navegador: "Voos", "Caronas · Voos", "Hospedagem", "Créditos de hotel · Hospedagem". Seletor de evento em cada tela.
+Títulos da aba do navegador: "Voos", "Hospedagem", "Créditos de hotel · Hospedagem". Seletor de evento em Voos e na Hospedagem (o das caronas é o da Hospedagem).
 
 ### 10.1 Voos (pedidos à SDC)
 
@@ -903,7 +902,7 @@ Toast: "Voo de [Staff 07] registrado. A copy dela foi atualizada." (o voo libera
 
 A tela parte de quem o time marcou com "Hotel" na escala do evento (seção 6.2) e serve para dizer **quem fica com quem**.
 
-**Layout por evento** (seletor de evento obrigatório nesta aba), de cima para baixo:
+**Layout por evento** (seletor de evento obrigatório nesta aba), de cima para baixo; depois dos quartos vem a seção de caronas do mesmo evento (§10.3):
 1. **Faixa da escala** (sempre): "8 pessoas marcadas para hotel na escala de CONF_AM_60" + "5 com quarto e 3 sem quarto. Coloque cada pessoa num quarto para definir quem divide com quem." Tom de atenção enquanto houver gente sem quarto, sucesso quando todo mundo tem ("Todo mundo tem quarto. Em cada quarto abaixo dá para ver quem divide com quem.") e informação quando ninguém foi marcado ("Só entra em quarto quem está marcado com Hotel na escala do evento…"). Link **"Abrir a escala"** ("Marcar na escala" quando ninguém foi marcado). Se há gente ativa na escala sem a marca: "4 pessoas da escala não estão marcadas para hotel. Se falta alguém aqui, marque Hotel na escala."
 2. **Sem quarto · N** (cartão, logo abaixo da faixa, antes dos hotéis; só aparece quando há alguém sem quarto, mesmo antes de existir hotel): cada pessoa com função e sexo e o seletor "Colocar no quarto…". A opção do quarto diz quem já está nele: "Quarto 2 · 1 de 2 · Feminino · com Bia" (ou "· vazio"). Ação "Distribuir por sexo (N)". Sem quarto criado: "Defina o hotel e crie os quartos logo abaixo para começar a distribuir."
 3. Cartão "Hotel": nome, endereço, check-in/check-out, reserva. Ação "Editar hotel". Sem hotel: estado vazio "Nenhum hotel definido para este evento." + "Definir hotel".
@@ -919,13 +918,17 @@ Arrastar entre quartos é opcional; o seletor "Mover para…" é obrigatório (W
 
 ### 10.3 Caronas
 
-**Layout por evento:**
-1. **Motoristas** (cartões): "[Staff 02] · 4 lugares · 2 ocupados · sai de Canoas, 32,4 km". Lista de passageiros com "Tirar da carona". Ação "Adicionar passageiro" (seletor com quem está sem carona, ordenado pela distância até o motorista).
-2. **Sem carona definida** (tabela): pessoas com deslocamento "Carona" sem motorista — Nome | Cidade | Distância até o evento | "Escolher carona" (seletor de motorista com lugares livres: "[Staff 02] — 2 lugares livres").
-3. Ação "Novo motorista": escolhe entre as pessoas escaladas com carro.
+Seção "Caronas" do evento, logo abaixo dos quartos na Hospedagem (e na aba Logística do evento). Parte de quem está com o
+deslocamento **"Carona"** na escala (seção 6.2); o motorista é alguém da escala com veículo no cadastro (em geral quem está
+como "Carro próprio"), escolhido em "Novo motorista". Quem vai de avião não entra em carona.
+
+**Layout, de cima para baixo:**
+1. Título "Caronas" + ação **"Novo motorista"** (escolhe entre as pessoas escaladas com carro).
+2. **Faixa da escala** (sempre): "5 pessoas marcadas como Carona na escala de CONF_AM_60" + "3 com motorista e 2 sem carona. Escolha o motorista de cada pessoa para definir quem vai com quem." Atenção enquanto houver alguém sem carona; sucesso quando todas têm ("Todo mundo que vai de carona tem motorista…"); informação quando ninguém foi marcado ("Quem vai de carona aparece aqui quando o deslocamento for marcado como Carona na escala do evento…"). Link "Abrir a escala" ("Marcar na escala" quando ninguém foi marcado).
+3. **Sem carona · N** (cartão, antes dos carros; só aparece quando há alguém marcado como Carona sem motorista): nome, função e distância até o evento, da mais perto para a mais longe, com o seletor "Escolher carona…". A opção diz quem já vai no carro: "[Staff 02] — 2 lugares livres · com Bia, Caio". Sem carro com lugar: "Escolha um motorista em "Novo motorista" para começar a distribuir." / "Os carros estão cheios: escolha mais um motorista…".
+4. **Motoristas** (cartões): "[Staff 02] · 4 lugares · 2 ocupados · 32,4 km até o evento". Lista de passageiros com "Tirar da carona". "Adicionar passageiro…" (seletor com quem está sem carona, ordenado pela distância) e "Remover" (os passageiros voltam a ficar sem carona).
 
 Validação: carro cheio — "O carro de [Staff 02] já está com os 4 lugares ocupados."
-Vazio: "Ninguém com carona neste evento." / "Quem vai de carona aparece aqui quando o deslocamento for marcado como Carona na escala." + "Ir para a escala".
 
 ### 10.4 Créditos de hotel
 

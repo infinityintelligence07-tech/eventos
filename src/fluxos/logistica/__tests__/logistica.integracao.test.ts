@@ -277,6 +277,12 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
     const semCarro = await convocar("Gil Sem Carro", { deslocamento: "CARONA" });
     const outro = await convocar("Hugo Carona", { deslocamento: "CARONA" });
 
+    // A seção parte de quem está marcado como Carona na escala: antes de existir motorista, as duas estão sem carona.
+    const antes = await carregarCaronas(eventoId, agora);
+    expect(antes.marcadasComoCarona).toBe(2);
+    expect(antes.semCarona.map((pessoa) => pessoa.nome)).toEqual(["Gil Sem Carro", "Hugo Carona"]);
+    expect(antes.caronas).toEqual([]);
+
     await expect(criarCarona({ eventoId, motoristaConvocacaoId: semCarro.convocacaoId }, ator(), agora)).rejects.toThrow(/não tem veículo/);
     const caronaId = await criarCarona({ eventoId, motoristaConvocacaoId: motorista.convocacaoId }, ator(), agora);
     await definirCarona({ convocacaoId: semCarro.convocacaoId, caronaId }, ator(), agora);
@@ -285,6 +291,8 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
     const caronas = await carregarCaronas(eventoId, agora);
     expect(caronas.caronas[0]).toMatchObject({ motoristaNome: "Fabi Motorista", livres: 0 });
     expect(caronas.semCarona.map((pessoa) => pessoa.nome)).toEqual(["Hugo Carona"]);
+    // Gil ganhou motorista, Hugo não: 2 marcadas como Carona, 1 ainda sem carona. A motorista (carro próprio) não conta.
+    expect(caronas.marcadasComoCarona).toBe(2);
     expect(await um(`select carona_id from eventos.convocacao where id = $1`, [semCarro.convocacaoId])).toEqual({ carona_id: caronaId });
 
     const registros = await teste.sql(

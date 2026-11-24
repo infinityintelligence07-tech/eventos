@@ -3,50 +3,30 @@ import type { ReactNode } from "react";
 import { type AbaDaPagina, AbasDaPagina, MigalhaDaSecao } from "../../_componentes/ui/abas-da-pagina";
 import { CabecalhoDaPagina } from "../../_componentes/ui/cabecalho";
 
-// Voos e Hospedagem são itens separados no menu. Cada um tem as suas abas: Caronas fica com Voos (como a pessoa
-// chega ao evento) e Créditos de hotel com Hospedagem (onde ela dorme). As rotas continuam em /logistica.
-
-const ABAS_DE_VOOS: AbaDaPagina[] = [
-  { href: "/logistica/voos", rotulo: "Voos (SDC)" },
-  { href: "/logistica/caronas", rotulo: "Caronas" },
-];
+// Voos e Hospedagem são itens separados no menu; as rotas continuam em /logistica. Voos tem uma tela só. Hospedagem
+// junta quartos e caronas na mesma tela (quem dorme com quem e quem vai com quem, numa passada) e tem a aba de créditos.
 
 const ABAS_DE_HOSPEDAGEM: AbaDaPagina[] = [
-  { href: "/logistica/hospedagem", rotulo: "Hotéis e quartos" },
+  { href: "/logistica/hospedagem", rotulo: "Quartos e caronas" },
   { href: "/logistica/creditos", rotulo: "Créditos de hotel" },
 ];
 
-type Secao = { titulo: string; subtitulo: string; href: string; abas: AbaDaPagina[] };
+/** Tela do item Voos do menu (/logistica/voos). Sem abas nem migalha: é uma tela só. */
+export function CabecalhoDeVoos({ acoes }: { acoes?: ReactNode }) {
+  return <CabecalhoDaPagina titulo="Voos" subtitulo="Passagens do staff pela SDC." acoes={acoes} />;
+}
 
-const VOOS: Secao = { titulo: "Voos", subtitulo: "Passagens pela SDC e caronas do staff.", href: "/logistica/voos", abas: ABAS_DE_VOOS };
-const HOSPEDAGEM: Secao = {
-  titulo: "Hospedagem",
-  subtitulo: "Hotéis, quartos e quem divide com quem.",
-  href: "/logistica/hospedagem",
-  abas: ABAS_DE_HOSPEDAGEM,
-};
-
-/** Cabeçalho e abas; fica em cada página para a ação principal da aba ir na área de ações. */
-function Cabecalho({ secao, acoes }: { secao: Secao; acoes?: ReactNode }) {
+/** Telas do item Hospedagem do menu: /logistica/hospedagem (quartos e caronas) e /logistica/creditos. A ação principal da aba vai em `acoes`. */
+export function CabecalhoDeHospedagem({ acoes }: { acoes?: ReactNode }) {
   return (
     <>
       <CabecalhoDaPagina
-        migalha={<MigalhaDaSecao itens={[{ rotulo: secao.titulo, href: secao.href }]} abas={secao.abas} />}
-        titulo={secao.titulo}
-        subtitulo={secao.subtitulo}
+        migalha={<MigalhaDaSecao itens={[{ rotulo: "Hospedagem", href: "/logistica/hospedagem" }]} abas={ABAS_DE_HOSPEDAGEM} />}
+        titulo="Hospedagem"
+        subtitulo="Quartos e caronas de cada evento: quem dorme com quem e quem vai com quem."
         acoes={acoes}
       />
-      <AbasDaPagina rotulo={`Seções de ${secao.titulo}`} abas={secao.abas} />
+      <AbasDaPagina rotulo="Seções de Hospedagem" abas={ABAS_DE_HOSPEDAGEM} />
     </>
   );
-}
-
-/** Telas do item Voos do menu: /logistica/voos e /logistica/caronas. */
-export function CabecalhoDeVoos({ acoes }: { acoes?: ReactNode }) {
-  return <Cabecalho secao={VOOS} acoes={acoes} />;
-}
-
-/** Telas do item Hospedagem do menu: /logistica/hospedagem e /logistica/creditos. */
-export function CabecalhoDeHospedagem({ acoes }: { acoes?: ReactNode }) {
-  return <Cabecalho secao={HOSPEDAGEM} acoes={acoes} />;
 }
