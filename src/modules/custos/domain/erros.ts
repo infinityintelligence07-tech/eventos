@@ -7,10 +7,13 @@ export class ErroDosCustos extends Error {
   }
 }
 
-/** UNIQUE (evento_id, pessoa_id): a tela oferece "Abrir solicitação". */
+/** UNIQUE (evento_id, pessoa_id): a tela oferece "Abrir solicitação". `propria` = quem tentou foi a própria pessoa. */
 export class SolicitacaoJaExisteError extends ErroDosCustos {
-  constructor(readonly protocolo: string) {
-    super(`Esta pessoa já tem a solicitação ${protocolo} para este evento.`);
+  constructor(
+    readonly protocolo: string,
+    propria = false,
+  ) {
+    super(propria ? `Já existe a solicitação ${protocolo} em seu nome para este evento.` : `Esta pessoa já tem a solicitação ${protocolo} para este evento.`);
     this.name = "SolicitacaoJaExisteError";
   }
 }

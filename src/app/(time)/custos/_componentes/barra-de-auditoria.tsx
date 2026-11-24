@@ -24,7 +24,8 @@ function CamposDaVersao({ versao }: { versao: Versao }) {
 
 /**
  * Rodapé do detalhe (doc 08 §11.2): Reprovar (motivo obrigatório) e Aprovar (direto; com alerta crítico,
- * pede o motivo — decisão do gerente, docs/07 §11.1). Depois de decidir, o painel avança para a próxima.
+ * pede o motivo — decisão do gerente, docs/07 §11.1). Depois de reprovar, o painel avança para a próxima; depois de
+ * aprovar, fica na solicitação, que passa a oferecer a mensagem de aprovado para copiar.
  */
 export function BarraDeAuditoria({
   versao,
@@ -32,6 +33,7 @@ export function BarraDeAuditoria({
   critico,
   alertasCriticos,
   hrefDepois,
+  hrefDepoisDeAprovar,
   aprovar,
   reprovar,
 }: {
@@ -41,17 +43,18 @@ export function BarraDeAuditoria({
   /** Todos os alertas críticos, um por linha no modal. */
   alertasCriticos: string[];
   hrefDepois: string;
+  hrefDepoisDeAprovar: string;
   aprovar: AcaoDoFormulario;
   reprovar: AcaoDoFormulario;
 }) {
   const router = useRouter();
   const [confirmando, setConfirmando] = useState<"aprovar" | "reprovar" | null>(null);
-  const depois = () => {
+  const irDepois = (href: string) => () => {
     setConfirmando(null);
-    router.push(hrefDepois, { scroll: false });
+    router.push(href, { scroll: false });
   };
-  const aprovacao = useAcao(aprovar, depois);
-  const reprovacao = useAcao(reprovar, depois);
+  const aprovacao = useAcao(aprovar, irDepois(hrefDepoisDeAprovar));
+  const reprovacao = useAcao(reprovar, irDepois(hrefDepois));
 
   return (
     <div className="flex w-full flex-wrap justify-end gap-2">

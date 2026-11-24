@@ -895,7 +895,8 @@ Vazio: "Nenhum crédito de hotel registrado."
 ## 11. Custos
 
 **Objetivo:** o time confere cada solicitação de custo do staff e **aprova ou reprova com motivo**. Só o que for aprovado vai para o financeiro.
-Sem portal do staff, o time também **registra a solicitação** em nome da pessoa.
+O staff envia a solicitação pelo **formulário dele** (`/solicitar-custo`, §11.4), aberto até 5 dias depois do evento; o time também
+**registra a solicitação** em nome da pessoa (§11.3), sem prazo.
 
 ### 11.1 Fila de auditoria
 
@@ -903,6 +904,8 @@ Sem portal do staff, o time também **registra a solicitação** em nome da pess
 
 **Layout:**
 1. Cabeçalho: "Custos" / "Confira as solicitações do staff. Só as aprovadas seguem para o financeiro." + primário **"Registrar solicitação"**.
+   Logo abaixo, o cartão **"Formulário de custo do staff"** com o endereço e o botão **"Copiar link"** (como o link do Meu cadastro em
+   Pessoas). Em `/custos` o link é o geral (`/solicitar-custo`); em `/eventos/[id]/custos`, o direto do evento (`/solicitar-custo/[id]`).
 2. Cartões de número: "Para auditar", "Com alerta crítico", "Aprovadas no mês (R$)", "Reprovadas no mês".
 3. Filtros: atalhos "Para auditar (12) | Aprovadas | Reprovadas | Todas"; Evento; Alerta ("Crítico", "Alerta", "Sem alerta"); busca por protocolo ou nome.
 4. Tabela (ordem em "Para auditar": críticos → alertas → sem alerta; dentro de cada grupo, a mais antiga primeiro):
@@ -910,7 +913,7 @@ Sem portal do staff, o time também **registra a solicitação** em nome da pess
 | Coluna | Conteúdo |
 |---|---|
 | Protocolo | `STF-202611-0012` em mono (botão que abre o painel) |
-| Pessoa | nome + selo "Registrado pelo time" se for o caso |
+| Pessoa | nome + selo "Registrado pelo time" se for o caso (sem selo = enviada pela própria pessoa) |
 | Evento | código |
 | Km | "412,0 km" (direita) |
 | Total | "R$ 486,30" (direita) |
@@ -933,10 +936,29 @@ Sem portal do staff, o time também **registra a solicitação** em nome da pess
 5. **Total** em destaque (20 px semibold, direita).
 6. **Parecer anterior** (se reprovada antes e reenviada): "Reprovada em 15/11: falta o comprovante do pedágio."
 7. **Barra de ação fixa do painel:** perigo contorno **"Reprovar"** e primário **"Aprovar"**.
-   - **Aprovar sem alerta:** aprova direto. Toast "STF-202611-0012 aprovada. Seguiu para o financeiro." + "Desfazer". O painel avança para a próxima da fila.
+   - **Aprovar sem alerta:** aprova direto. Toast "STF-202611-0012 aprovada. Seguiu para o financeiro." O painel **fica na solicitação**
+     aprovada, com a faixa "Avise [nome]: copie a mensagem de aprovado abaixo e mande pelo WhatsApp." e a ação "Próxima da fila".
    - **Aprovar com alerta crítico:** modal "Aprovar com alerta crítico?" — texto com o alerta — campo "Motivo da aprovação (obrigatório)" (ex.: "Carro da pessoa é antigo; consumo conferido"). Botão "Aprovar".
    - **Reprovar:** modal "Reprovar STF-202611-0012?" — "A pessoa vai ver o motivo e poderá corrigir e reenviar." Campo "Motivo (obrigatório)". Botão "Reprovar".
+   - **Reprovar:** depois de reprovar, o painel avança para a próxima da fila (a pessoa vê o motivo no formulário dela e pode corrigir, §11.4).
    - Já aprovada/reprovada: a barra mostra "Aprovada em 15/11 às 10:20" e, enquanto o financeiro não tiver pago, o link "Reabrir auditoria" (confirmação simples).
+8. **Mensagem de aprovado** (toda solicitação aprovada, logo depois de aprovar e sempre que o painel for aberto de novo): cartão com o
+   texto pronto e o botão **"Copiar mensagem"** (`BotaoCopiar`). O texto leva o primeiro nome, o evento, o protocolo e o valor aprovado
+   (`mensagemDeCustoAprovado`, no domínio de custos):
+
+   ```
+   Olá, Ana!
+
+   Sua solicitação de custo do evento ASM_POA_234 foi aprovada.
+
+   Protocolo: STF-202611-0012
+   Valor aprovado: R$ 486,30
+
+   O valor seguiu para o financeiro fazer o pagamento. Qualquer dúvida, fale com o time de eventos.
+   ```
+
+   O sistema **não envia nada sozinho**: o time copia e manda pelo WhatsApp. **Construção futura:** envio automático da mensagem
+   de aprovado pelo WhatsApp (e o registro de que foi enviada), junto com o envio das copys.
 
 ### 11.3 Registrar solicitação (em nome da pessoa)
 
@@ -949,6 +971,55 @@ Sem portal do staff, o time também **registra a solicitação** em nome da pess
 5. **Resumo ao vivo** (cartão à direita em `xl`, abaixo em telas menores): total, km total, alerta que a solicitação vai ter ("Esta solicitação vai entrar com alerta: custo de R$ 0,74 por km.").
 6. Ações: primário "Registrar solicitação", secundário "Cancelar".
    Sucesso: vai para `/custos?protocolo=STF-202611-0013` com toast "Solicitação STF-202611-0013 registrada em nome de [Staff 07]."
+
+### 11.4 Formulário de custo do staff (`/solicitar-custo`)
+
+Substitui o Google Forms "Nova solicitação de custo time IAM". Fora do `(time)`, como "Meu cadastro" e a resposta da enquete: pede
+login e que o usuário seja staff, sem perfil do Eventos. Visual do login (`MolduraDeEntrada`), pensado para o celular.
+
+**Rotas:** `/solicitar-custo` (os eventos da pessoa com o prazo aberto e as solicitações anteriores) e `/solicitar-custo/[eventoId]`
+(o formulário do evento; é também o link direto que o time copia na aba Custos do evento).
+
+**Quem e quando:**
+- A pessoa é a da sessão; nenhum id de pessoa vem do formulário.
+- Só aparecem (e só são aceitos) os eventos em que ela está na escala (convocação sugerida, convidada ou aceita).
+- Evento cancelado não abre o formulário ("Este evento foi cancelado…"); o time ainda pode registrar em nome da pessoa.
+- **Prazo:** abre no primeiro dia do evento e fecha no fim do **5º dia depois do último dia** (inclusive), no fuso de São Paulo
+  (`DIAS_DE_PRAZO_DO_FORMULARIO`, `src/modules/custos/domain/prazo.ts`). Antes: "O formulário abre em 15/12…". Depois: "O prazo
+  acabou em 22/12 (5 dias depois do último dia do evento). Fale com o time de eventos…". O registro em nome da pessoa (§11.3) não tem prazo.
+- Uma solicitação por pessoa e evento (a mesma restrição do banco). Quem já tem solicitação (enviada por ela ou registrada pelo
+  time) vê o protocolo, a situação ("Em conferência pelo time", "Aprovada · aguardando pagamento", "Reprovada: motivo") e o que foi enviado.
+- **Correção:** como no registro do time, só a solicitação **reprovada** é corrigida (pendente não se altera). A pessoa vê o motivo,
+  usa "Corrigir e reenviar" e a solicitação volta para a fila. Prazo da correção: 5 dias depois da reprovação (`DIAS_PARA_CORRIGIR`)
+  ou o prazo do evento, o que acabar depois. Os itens lançados pelo time (remuneração, alimentação…) ficam como estão.
+
+**Campos (o que o sistema não sabe):**
+1. "Você foi com o seu carro?" Sim / Não.
+2. **Deslocamento de carro** (repetível, até 10): de onde saiu, para onde foi, km de um sentido, consumo (vem do Meu cadastro),
+   preço do litro (vem da regra da UF, se houver), pedágio de um sentido, "Ida e volta". Combustível, depreciação e total são
+   calculados pelo servidor e mostrados ao vivo.
+3. **Outras despesas do deslocamento** (repetível, até 10): o que foi + valor (estacionamento, ônibus, aplicativo). Entram como itens "Outro".
+4. Total da solicitação (calculado) e botão "Enviar solicitação".
+
+É o mesmo registro do time (validação, cálculo pelas regras, protocolo `STF-…`, fila de auditoria). Grava sem `registrado_por` e o
+`registro_acao` leva `propria: true`; na fila aparece sem o selo "Registrado pelo time".
+
+**Do Google Forms para o sistema:**
+
+| Campo do Forms | No sistema |
+|---|---|
+| Qual seu nome | Não existe: é a pessoa da sessão. |
+| Qual evento | Lista dos eventos da pessoa com o prazo aberto (ou o link direto). |
+| Consumo médio do veículo | Campo do deslocamento, já preenchido com o consumo do Meu cadastro. |
+| Valor do litro e tipo do combustível | Preço do litro: campo do deslocamento. **Tipo do combustível: fora** (não entra no cálculo e o modelo não tem onde guardar). |
+| Data do último dia ou da Masterclass | Fora: o sistema já sabe as datas do evento. |
+| Valor do custo do seu deslocamento | Não se digita: o sistema calcula (combustível, pedágio e depreciação pelas regras) e soma as despesas. |
+| Descrição do lançamento | A descrição de cada despesa; combustível e pedágio saem do deslocamento. |
+| Se utilizou seu veículo, qual a distância (faixas) | Os km de um sentido; a faixa de depreciação sai deles. "Não se aplica" = "Não fui com o meu carro". |
+| Comprovante do deslocamento (arquivo) | **Pendente.** O sistema não tem onde guardar arquivo (as colunas `comprovante_url` existem, sem armazenamento por trás). |
+
+**Para o time usar o link:** botão "Copiar link" em Custos (§11.1). Em Configurações › Modelos de copy, o cartão do link de custos
+mostra o endereço do formulário do sistema para copiar e salvar em `link_custos` (a copy de escalação continua usando o valor configurado).
 
 **Estados (Custos):**
 - Fila vazia em "Para auditar": `CircleCheck` — "Nenhuma solicitação para auditar." / "Quando uma solicitação for registrada, ela aparece aqui."

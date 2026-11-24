@@ -51,7 +51,7 @@ export default async function PaginaNovaSolicitacao({ searchParams }: { searchPa
       <CabecalhoDaPagina
         migalha={<Migalha itens={[{ rotulo: "Custos", href: "/custos" }, { rotulo: corrigindo ? `Corrigir ${paraCorrigir.protocolo}` : "Registrar solicitação" }]} />}
         titulo={corrigindo ? `Corrigir ${paraCorrigir.protocolo}` : "Registrar solicitação"}
-        subtitulo={corrigindo ? "A solicitação foi reprovada. Registre a correção e ela volta para a fila de auditoria." : "Em nome da pessoa: o staff ainda não tem portal."}
+        subtitulo={corrigindo ? "A solicitação foi reprovada. Registre a correção e ela volta para a fila de auditoria." : "Em nome da pessoa. Use quando ela não enviou pelo formulário do staff ou o prazo dela já acabou."}
       />
       {!escrita.liberada && <FaixaSomenteLeitura />}
 

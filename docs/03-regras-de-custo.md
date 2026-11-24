@@ -35,6 +35,16 @@ Dois eixos independentes:
 - **Financeiro:** `AGUARDANDO_AUDITORIA`, `AGUARDANDO_PAGAMENTO`, `PENDENTE_CADASTRO`, `PAGO`, `REJEITADO`.
   Aprovar na auditoria leva o financeiro para `AGUARDANDO_PAGAMENTO`; `PAGO` registra a data do pagamento.
 
+## Formulário do staff e prazo (decidido em 24/11/2026)
+
+- O staff envia a própria solicitação em `/solicitar-custo` (substitui o Google Forms). Só para evento em que está na escala.
+- **Prazo:** do primeiro dia do evento até o fim do **5º dia depois do último dia do evento** (inclusive), no fuso de São Paulo.
+  Depois disso, só o time registra em nome da pessoa.
+- A pessoa informa o deslocamento de carro (km, consumo, preço do litro, pedágio) e outras despesas do deslocamento
+  (estacionamento, ônibus…). O valor é calculado pelas regras desta página; ela não digita o total.
+- Reprovada, a pessoa corrige e reenvia até 5 dias depois da reprovação.
+- Aprovada, o time copia a mensagem de "custo aprovado" e manda pelo WhatsApp. Envio automático: construção futura.
+
 ## Protocolo
 
 `STF-AAAAMM-NNNN` (formato que o financeiro já conhece). `NNNN` vem de uma sequência no banco por mês,
