@@ -22,6 +22,7 @@ export {
   type Periodo,
   periodoProprio,
   podeOcupar,
+  podeTrocar,
   type QuartoDoRooming,
   rotuloDaCapacidade,
   rotuloDoSexoDoQuarto,
@@ -42,6 +43,10 @@ export {
   type CriarHospedagem,
   type DefinirCarona,
   type DefinirPeriodoDoOcupante,
+  destinoDaTroca,
+  destinoNoQuarto,
+  type MoverDeQuarto,
+  moverDeQuartoSchema,
   type PorNoQuarto,
   type RegistrarPedidoDeHospedagem,
   type RegistrarPedidoDeVoo,
@@ -66,6 +71,8 @@ export {
   SENTIDOS,
   tirarDaCaronaSchema,
   tirarDoQuartoSchema,
+  type TrocarDeQuarto,
+  trocarDeQuartoSchema,
 } from "./domain/schemas";
 export * as servicoDePedidos from "./service/pedidos";
 export * as servicoDeHospedagem from "./service/hospedagem";
