@@ -713,7 +713,15 @@ navegador); `corrigirSolicitacao` ← o mesmo + `solicitacaoId` (só `REPROVADO`
   `carregarFormularioDoStaff(eventoId, pessoaId)`, `solicitarCusto` e `corrigirMeuCusto` (em `src/fluxos/custos/staff.ts`). Usa o mesmo
   serviço de registro, com `propria: true` no contexto: grava sem `registrado_por`, o `registro_acao` leva `propria: true` e vale o
   prazo de `domain/prazo.ts` (do primeiro dia do evento até 5 dias depois do último, em São Paulo). As despesas do staff viram
-  `custo_item` "OUTRO"; a pessoa não escolhe categoria.
+  `custo_item` "OUTRO"; a pessoa não escolhe categoria. Remuneração e alimentação fixas entram sozinhas, por
+  `itensFixosDasRegras` (`domain/regras.ts`), a mesma função que sugere os itens no registro do time.
+- **Comprovantes** (migration 0014, doc 08 §11.4): tabela `eventos.comprovante_custo` (anexo da solicitação; antes de ela existir,
+  da pessoa no evento) e arquivo no armazenamento. `src/core/integrations/armazenamento`: uma interface (`guardar`,
+  `linkTemporario`, `ler`, `apagar`) e três implementações — S3 do Storage do Supabase com AWS Signature V4 em `node:crypto`
+  (`sigv4.ts`, sem dependência nova), disco em `.banco-local/comprovantes` (só `EVENTOS_MODO=local`) e memória (testes). Sem as
+  variáveis `COMPROVANTES_S3_*` (`src/core/config/comprovantes.ts`) o anexo fica desligado. Envio por route handler, um arquivo
+  por pedido (`/solicitar-custo/[eventoId]/comprovantes`): server action tem limite de 1 MB e o corpo que passa pelo middleware
+  é cortado em 10 MB. Fluxos em `src/fluxos/custos/comprovantes.ts`; histórico com a entidade `COMPROVANTE_CUSTO`.
 - **Mensagem de custo aprovado:** `domain/mensagens.ts` (`mensagemDeCustoAprovado`), copiada pelo time no painel da solicitação aprovada.
 
 ### 6.8 Configurações — `/configuracoes/regras-de-custo`, `/vagas`, `/modelos-de-copy`, `/locais`
@@ -982,7 +990,8 @@ Onde a doc 08 diverge, vale o que está aqui.
 | Aprovação sem login | Registra data/hora e o usuário de teste. |
 | Motivo em custos | Obrigatório para reprovar e para aprovar com alerta crítico; opcional no resto. |
 | Item 7, janela de voo (24/11/2026) | O D-90 virou configurável em Configurações › Aviso de voos (7 a 365 dias, padrão 90). O "atrasado" deixou de ser 60 fixo: é dois terços do aviso, no máximo 60 (§4.5). O aviso é só na tela, para a líder e o time. |
-| Formulário de custo do staff (24/11/2026) | `/solicitar-custo` substitui o Google Forms: aberto do primeiro dia do evento até 5 dias depois do último (inclusive, fuso de São Paulo); fora do prazo, só o time registra. Só deslocamento e despesas (sem remuneração nem alimentação, que continuam entrando pelo registro do time). Tipo de combustível e data do evento ficam de fora; comprovante em arquivo pendente (sem armazenamento). Correção pelo staff só da reprovada, até 5 dias depois da reprovação. Detalhe na doc 08 §11.4. |
+| Formulário de custo do staff (24/11/2026) | `/solicitar-custo` substitui o Google Forms: aberto do primeiro dia do evento até 5 dias depois do último (inclusive, fuso de São Paulo); fora do prazo, só o time registra. A pessoa informa só deslocamento e despesas; remuneração e alimentação são fixas e entram sozinhas pela regra (quantidade 1, como a tela do time sugere). Tipo de combustível e data do evento ficam de fora. Correção pelo staff só da reprovada, até 5 dias depois da reprovação. Detalhe na doc 08 §11.4. |
+| Comprovante do custo (24/11/2026) | Anexo no formulário do staff: até 3 arquivos de 8 MB (JPEG, PNG, WebP ou PDF, conferidos pelos bytes), obrigatório quando há deslocamento ou despesa. Storage do Supabase, bucket privado `eventos-comprovantes`, pelo protocolo S3 com chave de acesso S3 (nunca a `service_role`); leitura por rota autenticada que redireciona para URL pré-assinada de 5 minutos. Sem as variáveis, o anexo fica desligado e o formulário funciona sem o campo. |
 | Custo aprovado (24/11/2026) | Mensagem pronta para copiar e mandar no WhatsApp (primeiro nome, evento, protocolo, valor). O sistema não envia. **Construção futura:** envio automático pelo WhatsApp. |
 | Pessoa nova | Sem botão "Nova pessoa" (cadastro é do GH); no local, usar as 60 pessoas semeadas. |
 | WhatsApp | Só copiar e marcar como enviada; botão do WhatsApp inativo com "em breve". |

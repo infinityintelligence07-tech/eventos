@@ -174,6 +174,10 @@ Só a Patricia recebe `EVENTOS_LIDER` (doc 09 §13.1). Na demo somente leitura o
   `NEXT_PUBLIC_SUPABASE_URL=https://rpnyvqinqdvqwripqlxj.supabase.co` e
   `NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_6xd4FjpJcUNtKcpUYoRsKg_sctjPGE4` (chave pública).
   Nunca `EVENTOS_ESCRITA`, `DATABASE_URL_ESCRITA` nem a `service_role`.
+
+  Para ligar o anexo de comprovantes no formulário de custo do staff (doc 08 §11.4; sem elas o formulário funciona sem o
+  campo): `COMPROVANTES_S3_ENDPOINT`, `COMPROVANTES_S3_REGIAO`, `COMPROVANTES_S3_BUCKET`, `COMPROVANTES_S3_CHAVE_ID` e
+  `COMPROVANTES_S3_CHAVE_SEGREDO`. Passo a passo no README ("Comprovantes de custo").
 - **Domínio:** `eventos.iamcontrol.com.br` → porta `3000`, HTTPS ligado.
 - **Worker:** não precisa para a demo. A sincronização de turmas pode continuar à mão (`npm run sync:turmas`).
   O worker com papel próprio (`app_eventos_worker`, R7) fica para a próxima rodada.

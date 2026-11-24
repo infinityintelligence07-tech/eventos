@@ -17,10 +17,9 @@ describe("formulário de custo do staff", () => {
     expect(lido).toEqual({ eventoId, deslocamentos: [], despesas: [{ descricao: "Ônibus", valorCentavos: 8000 }] });
   });
 
-  it("exige pelo menos um deslocamento ou uma despesa", () => {
-    const vazio = solicitarCustoSchema.safeParse({ eventoId });
-    expect(vazio.success).toBe(false);
-    expect(vazio.error?.issues[0]?.message).toBe("Informe pelo menos um deslocamento de carro ou uma despesa.");
+  it("sem deslocamento e sem despesa é válido aqui: a solicitação pode levar só os itens fixos (quem recusa o vazio é o serviço)", () => {
+    expect(solicitarCustoSchema.parse({ eventoId })).toEqual({ eventoId, deslocamentos: [], despesas: [] });
+    expect(solicitarCustoSchema.safeParse({ eventoId, deslocamentos: Array.from({ length: 11 }, () => deslocamento) }).success).toBe(false);
   });
 
   it("consumo zero e despesa sem descrição são recusados", () => {

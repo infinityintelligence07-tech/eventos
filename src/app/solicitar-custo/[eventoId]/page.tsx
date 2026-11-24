@@ -7,11 +7,11 @@ import { dataCurta, dinheiro, distancia } from "@/app/(time)/_componentes/ui/for
 import { identidadeDaSessao } from "@/app/(time)/_servidor/usuario-atual";
 import { carregarFormularioDoStaff, type SolicitacaoDoStaff, type SugestoesDoStaff } from "@/fluxos/custos";
 import { staffDaIdentidade } from "@/fluxos/pessoas";
-import { caminhoDoFormularioDeCusto, DIAS_DE_PRAZO_DO_FORMULARIO } from "@/modules/custos";
+import { caminhoDoFormularioDeCusto, type ComprovanteDaTela, DIAS_DE_PRAZO_DO_FORMULARIO, MAXIMO_DE_COMPROVANTES, TAMANHO_MAXIMO_DO_COMPROVANTE, tamanhoLegivel } from "@/modules/custos";
 
 import { MolduraDeEntrada } from "../../login/_componentes/moldura";
 import { calcularPreviaDoStaffAcao, corrigirMeuCustoAcao, solicitarCustoAcao } from "../acoes";
-import { type DeslocamentoDoFormulario, FormularioDeCusto } from "../_componentes/formulario";
+import { type AnexoDoFormulario, type DeslocamentoDoFormulario, FormularioDeCusto } from "../_componentes/formulario";
 import { NaoEhStaff, nomeDoEvento, periodoDoEvento, Sair, Situacao, situacaoParaOStaff } from "../_componentes/partes";
 
 export const dynamic = "force-dynamic";
@@ -38,8 +38,19 @@ function deslocamentoNovo(sugestoes: SugestoesDoStaff): DeslocamentoDoFormulario
   return { origem: "", destino: "", idaVolta: true, km: "", consumoKmL: decimal(sugestoes.consumoKmL), precoLitroCentavos: campoDeDinheiro(sugestoes.precoLitroCentavos), pedagioCentavos: "" };
 }
 
-/** O que foi enviado: deslocamentos, despesas, itens do time e total. */
-function Enviado({ solicitacao }: { solicitacao: SolicitacaoDoStaff }) {
+const enderecoDosComprovantes = (eventoId: string) => `${caminhoDoFormularioDeCusto(eventoId)}/comprovantes`;
+
+/** O que o formulário precisa para anexar: só id, nome e tamanho de cada arquivo vão para o navegador. */
+function anexoDoFormulario(eventoId: string, comprovantes: ComprovanteDaTela[]): AnexoDoFormulario {
+  return {
+    endereco: enderecoDosComprovantes(eventoId),
+    comprovantes: comprovantes.map(({ id, nome, tamanhoBytes }) => ({ id, nome, tamanhoBytes })),
+    limites: { maximo: MAXIMO_DE_COMPROVANTES, tamanhoMaximoBytes: TAMANHO_MAXIMO_DO_COMPROVANTE },
+  };
+}
+
+/** O que foi enviado: deslocamentos, despesas, valores fixos, comprovantes e total. */
+function Enviado({ solicitacao, eventoId }: { solicitacao: SolicitacaoDoStaff; eventoId: string }) {
   return (
     <div className="custo-enviado">
       {solicitacao.deslocamentos.map((deslocamento) => (
@@ -62,13 +73,21 @@ function Enviado({ solicitacao }: { solicitacao: SolicitacaoDoStaff }) {
           <span>{dinheiro(despesa.valorCentavos)}</span>
         </p>
       ))}
-      {solicitacao.itensDoTime.map((item, indice) => (
+      {solicitacao.itensFixos.map((item, indice) => (
         <p key={indice} className="custo-bloco custo-linha">
           <span>
             {item.descricao}
-            <small> · lançado pelo time</small>
+            <small> · {item.origem === "REGRA" ? "valor fixo do evento" : "lançado pelo time"}</small>
           </span>
           <span>{dinheiro(item.totalCentavos)}</span>
+        </p>
+      ))}
+      {solicitacao.comprovantes.map((comprovante) => (
+        <p key={comprovante.id} className="custo-bloco custo-linha">
+          <a href={`${enderecoDosComprovantes(eventoId)}/${comprovante.id}`} target="_blank" rel="noreferrer noopener">
+            Comprovante: {comprovante.nome}
+          </a>
+          <small>{tamanhoLegivel(comprovante.tamanhoBytes)}</small>
         </p>
       ))}
       <p className="custo-total">
@@ -141,8 +160,9 @@ export default async function PaginaSolicitarCustoDoEvento({
       return (
         <Pagina titulo={nomeDoEvento(carregado.evento)}>
           <p className="login-lead">
-            Evento de {periodoDoEvento(carregado.evento)}. Informe o seu deslocamento; o valor é calculado pelas regras de custo. Envie até {dataCurta(carregado.prazo.fechaEm)}: depois de
-            enviar, não dá para mandar outra solicitação deste evento.
+            Evento de {periodoDoEvento(carregado.evento)}. Informe o seu deslocamento; o valor é calculado pelas regras de custo
+            {carregado.fixos.length > 0 ? " e os valores fixos do evento entram sozinhos" : ""}. Envie até {dataCurta(carregado.prazo.fechaEm)}: depois de enviar, não dá para mandar outra
+            solicitação deste evento.
           </p>
           {carregado.sugestoes.consumoKmL === null && (
             <p className="cadastro-ajuda">
@@ -157,12 +177,14 @@ export default async function PaginaSolicitarCustoDoEvento({
             deslocamentosIniciais={[deslocamentoNovo(carregado.sugestoes)]}
             despesasIniciais={[]}
             deslocamentoNovo={deslocamentoNovo(carregado.sugestoes)}
+            fixos={carregado.fixos}
+            anexo={carregado.anexo ? anexoDoFormulario(carregado.evento.id, carregado.anexo.comprovantes) : null}
           />
         </Pagina>
       );
 
     case "ENVIADA": {
-      const { evento, solicitacao, correcao, sugestoes } = carregado;
+      const { evento, solicitacao, correcao, sugestoes, anexoLigado } = carregado;
       const aqui = caminhoDoFormularioDeCusto(evento.id);
 
       if (correcao.pode && primeiro(busca.corrigir) === "1") {
@@ -170,7 +192,7 @@ export default async function PaginaSolicitarCustoDoEvento({
           <Pagina titulo={`Corrigir ${solicitacao.protocolo}`}>
             <p className="login-lead">{nomeDoEvento(evento)}. Ajuste o que o time apontou e reenvie: a solicitação volta para a conferência.</p>
             {solicitacao.motivoDaReprovacao && <p className="login-error">Motivo da reprovação: {solicitacao.motivoDaReprovacao}</p>}
-            {solicitacao.itensDoTime.length > 0 && <p className="cadastro-ajuda">Os itens lançados pelo time continuam como estão; você altera o deslocamento e as suas despesas.</p>}
+            {solicitacao.itensFixos.length > 0 && <p className="cadastro-ajuda">Os valores fixos do evento e os itens lançados pelo time continuam como estão; você altera o deslocamento, as suas despesas e os comprovantes.</p>}
             <FormularioDeCusto
               acao={corrigirMeuCustoAcao}
               calcularPrevia={calcularPreviaDoStaffAcao}
@@ -188,7 +210,8 @@ export default async function PaginaSolicitarCustoDoEvento({
               }))}
               despesasIniciais={solicitacao.despesas.map((despesa) => ({ descricao: despesa.descricao, valorCentavos: campoDeDinheiro(despesa.valorCentavos) }))}
               deslocamentoNovo={deslocamentoNovo(sugestoes)}
-              totalDoTimeCentavos={solicitacao.itensDoTime.reduce((soma, item) => soma + item.totalCentavos, 0)}
+              fixos={solicitacao.itensFixos}
+              anexo={anexoLigado ? anexoDoFormulario(evento.id, solicitacao.comprovantes) : null}
               cancelarHref={aqui}
             />
           </Pagina>
@@ -242,7 +265,7 @@ export default async function PaginaSolicitarCustoDoEvento({
             </>
           )}
 
-          <Enviado solicitacao={solicitacao} />
+          <Enviado solicitacao={solicitacao} eventoId={evento.id} />
         </Pagina>
       );
     }

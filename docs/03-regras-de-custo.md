@@ -42,6 +42,12 @@ Dois eixos independentes:
   Depois disso, só o time registra em nome da pessoa.
 - A pessoa informa o deslocamento de carro (km, consumo, preço do litro, pedágio) e outras despesas do deslocamento
   (estacionamento, ônibus…). O valor é calculado pelas regras desta página; ela não digita o total.
+- **Remuneração e alimentação são fixas e o staff não pede** (decidido em 24/11/2026): entram sozinhas na solicitação
+  que ele envia, pelas mesmas regras e com o mesmo valor inicial do registro do time (quantidade 1). Sem regra para o
+  tipo do evento, nada entra. Regra por hora (Masterclass) ou por dia entra com 1 unidade: o time confere a quantidade.
+  Quem não foi de carro e não teve despesa envia só com os fixos.
+- **Comprovante** (foto ou PDF): obrigatório quando há deslocamento ou despesa; até 3 arquivos de 8 MB por solicitação.
+  Fica desligado enquanto o armazenamento não estiver configurado (variáveis `COMPROVANTES_S3_*`).
 - Reprovada, a pessoa corrige e reenvia até 5 dias depois da reprovação.
 - Aprovada, o time copia a mensagem de "custo aprovado" e manda pelo WhatsApp. Envio automático: construção futura.
 

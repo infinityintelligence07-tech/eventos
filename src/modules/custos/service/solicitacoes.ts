@@ -2,7 +2,7 @@ import { exigeMotivo, mensagemDaTransicaoInvalida, type AcaoDeAuditoria, type Ca
 import { calcularSolicitacao, type DeslocamentoCalculado, type NivelDeExcecao, type SolicitacaoCalculada } from "../domain/calculo";
 import { CustosMudouError, ErroDosCustos, SolicitacaoJaExisteError } from "../domain/erros";
 import { DIAS_DE_PRAZO_DO_FORMULARIO, type PeriodoDoEvento, podeCorrigirNoPrazo, prazoDoFormulario, situacaoDoPrazo } from "../domain/prazo";
-import { type RegraDeCusto, regrasAplicaveis, regrasDoCalculo } from "../domain/regras";
+import { type ItemFixo, itensFixosDasRegras, type RegraDeCusto, regrasAplicaveis, regrasDoCalculo } from "../domain/regras";
 import type {
   AprovarSolicitacao,
   CorrigirMeuCusto,
@@ -25,8 +25,18 @@ import { type AcaoSegregada, SegregacaoDeFuncoesError, type ViolacaoDeSegregacao
  * `dispensaSegregacao`: só o dono do sistema (docs/10); a regra dispensada vai para o registro_acao.
  * `propria`: quem envia é a própria pessoa (formulário do staff). Grava sem `registrado_por`, o registro_acao leva
  * `propria: true` e vale o prazo do formulário.
+ * `comprovanteObrigatorio`: o anexo está ligado neste ambiente. Aí o envio da própria pessoa com deslocamento ou
+ * despesa exige pelo menos um comprovante anexado.
  */
-export type ContextoDaAcao = { usuarioId: string; pessoaId: string | null; email?: string | null; dispensaSegregacao?: boolean; propria?: boolean; instante: Date };
+export type ContextoDaAcao = {
+  usuarioId: string;
+  pessoaId: string | null;
+  email?: string | null;
+  dispensaSegregacao?: boolean;
+  propria?: boolean;
+  comprovanteObrigatorio?: boolean;
+  instante: Date;
+};
 
 /** `data` e `dataFim`: primeiro e último dia do evento em São Paulo (AAAA-MM-DD). */
 export type EventoDoCusto = { id: string; codigo: string | null; nome: string; tipoEventoId: string | null; uf: string | null; data: string; dataFim: string; cancelado: boolean };
@@ -52,6 +62,14 @@ export type RepositorioSolicitacoes = {
   convocacaoDaPessoa(eventoId: string, pessoaId: string): Promise<string | null>;
   /** Trava a solicitação da pessoa no evento, se existir (só dentro da transação de escrita). */
   solicitacaoDaPessoa(eventoId: string, pessoaId: string): Promise<{ id: string; protocolo: string } | null>;
+  /** O mesmo, sem travar: serve também à leitura. */
+  situacaoDaSolicitacaoDaPessoa(eventoId: string, pessoaId: string): Promise<{ id: string; auditoria: SituacaoDaSolicitacao["auditoria"]; auditadoEm: Date | null } | null>;
+  /** Uma transação por vez mexe na solicitação e nos anexos da pessoa no evento (só dentro da transação de escrita). */
+  travarPessoaNoEvento(eventoId: string, pessoaId: string): Promise<void>;
+  /** Comprovantes que a pessoa anexou para o evento (com ou sem solicitação). */
+  contarComprovantes(eventoId: string, pessoaId: string): Promise<number>;
+  /** Os anexos enviados antes de a solicitação existir passam a ser dela. Devolve quantos ela tem. */
+  vincularComprovantes(eventoId: string, pessoaId: string, solicitacaoId: string): Promise<number>;
   regras(): Promise<RegraDeCusto[]>;
   inserirSolicitacao(solicitacao: {
     eventoId: string;
@@ -137,12 +155,12 @@ function destino(solicitacao: SolicitacaoTravada, acao: AcaoDeAuditoria): Situac
   return transicao.para;
 }
 
-const periodoDoEvento = (evento: EventoDoCusto): PeriodoDoEvento => ({ dataInicio: evento.data, dataFim: evento.dataFim });
+export const periodoDoEvento = (evento: EventoDoCusto): PeriodoDoEvento => ({ dataInicio: evento.data, dataFim: evento.dataFim });
 
 const diaEMes = (dia: string) => `${dia.slice(8, 10)}/${dia.slice(5, 7)}`;
 
 /** O formulário do staff só aceita envio do primeiro dia do evento até 5 dias depois do último (docs/08 §11.4). */
-function exigirPrazoAberto(evento: EventoDoCusto, instante: Date): void {
+export function exigirPrazoAberto(evento: EventoDoCusto, instante: Date): void {
   const periodo = periodoDoEvento(evento);
   const { abreEm, fechaEm } = prazoDoFormulario(periodo);
   const situacao = situacaoDoPrazo(periodo, instante);
@@ -165,12 +183,16 @@ function exigirPrazoAberto(evento: EventoDoCusto, instante: Date): void {
 /** A autoria no registro_acao: em nome da pessoa (time) ou `propria: true` (a pessoa mesma). */
 const autoria = (propria: boolean, pessoaId: string) => ({ emNomeDePessoaId: propria ? null : pessoaId, marca: propria ? { propria: true } : {} });
 
+const MENSAGEM_SEM_COMPROVANTE = "Anexe pelo menos um comprovante do deslocamento ou das despesas (foto ou PDF) antes de enviar.";
+
 export async function registrarSolicitacao(
   repo: RepositorioSolicitacoes,
   entrada: RegistrarSolicitacao,
-  { usuarioId, instante, propria = false }: ContextoDaAcao,
+  { usuarioId, instante, propria = false, comprovanteObrigatorio = false }: ContextoDaAcao,
 ): Promise<{ id: string; protocolo: string; nivel: NivelDeExcecao; totalCentavos: number }> {
   const evento = await eventoDoCusto(repo, entrada.eventoId);
+  // Antes de olhar se já existe: dois envios ao mesmo tempo esperam um pelo outro, e um anexo em andamento também.
+  await repo.travarPessoaNoEvento(entrada.eventoId, entrada.pessoaId);
   const convocacaoId = await repo.convocacaoDaPessoa(entrada.eventoId, entrada.pessoaId);
   if (!convocacaoId) throw new ErroDosCustos(propria ? "Você não está na escala deste evento. Se serviu nele, fale com o time de eventos." : "Esta pessoa não esteve na escala deste evento.");
   const existente = await repo.solicitacaoDaPessoa(entrada.eventoId, entrada.pessoaId);
@@ -179,6 +201,7 @@ export async function registrarSolicitacao(
     // Evento cancelado não abre o formulário do staff; o time ainda pode registrar em nome da pessoa.
     if (evento.cancelado) throw new ErroDosCustos("Este evento foi cancelado. Se você teve custo com ele, fale com o time de eventos.");
     exigirPrazoAberto(evento, instante);
+    if (comprovanteObrigatorio && (await repo.contarComprovantes(entrada.eventoId, entrada.pessoaId)) === 0) throw new ErroDosCustos(MENSAGEM_SEM_COMPROVANTE);
   }
 
   const { calculada, linhas } = await calcularPelasRegras(repo, evento, entrada);
@@ -192,6 +215,7 @@ export async function registrarSolicitacao(
     instante,
   });
   await repo.gravarLinhas(solicitacao.id, linhas, instante);
+  const comprovantes = await repo.vincularComprovantes(entrada.eventoId, entrada.pessoaId, solicitacao.id);
   const { emNomeDePessoaId, marca } = autoria(propria, entrada.pessoaId);
   await repo.registrar({
     solicitacaoId: solicitacao.id,
@@ -200,7 +224,7 @@ export async function registrarSolicitacao(
     statusPara: "PENDENTE",
     emNomeDePessoaId,
     usuarioId,
-    dados: { protocolo: solicitacao.protocolo, totalCentavos: calculada.totalCentavos, nivel: calculada.nivel, ...marca },
+    dados: { protocolo: solicitacao.protocolo, totalCentavos: calculada.totalCentavos, nivel: calculada.nivel, ...(comprovantes > 0 ? { comprovantes } : {}), ...marca },
   });
   return { ...solicitacao, nivel: calculada.nivel, totalCentavos: calculada.totalCentavos };
 }
@@ -253,23 +277,43 @@ const itensDasDespesas = (despesas: EntradaDeDespesa[]): EntradaDeItem[] =>
 /** Quem envia pelo formulário do staff: a pessoa vem da sessão. */
 export type ContextoDoStaff = ContextoDaAcao & { pessoaId: string };
 
+const MENSAGEM_SEM_LINHA_DO_STAFF = "Informe pelo menos um deslocamento de carro ou uma despesa.";
+
+const itemDoFixo = ({ categoria, regraCustoId, descricao, quantidade, valorCentavos }: ItemFixo): EntradaDeItem => ({ categoria, regraCustoId, descricao, quantidade, valorCentavos });
+
+/**
+ * Remuneração e alimentação que a regra de custo dá ao evento (tipo, UF e data). São fixas: o staff não pede, e
+ * entram sozinhas na solicitação que ele envia, como itens da regra. Sem regra para o evento, lista vazia.
+ */
+export async function itensFixosDoEvento(repo: Pick<RepositorioSolicitacoes, "regras">, evento: EventoDoCusto): Promise<ItemFixo[]> {
+  return itensFixosDasRegras(regrasAplicaveis(await repo.regras(), { tipoEventoId: evento.tipoEventoId, uf: evento.uf, data: evento.data }));
+}
+
 /**
  * A própria pessoa envia a solicitação do evento em que está na escala, dentro do prazo. É o mesmo registro do
- * time (validação, cálculo e protocolo), sem `registrado_por`.
+ * time (validação, cálculo e protocolo), sem `registrado_por`. Ela informa só deslocamento e despesas; a remuneração
+ * e a alimentação fixas do evento entram como no registro do time. Sem deslocamento nem despesa, a solicitação leva
+ * só os itens fixos (e não pede comprovante: não há gasto a comprovar); sem item fixo também, não há o que enviar.
  */
-export function solicitarCusto(repo: RepositorioSolicitacoes, entrada: SolicitarCusto, contexto: ContextoDoStaff) {
+export async function solicitarCusto(repo: RepositorioSolicitacoes, entrada: SolicitarCusto, contexto: ContextoDoStaff) {
+  const evento = await eventoDoCusto(repo, entrada.eventoId);
+  const fixos = (await itensFixosDoEvento(repo, evento)).map(itemDoFixo);
+  const temGasto = entrada.deslocamentos.length + entrada.despesas.length > 0;
+  if (!temGasto && fixos.length === 0) throw new ErroDosCustos(MENSAGEM_SEM_LINHA_DO_STAFF);
   return registrarSolicitacao(
     repo,
-    { eventoId: entrada.eventoId, pessoaId: contexto.pessoaId, deslocamentos: entrada.deslocamentos, itens: itensDasDespesas(entrada.despesas) },
-    { ...contexto, propria: true },
+    { eventoId: entrada.eventoId, pessoaId: contexto.pessoaId, deslocamentos: entrada.deslocamentos, itens: [...fixos, ...itensDasDespesas(entrada.despesas)] },
+    { ...contexto, propria: true, comprovanteObrigatorio: Boolean(contexto.comprovanteObrigatorio) && temGasto },
   );
 }
 
 /**
  * A própria pessoa corrige a solicitação reprovada e ela volta para a fila. Troca os deslocamentos e as despesas
- * que ela declara; os itens lançados pelo time (remuneração, alimentação…) ficam como estão.
+ * que ela declara; os itens fixos da regra e os lançados pelo time (remuneração, alimentação…) ficam como estão.
+ * Os comprovantes são da solicitação e não das linhas: sobrevivem à correção.
  */
 export async function corrigirMeuCusto(repo: RepositorioSolicitacoes, entrada: CorrigirMeuCusto, contexto: ContextoDoStaff): Promise<SolicitacaoTravada> {
+  await repo.travarPessoaNoEvento(entrada.eventoId, contexto.pessoaId);
   const existente = await repo.solicitacaoDaPessoa(entrada.eventoId, contexto.pessoaId);
   if (!existente) throw new ErroDosCustos("Você ainda não enviou solicitação para este evento. Recarregue a página.");
   const solicitacao = await travada(repo, existente.id);
@@ -279,6 +323,9 @@ export async function corrigirMeuCusto(repo: RepositorioSolicitacoes, entrada: C
     throw new ErroDosCustos("O prazo para corrigir esta solicitação acabou. Fale com o time de eventos.");
   }
   const doTime = (await repo.itensDaSolicitacao(solicitacao.id)).filter((item) => item.categoria !== CATEGORIA_DA_DESPESA_DO_STAFF);
+  const temGasto = entrada.deslocamentos.length + entrada.despesas.length > 0;
+  if (!temGasto && doTime.length === 0) throw new ErroDosCustos(MENSAGEM_SEM_LINHA_DO_STAFF);
+  if (contexto.comprovanteObrigatorio && temGasto && (await repo.contarComprovantes(entrada.eventoId, contexto.pessoaId)) === 0) throw new ErroDosCustos(MENSAGEM_SEM_COMPROVANTE);
   return aplicarCorrecao(
     repo,
     solicitacao,

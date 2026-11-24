@@ -562,7 +562,15 @@ a[class*="situacao-"]:hover {
 .custo-aviso { margin: 0; }
 .custo-link-botao { box-sizing: border-box; margin: 0 0 10px; text-decoration: none; }
 .custo-voltar { margin: 18px 0 0; font-size: 13px; }
-.custo-voltar a, .login-form .cadastro-ajuda a { color: #9fbcff; }
+.custo-voltar a, .login-form .cadastro-ajuda a, .custo-linha a, .custo-anexo a { color: #9fbcff; }
+/* Comprovantes: nome do arquivo (link), tamanho e remover; o campo de arquivo fica escondido atrás do botão. */
+.custo-anexo { grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 10px 14px; }
+.custo-anexo a { overflow-wrap: anywhere; font-size: 14px; }
+.custo-anexo small { font-size: 12.5px; color: rgba(235, 235, 245, 0.6); white-space: nowrap; }
+.custo-anexo .custo-botao-texto { justify-self: end; }
+.custo-anexar { display: flex; align-items: center; justify-content: center; position: relative; }
+.custo-anexar input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.custo-anexar:focus-within { outline: 2px solid var(--lg-blue-light); outline-offset: 2px; }
 .login-error {
   margin: 0 0 14px;
   padding: 10px 12px;

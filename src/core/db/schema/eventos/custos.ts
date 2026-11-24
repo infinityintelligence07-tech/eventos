@@ -208,3 +208,38 @@ export const custoItem = eventosSchema.table(
     check("custo_item_valor_check", sql`${table.valorCentavos} >= 0`),
   ],
 );
+
+// Comprovantes anexados pela pessoa (docs/08 §11.4). São da solicitação, não de cada linha: a correção apaga e regrava
+// deslocamentos e itens, e os anexos ficam. O arquivo vive no armazenamento (Storage); aqui fica só a chave dele.
+// evento_id + pessoa_id identificam de quem é antes de a solicitação existir (ela é única por evento e pessoa);
+// solicitacao_id é preenchido quando a solicitação é registrada.
+export const comprovanteCusto = eventosSchema.table(
+  "comprovante_custo",
+  {
+    id: uuid("id").default(sql`public.uuid_v7()`).primaryKey(),
+    eventoId: uuid("evento_id")
+      .notNull()
+      .references(() => evento.id, { onDelete: "restrict" }),
+    pessoaId: uuid("pessoa_id")
+      .notNull()
+      .references(() => pessoa.id, { onDelete: "restrict" }),
+    solicitacaoId: uuid("solicitacao_id").references(() => solicitacaoCusto.id, { onDelete: "set null" }),
+    // Caminho do objeto no armazenamento, gerado no servidor (sem o nome original).
+    chave: text("chave").notNull().unique(),
+    nomeOriginal: text("nome_original").notNull(),
+    // Tipo conferido pelos primeiros bytes do arquivo, não pelo que o navegador disse.
+    tipo: text("tipo").notNull(),
+    tamanhoBytes: integer("tamanho_bytes").notNull(),
+    enviadoPor: uuid("enviado_por").references(() => usuario.id, { onDelete: "set null" }),
+    criadoEm: timestamp("criado_em", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("comprovante_custo_evento_pessoa_idx").on(table.eventoId, table.pessoaId),
+    index("comprovante_custo_pessoa_idx").on(table.pessoaId),
+    index("comprovante_custo_solicitacao_idx").on(table.solicitacaoId),
+    index("comprovante_custo_enviado_por_idx").on(table.enviadoPor),
+    check("comprovante_custo_tipo_check", sql`${table.tipo} IN ('image/jpeg', 'image/png', 'image/webp', 'application/pdf')`),
+    check("comprovante_custo_tamanho_check", sql`${table.tamanhoBytes} > 0`),
+    check("comprovante_custo_nome_check", sql`length(${table.nomeOriginal}) BETWEEN 1 AND 200`),
+  ],
+);

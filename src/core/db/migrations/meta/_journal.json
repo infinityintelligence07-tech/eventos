@@ -99,6 +99,13 @@
       "when": 1795532029457,
       "tag": "0013_escala-hotel-situacao-e-funcoes",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1795535234945,
+      "tag": "0014_comprovante-custo",
+      "breakpoints": true
     }
   ]
 }

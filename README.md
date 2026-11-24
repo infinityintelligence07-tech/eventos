@@ -129,6 +129,31 @@ docker build --target worker -t eventos-worker .  # pg-boss
 Variáveis: `DATABASE_URL`, `WORKER_DATABASE_URL` (opcional, conexão direta para o worker),
 `IAM_CONTROL_URL`, `IAM_CONTROL_EVENTOS_TOKEN` (worker), `LOG_LEVEL`; no web, também `NEXT_PUBLIC_SUPABASE_URL`,
 `NEXT_PUBLIC_SUPABASE_ANON_KEY` e `EVENTOS_URL_PUBLICA` (ver "Login"). Nunca `EVENTOS_MODO=local` nem `SUPABASE_SERVICE_ROLE_KEY`; `EVENTOS_MODO=demo` só na demo sem login (docs/10).
+Opcionais no web, para o anexo de comprovantes: as cinco `COMPROVANTES_S3_*` (abaixo).
+
+### Comprovantes de custo
+
+O formulário de custo do staff (`/solicitar-custo`) aceita foto ou PDF do comprovante. Os arquivos ficam no Storage do
+Supabase, num bucket privado, e o servidor fala com ele pelo protocolo S3 (assinatura feita no próprio código, sem
+biblioteca nova). **Sem as variáveis, o anexo fica desligado** e o formulário funciona sem o campo.
+
+Para ligar em produção:
+
+1. Supabase › Storage › New bucket: nome `eventos-comprovantes`, **privado** (Public bucket desligado). Sem política
+   nenhuma: só a chave S3 acessa.
+2. Supabase › Storage › S3 Connection (em Settings): anote o **Endpoint** e a **Region**, e crie uma **access key**.
+   O segredo aparece só nessa hora. É uma chave do Storage: não é a `service_role` e não acessa o banco.
+3. No serviço web (Easypanel), defina:
+   - `COMPROVANTES_S3_ENDPOINT`: o endpoint S3 do projeto, sem o bucket;
+   - `COMPROVANTES_S3_REGIAO`: a região mostrada na mesma tela;
+   - `COMPROVANTES_S3_BUCKET`: `eventos-comprovantes`;
+   - `COMPROVANTES_S3_CHAVE_ID` e `COMPROVANTES_S3_CHAVE_SEGREDO`: a access key criada.
+4. Aplique a migration `0014_comprovante-custo` (`npm run db:migrate`) antes de publicar o código.
+5. Confira a credencial, com as mesmas variáveis no ambiente: `npm run comprovantes:testar`. Ele grava, lê pela URL
+   pré-assinada, confere que o bucket é privado e apaga um arquivo de teste. Imprime só `ok` ou a etapa que falhou.
+6. Reinicie o serviço web. O campo "Comprovantes" aparece no formulário do staff.
+
+No `npm run dev:local` não precisa de nada disso: os arquivos vão para `.banco-local/comprovantes`.
 
 ## Banco
 

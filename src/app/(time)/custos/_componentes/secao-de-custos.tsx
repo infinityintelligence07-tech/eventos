@@ -3,7 +3,7 @@ import Link from "next/link";
 import { z } from "zod";
 
 import type { FilaCarregada, LinhaDaFila, SolicitacaoCarregada } from "@/fluxos/custos";
-import { DIAS_DE_PRAZO_DO_FORMULARIO, mensagemDeCustoAprovado, type NivelDeExcecao, primeiroNome, rotuloDaCategoriaDoItem, type StatusAuditoria, textoDoFinanceiro } from "@/modules/custos";
+import { DIAS_DE_PRAZO_DO_FORMULARIO, mensagemDeCustoAprovado, type NivelDeExcecao, primeiroNome, rotuloDaCategoriaDoItem, type StatusAuditoria, tamanhoLegivel, textoDoFinanceiro } from "@/modules/custos";
 import { BotaoCopiar, PainelPelaUrl } from "@/app/(time)/_componentes/ui";
 
 import { Aviso, FaixaSomenteLeitura } from "../../_componentes/ui/aviso";
@@ -109,7 +109,7 @@ function MensagemDeAprovado({ solicitacao }: { solicitacao: SolicitacaoCarregada
           Copiar mensagem
         </BotaoCopiar>
       </div>
-      <p className="whitespace-pre-wrap rounded-[var(--ds-radius-md)] bg-[var(--ds-surface-2)] px-4 py-3 text-[13px]">{mensagem}</p>
+      <p className="sem-caixa-alta whitespace-pre-wrap rounded-[var(--ds-radius-md)] bg-[var(--ds-surface-2)] px-4 py-3 text-[13px]">{mensagem}</p>
     </section>
   );
 }
@@ -321,6 +321,28 @@ function PainelDaSolicitacao({
                 ))}
               </tbody>
             </Tabela>
+          )}
+        </section>
+
+        <section aria-labelledby="titulo-comprovantes">
+          <h3 id="titulo-comprovantes" className="mb-2 text-[15px] font-semibold">
+            Comprovantes
+          </h3>
+          {solicitacao.comprovantes.length === 0 ? (
+            <p className="text-[13px] text-[var(--ds-label-2)]">Nenhum comprovante anexado.</p>
+          ) : (
+            <ul className="flex flex-col gap-1 text-[13px]">
+              {solicitacao.comprovantes.map((comprovante) => (
+                <li key={comprovante.id} className="flex flex-wrap items-baseline gap-x-2">
+                  <a href={`/custos/comprovantes/${comprovante.id}`} target="_blank" rel="noreferrer noopener" className="break-all font-medium text-[var(--ds-tint-text)] hover:underline">
+                    {comprovante.nome}
+                  </a>
+                  <span className="text-[12px] text-[var(--ds-label-2)]">
+                    {tamanhoLegivel(comprovante.tamanhoBytes)} · anexado em {dataEHora(comprovante.criadoEm)}
+                  </span>
+                </li>
+              ))}
+            </ul>
           )}
         </section>
 
