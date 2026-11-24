@@ -440,7 +440,7 @@ Acrescentar `scroll-padding-bottom` no `main` com a altura da barra, para o foco
 | Copys desatualizadas | "Os dados mudaram depois do envio. Copie e envie de novo." | nome · código · o que mudou | Comunicação do evento |
 | Pendências da sincronização | "Eventos sem polo cadastrado ou com código repetido no IAM Control." | código ou nome da turma · motivo | Evento · Resumo |
 | Custos para auditar | "Solicitações de custo esperando aprovação do time." | protocolo · nome · chip "Crítico"/"Alerta" | Custos, com o painel aberto |
-| Voos a pedir à SDC | "Eventos em 90 dias ou menos com pessoas que vão de avião e ainda sem pedido à SDC." (os dias são os de Configurações › Aviso de voos, §12.5) | por evento na janela: código · "4 passagens a pedir" · "faltam 75 dias" (ou "atrasado · faltam 48 dias"); o contador é o total de passagens | Voos, filtrado pelo evento e por "A pedir". Aparece para a líder e para o time; é o aviso de voos, só na tela |
+| Eventos sem pedido de voo | "Eventos em 90 dias ou menos que ainda não têm nenhum pedido de voo à SDC. Se o evento não precisa de voo, marque isso em Voos e ele sai daqui." (os dias são os de Configurações › Aviso de voos, §12.5) | por evento no prazo: código · "faltam 75 dias" (ou "atrasado · faltam 48 dias"); o contador é o número de eventos | Voos, filtrado pelo evento. Aparece para a líder e para o time; é o aviso de voos, só na tela. Ficam de fora os eventos com pelo menos um pedido, os marcados como "não precisa de voo" e as Masterclasses |
 
    Cartão com contador 0 continua visível, com a pílula verde "0" e o texto "Nada pendente." — mostra que está tudo em dia.
    Ordem dentro de cada cartão: o mais urgente primeiro (data do evento mais próxima; críticos antes de alertas).
@@ -855,7 +855,8 @@ A camiseta (modelo e tamanho) não aparece na lista: fica só na ficha da pessoa
 ## 10. Voos e Hospedagem
 
 **Objetivo:** organizar como cada pessoa chega e onde dorme: pedidos de voo à SDC (aviso configurável, padrão D-90), rooming list, caronas e créditos de hotel.
-A SDC ainda não tem portal: o time registra o pedido, envia pelo canal de sempre e **registra o voo emitido** quando a SDC responder.
+
+**Quem faz o quê (Vitor, 24/11/2026):** "quem põe quem fica com os quartos somos nós, quem vai colocar passagem e hotel é a empresa parceira SDC. Nós solicitamos e eles compram." Vale para voo e para hotel: o time **solicita** (o pedido `SDC-…`, com texto pronto para copiar), a SDC **compra** e o time **registra o retorno** dela. A SDC ainda não tem portal nem login no sistema.
 
 > Dados: só `carona` e `convocacao.deslocamento` existem hoje. Voos, hotéis, quartos e créditos são da fase 3 do modelo
 > (`voo_pedido`, `hotel`, `hospedagem_reserva`, `quarto`, `quarto_ocupante`, `credito_hotel`). Comece por **Caronas**.
@@ -872,49 +873,75 @@ A SDC ainda não tem portal: o time registra o pedido, envia pelo canal de sempr
 (Voos, Hospedagem, Caronas) filtradas pelo evento, uma abaixo da outra, e acende **Voos** no menu (é a seção que abre a página).
 Títulos da aba do navegador: "Voos", "Hospedagem", "Créditos de hotel · Hospedagem". Seletor de evento em Voos e na Hospedagem (o das caronas é o da Hospedagem).
 
-### 10.1 Voos (pedidos à SDC)
+### 10.1 Voos (pedidos à SDC, como na planilha)
+
+O voo é pedido até 3 meses antes do evento, quase sempre **antes de a escala existir**. Por isso o pedido não depende da
+escala: é de um **evento** e de uma **pessoa do staff**, como uma linha da planilha do time.
 
 **Layout:**
-1. **Aviso de passagens a pedir** (faixa de atenção, só na tela, para a líder e para o time; aparece quando algum evento já entrou na janela configurada em Configurações › Aviso de voos, §12.5): título "Faltam pedir 7 passagens à SDC" e uma linha por evento, o mais próximo primeiro: "CONF_AM_60 · 12/02 — 4 passagens a pedir · faltam 75 dias" (com "· atrasado" quando passou do limite). O evento é link para a lista filtrada por ele e por "A pedir". Rodapé: "O aviso começa 90 dias antes do evento e o pedido conta como atrasado a partir de 60 dias." + link "Configurações". Na aba Logística do evento a faixa mostra só aquele evento.
-2. Atalhos: "A pedir (7) | Pedido à SDC (5) | Emitidos | Cancelados | Todos". Ação primária: **"Novo pedido"**. Pedidos da SDC atualizam ao vivo.
-3. Tabela:
+1. **Aviso de voos, por evento** (faixa de atenção, só na tela, para a líder e para o time): eventos que já entraram no prazo configurado em Configurações › Aviso de voos (§12.5) e ainda não têm **nenhum** pedido de voo. Título "3 eventos no prazo ainda sem pedido de voo" e uma linha por evento, o mais próximo primeiro: "CONF_AM_60 · 12/02 faltam 75 dias" (com "· atrasado" depois do limite e, se houver, "· 2 pessoas marcadas como Avião na escala"). Em cada linha: **"Pedir voo"** (abre o novo pedido já no evento) e **"Não precisa de voo"** (o evento sai do aviso; a maioria dos eventos, os de casa, não tem voo). Masterclasses não entram. Rodapé com os dias em vigor e o link "Configurações". Na aba Logística do evento a faixa mostra só aquele evento.
+2. Filtros: seletor de evento (todos os eventos de hoje em diante, com ou sem escala) e atalhos de situação "A pedir (N) | Pedido à SDC (N) | Emitidos | Alterados | Cancelados | Todos". Ação primária: **"Novo pedido"**.
+3. **Pedidos agrupados por mês e por evento**, como as abas da planilha: título do mês ("Dezembro de 2026"), e para cada evento o cabeçalho "16 a 18/12 · IPR_POA_12 · Porto Alegre (RS)" com "Novo pedido neste evento" e a tabela dele, uma linha por compra:
 
 | Coluna | Conteúdo |
 |---|---|
-| Referência | `[REF-0001]` em mono (link → painel do pedido) |
-| Evento | código |
-| Passageiro | nome |
-| Trecho | "Porto Alegre → Manaus" + "ida" / "volta" |
-| Data desejada | `11/11` |
-| Voo | "LATAM 3456 · 11/11 06:10–11:45 · localizador ABC123" ou "—" |
-| Situação | chip (A pedir, Pedido à SDC, Emitido, Alterado pelo time, Cancelado) + selo "Registrado pelo time" no voo informado pelo time |
-| Ações | "Registrar voo" (quando pedido), menu: Copiar pedido, Editar, Cancelar pedido |
+| Passageiro | nome e, embaixo, a referência `SDC-000012` em mono (link → painel do pedido) |
+| Escala | "Na escala" ou "Fora da escala" (a pessoa está ou não na escala do evento; o pedido vale nos dois casos) |
+| Solicitação | data em que o pedido foi registrado |
+| Ida/volta | "Ida e volta", "Ida" ou "Volta" |
+| Ida | aeroportos "VCP → POA" e, embaixo, a data e o horário: os do voo emitido ("14/12 · 08:10") ou, antes disso, a data pedida e a preferência ("14/12 · manhã") |
+| Volta | o mesmo, para a volta |
+| Situação | chip (A pedir, Pedido à SDC, Emitido, Alterado pelo time, Cancelado) + selo "Registrado pelo time" |
+| Compra | data em que o retorno da SDC foi registrado |
+| Companhia | companhia e número do voo |
+| Reserva | código da reserva (localizador) |
+| Preço | valor informado pela SDC |
+| Ações | "Registrar voo" (enquanto aguarda a SDC), "Abrir" ou, no lembrete, "Registrar pedido" |
 
-**Painel "Novo pedido"**: Evento; Pessoa (só escaladas com deslocamento "Avião"; as demais aparecem com aviso "Mude o deslocamento para Avião na escala"); Trecho (Origem, Destino, Ida/Volta/Ida e volta); Datas desejadas; Observação para a SDC. Primário "Registrar pedido".
-Depois: faixa de sucesso no painel "Pedido [REF-0001] registrado. A SDC ainda não tem portal: copie o pedido e envie pelo canal de sempre." + "Copiar pedido".
+   A mesma pessoa pode ter **mais de uma linha no mesmo evento** (ida e volta + um trecho a mais); as linhas dela ficam juntas.
+4. **Lembrete da escala ("A pedir"):** quem está na escala com deslocamento "Avião" e ainda sem pedido aparece como linha "A pedir · Marcada como Avião na escala", no fim do evento, com "Registrar pedido". É só um atalho: não é preciso marcar ninguém como Avião para pedir.
+5. **Marcados como sem voo · N** (cartão no fim, quando houver): os eventos que o time tirou do aviso, com "Desfazer". Com um evento escolhido que ainda está longe do prazo e sem pedido, aparece "Este evento não vai ter passagem? Marcar que não precisa de voo".
 
-**Painel "Registrar voo"** (em nome da SDC): faixa neutra "Você está registrando o voo informado pela SDC." À esquerda (ou acima, em 520 px), "O que a IAM pediu" (somente leitura); abaixo, formulário: Companhia, Número do voo, Localizador, Partida (data e hora), Chegada (data e hora), Valor (R$), Cartão de embarque (arquivo, opcional). Primário "Registrar voo".
-Toast: "Voo de [Staff 07] registrado. A copy dela foi atualizada." (o voo libera a copy bloqueada ou a deixa desatualizada se já tinha sido enviada).
+Vazio: "Nenhum pedido de voo nos próximos eventos." / "Peça as passagens por aqui, como na planilha: escolha o evento e a pessoa do staff, mesmo antes de montar a escala. A SDC compra e o time registra o voo." + "Novo pedido".
 
-**Cancelar pedido:** confirmação "Cancelar o pedido [REF-0001]?" — "Avise a SDC pelo canal de sempre. O voo some da copy da pessoa." Botão "Cancelar pedido" / "Voltar".
+**Painel "Novo pedido"**: Evento (qualquer evento futuro, com ou sem escala; fixo na aba Logística do evento); Passageiro (qualquer pessoa ativa do cadastro de staff, esteja ou não na escala); Trecho (Origem, Destino, Ida e volta / Só ida / Só volta); datas (sugeridas pelo evento) e horário preferido; Observação para a SDC. Primário "Registrar pedido".
+Se a pessoa **já tem pedido ativo naquele evento**, o painel avisa ("[Staff 07] já tem pedido de voo neste evento: SDC-000012 (ida e volta). Registre outro só se for uma compra a mais, como um trecho extra.") e pede a caixa **"É outra compra para a mesma pessoa"**; sem ela o pedido é recusado com a mesma explicação (evita duplicar por engano).
+Depois: faixa de sucesso no painel "Pedido SDC-000013 registrado. A SDC ainda não tem portal: copie o pedido e envie pelo canal de sempre." + "Copiar pedido". Registrar um pedido num evento marcado como "não precisa de voo" desfaz a marca.
+
+**Painel "Registrar voo"** (em nome da SDC): faixa neutra "Você está registrando o voo informado pela SDC." Formulário por trecho: Companhia, Número do voo, Localizador, Partida (data e hora), Chegada (data e hora), link do cartão de embarque (opcional); e o Valor (R$). Primário "Registrar voo".
+Toast: "Voo do pedido SDC-000013 registrado. A copy de hospedagem da pessoa foi atualizada."
+
+**Alterar e cancelar** continuam como eram (alterar depois de emitido deixa "Alterado pelo time" até o novo retorno). Cancelar: confirmação "Cancelar o pedido SDC-000013?" — "Avise a SDC pelo canal de sempre. O voo some da copy da pessoa." Pedido cancelado não conta como "já tem pedido".
 
 ### 10.2 Hospedagem (rooming list)
 
-A tela parte de quem o time marcou com "Hotel" na escala do evento (seção 6.2) e serve para dizer **quem fica com quem**.
+**Nós montamos os quartos; a SDC escolhe e reserva o hotel.** A tela parte de quem o time marcou com "Hotel" na escala do
+evento (seção 6.2) e serve para dizer **quem fica com quem**. O hotel só aparece depois que a SDC responde ao pedido.
 
-**Layout por evento** (seletor de evento obrigatório nesta aba), de cima para baixo; depois dos quartos vem a seção de caronas do mesmo evento (§10.3):
-1. **Faixa da escala** (sempre): "8 pessoas marcadas para hotel na escala de CONF_AM_60" + "5 com quarto e 3 sem quarto. Coloque cada pessoa num quarto para definir quem divide com quem." Tom de atenção enquanto houver gente sem quarto, sucesso quando todo mundo tem ("Todo mundo tem quarto. Em cada quarto abaixo dá para ver quem divide com quem.") e informação quando ninguém foi marcado ("Só entra em quarto quem está marcado com Hotel na escala do evento…"). Link **"Abrir a escala"** ("Marcar na escala" quando ninguém foi marcado). Se há gente ativa na escala sem a marca: "4 pessoas da escala não estão marcadas para hotel. Se falta alguém aqui, marque Hotel na escala."
-2. **Sem quarto · N** (cartão, logo abaixo da faixa, antes dos hotéis; só aparece quando há alguém sem quarto, mesmo antes de existir hotel): cada pessoa com função e sexo e o seletor "Colocar no quarto…". A opção do quarto diz quem já está nele: "Quarto 2 · 1 de 2 · Feminino · com Bia" (ou "· vazio"). Ação "Distribuir por sexo (N)". Sem quarto criado: "Defina o hotel e crie os quartos logo abaixo para começar a distribuir."
-3. Cartão "Hotel": nome, endereço, check-in/check-out, reserva. Ação "Editar hotel". Sem hotel: estado vazio "Nenhum hotel definido para este evento." + "Definir hotel".
-4. **Quartos** (grade de cartões `md:grid-cols-2 xl:grid-cols-3`): "Quarto 1 · duplo · 2 de 2" e, na linha de baixo, "Feminino · 2 pessoas dividem o quarto"; lista de ocupantes com "Período", **"Mover para…"** e "Tirar". Aviso de atenção no cartão quando misturar sexos: "Quarto com pessoas de sexos diferentes." "+ Novo quarto" no fim.
-5. Ação no cartão do hotel: secundário "Copiar rooming list" (texto pronto para o hotel: quarto, nomes, check-in/out).
+**Layout por evento** (seletor de evento obrigatório nesta aba; os marcados aparecem como "· sem hospedagem"), de cima para baixo; depois dos quartos vem a seção de caronas do mesmo evento (§10.3):
+1. **Faixa da escala** (sempre): "8 pessoas marcadas para hotel na escala de CONF_AM_60" + "5 com quarto e 3 sem quarto. Coloque cada pessoa num quarto para definir quem divide com quem." Tom de atenção enquanto houver gente sem quarto, sucesso quando todo mundo tem e informação quando ninguém foi marcado. Link **"Abrir a escala"** ("Marcar na escala" quando ninguém foi marcado). Se há gente ativa na escala sem a marca: "4 pessoas da escala não estão marcadas para hotel. Se falta alguém aqui, marque Hotel na escala."
+2. **Sem quarto · N** (cartão, logo abaixo da faixa; só aparece quando há alguém sem quarto, mesmo antes de existir quarto): cada pessoa com função e sexo e o seletor "Colocar no quarto…". A opção do quarto diz quem já está nele: "Quarto 2 · 1 de 2 · Feminino · com Bia" (ou "· vazio"). Ação "Distribuir por sexo (N)". Sem quarto criado: "Clique em "Montar quartos" logo abaixo para começar a distribuir."
+3. **Primeiro passo — "Montar quartos"** (estado vazio "Nenhum quarto montado para este evento."): abre o painel com as datas de **entrada e saída** já sugeridas pelo evento (véspera do início até o dia seguinte ao fim), a observação e o campo "Onde", que fica em **"Hotel pela SDC (ela escolhe e reserva)"**; só se escolhe ali um apartamento da IAM (não passa pela SDC) ou um hotel já definido. Ao lado, **"Este evento não tem hospedagem"**.
+4. **Cartão da hospedagem**: título "Hotel a definir pela SDC" (ou o nome do hotel, depois do retorno; ou "Apartamento da IAM"). Linhas: Período ("Entrada 14/12 · saída 18/12"); Quartos ("3 quartos · 7 pessoas"); **Pedido à SDC**; Reserva; Valor total e forma de pagamento ("R$ 2.400,00 · Faturado SDC"); Resposta da SDC; Observação. Ações: "Copiar rooming list", "Copiar pedido" (depois de pedir), "Editar" e, sem quartos nem pedido, "Remover".
+5. **Quartos** (grade de cartões `md:grid-cols-2 xl:grid-cols-3`): "Quarto 1 · duplo · 2 de 2" e, na linha de baixo, "Feminino · 2 pessoas dividem o quarto"; lista de ocupantes com "Período", **"Mover para…"** e "Tirar". Aviso de atenção no cartão quando misturar sexos. "+ Novo quarto" no fim.
+
+**Pedido à SDC (na linha do cartão):**
+- Sem quartos: "Monte os quartos para pedir a hospedagem à SDC." (o pedido diz quantos quartos e quem divide com quem).
+- Com quartos: botão primário **"Pedir hospedagem à SDC"**. Gera o pedido `SDC-…` e o texto de "Copiar pedido": evento, **local e cidade do evento** (para a SDC procurar hotel perto), check-in e check-out, "3 quartos · 7 pessoas" e a lista de quartos com os nomes. Sem hotel no texto (a não ser que já esteja definido).
+- Pedido aguardando: referência, chip "Pedido à SDC", **"Registrar reserva"** e "Cancelar pedido".
+- **"Registrar reserva"** (painel, em nome da SDC): **Hotel reservado pela SDC** (um hotel de Locais e hotéis ou "Cadastrar outro hotel…", que abre ali mesmo Nome, Cidade e UF — já com a cidade do evento — e, opcionais, rua, número e bairro; o hotel entra em Configurações › Locais e hotéis), Número da reserva, Valor total (R$), **Forma de pagamento** (vem "Faturado SDC") e Observação da SDC. Aí o hotel aparece no cartão e na rooming list. Toast: "Reserva do pedido SDC-000020 registrada: o hotel já aparece na hospedagem e na rooming list."
+- Cancelar o pedido deixa os quartos montados e libera pedir de novo.
+
+**Apartamento da IAM** (sem SDC): escolhido no campo "Onde"; tem quartos e rooming list, não tem pedido.
+
+**"Sem hospedagem"** (como na planilha): com "Este evento não tem hospedagem" a tela do evento vira uma faixa neutra "CONF_AM_60 está marcado como sem hospedagem" com **"Desfazer"**; o evento continua no seletor (com "· sem hospedagem"), mas deixa de ser o evento que a Hospedagem abre sozinha ("Próximo evento"). Só dá para marcar quando não há quartos montados; "Montar quartos" num evento marcado desfaz a marca. As caronas do evento continuam logo abaixo.
 
 **"Mover para…" em um passo** (seletor de quem já está num quarto), com dois grupos:
 - **Outro quarto:** os quartos com vaga (os cheios aparecem desabilitados, "(cheio)").
-- **Trocar de lugar com:** cada pessoa dos outros quartos, "Dani Lima (Quarto 2)". As duas trocam de quarto de uma vez, mesmo com os dois quartos cheios, sem passar por "Sem quarto". Vale a regra de sempre (sexo do quarto, escala ativa, marcada para hotel); recusada, nada muda. Toast: "Troca feita: as duas pessoas mudaram de lugar entre o Quarto 1 e o Quarto 2. A copy de hospedagem ficou desatualizada."
+- **Trocar de lugar com:** cada pessoa dos outros quartos, "Dani Lima (Quarto 2)". As duas trocam de quarto de uma vez, mesmo com os dois quartos cheios, sem passar por "Sem quarto". Vale a regra de sempre (sexo do quarto, escala ativa, marcada para hotel); recusada, nada muda.
 
 Só quem está marcado entra em quarto e na distribuição por sexo. Quem já está num quarto continua aparecendo no quarto.
-Arrastar entre quartos é opcional; o seletor "Mover para…" é obrigatório (WCAG 2.5.7). Mudança de quarto deixa a copy de hospedagem desatualizada.
+Arrastar entre quartos é opcional; o seletor "Mover para…" é obrigatório (WCAG 2.5.7). Mudança de quarto deixa a copy de hospedagem desatualizada; enquanto o hotel não vem da SDC, a copy de hospedagem da pessoa fica bloqueada por falta do hotel e libera sozinha depois do retorno.
 
 ### 10.3 Caronas
 
@@ -1152,6 +1179,7 @@ Cabeçalho: "Configurações" / "Valores e modelos usados pelo sistema. Mudança
 - Um cartão, "Aviso de passagens a pedir": campo **"Avisar quantos dias antes do evento"** (inteiro de 7 a 365; padrão **90**, os 3 meses) + "Salvar aviso". Só a líder edita (`config.aviso_de_voos`); o time vê o valor em vigor e o motivo "Só a líder pode mudar o aviso de voos." (a aba aparece com "só leitura").
 - Abaixo do campo, o que o valor significa: "Em vigor: 90 dias antes do evento (o padrão: 3 meses)", "Na janela: entre 90 e 61 dias antes do evento", "Atrasado: com 60 dias ou menos".
 - **Atrasado acompanha o aviso:** dois terços dos dias do aviso, no máximo 60 (aviso de 90 ou mais → 60; de 45 → 30; de 30 → 20). Assim sempre existe um trecho "na janela" antes do "atrasado", qualquer que seja o valor.
+- **O aviso é por evento** (desde 24/11/2026): entra o evento que chegou ao prazo e ainda não tem nenhum pedido de voo; sai quando o primeiro pedido é registrado ou quando o time marca "não precisa de voo" (§10.1). Não depende de ninguém estar marcado como Avião na escala, porque o voo é pedido antes dela.
 - O aviso é só na tela (Início e topo de Voos, §4 e §10.1), para a líder e para o time; não manda e-mail nem WhatsApp. Mudar o prazo vale dali em diante e fica no histórico (`registro_acao`, `CONFIGURACAO_ALTERADA`).
 - Toast: "Aviso de voos salvo: começa 120 dias antes do evento e o pedido conta como atrasado a partir de 60 dias." Erros no campo: "Use um número inteiro de dias, sem vírgula." / "Use de 7 a 365 dias."
 
