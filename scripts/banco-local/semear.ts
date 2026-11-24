@@ -42,6 +42,8 @@ function semAcento(texto: string): string {
  * - Confronto: STAFF sem número na regra, quem monta digita (doc 07 §11, item 8). Na produção vai num passo
  *   de dados depois do deploy do código que entende "digitado" (ver README).
  * - Copy de escalação com gênero e um modelo ativo por tipo: a mesma correção de dados da migration 0004.
+ * - Funções: enquanto a produção não tiver a migration 0013, a cópia traz Pai / mãe sem a marca de cargo do evento
+ *   e não traz Trainee de líder. Os mesmos dados da migration, de novo.
  */
 async function ajustarCadastrosCopiados(db: Executor): Promise<void> {
   await db.query(
@@ -60,6 +62,8 @@ async function ajustarCadastrosCopiados(db: Executor): Promise<void> {
       WHERE m.ativo AND EXISTS (SELECT 1 FROM eventos.modelo_copy o
                                  WHERE o.tipo = m.tipo AND o.ativo AND (o.atualizado_em, o.id) > (m.atualizado_em, m.id))`,
   );
+  await db.query(`UPDATE eventos.funcao SET cargo_do_evento = true WHERE codigo = 'PAI_MAE' AND NOT cargo_do_evento`);
+  await db.query(`INSERT INTO eventos.funcao (codigo, nome) VALUES ('TRAINEE_LIDER', 'Trainee de líder') ON CONFLICT (codigo) DO NOTHING`);
 }
 
 export async function semear({ sql: db, drizzle }: Banco): Promise<void> {
