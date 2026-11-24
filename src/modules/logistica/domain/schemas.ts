@@ -75,10 +75,16 @@ const trechosDesejadosSchema = z
     return !ida || !volta || volta.dataDesejada >= ida.dataDesejada;
   }, "A volta não pode ser antes da ida.");
 
+/**
+ * Pedido de voo como na planilha do time: evento + pessoa do staff, esteja ou não na escala (o pedido costuma vir
+ * antes dela). `outraCompra` confirma que é uma compra a mais para quem já tem pedido ativo no evento.
+ */
 export const registrarPedidoDeVooSchema = z.object({
-  convocacaoId: id,
+  eventoId: id,
+  pessoaId: id,
   trechos: trechosDesejadosSchema,
   observacaoTime: textoOpcional(500),
+  outraCompra: z.stringbool().optional(),
 });
 export type RegistrarPedidoDeVoo = z.output<typeof registrarPedidoDeVooSchema>;
 
@@ -133,25 +139,57 @@ export const registrarRetornoDeVooSchema = z.object({
 });
 export type RegistrarRetornoDeVoo = z.output<typeof registrarRetornoDeVooSchema>;
 
-export const registrarRetornoDeHospedagemSchema = z.object({
-  pedidoId: id,
-  valorCentavos: dinheiro,
-  numeroReserva: z.string().trim().min(1, "Informe o número da reserva.").max(60, "Use até 60 caracteres."),
-  observacaoSdc: textoOpcional(500),
+/** Hotel que a SDC reservou e que ainda não está em Locais e hotéis: o mínimo para cadastrar na hora. */
+const novoHotelSchema = z.object({
+  nome: z.string().trim().min(2, "Informe o nome do hotel.").max(120, "Use até 120 caracteres."),
+  cidade: z.string().trim().min(2, "Informe a cidade.").max(80, "Use até 80 caracteres."),
+  uf: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z]{2}$/, "Use a sigla do estado (SP, AM...)."),
+  logradouro: textoOpcional(160),
+  numero: textoOpcional(20),
+  bairro: textoOpcional(80),
 });
+export type NovoHotel = z.output<typeof novoHotelSchema>;
+
+export const FORMA_DE_PAGAMENTO_PADRAO = "Faturado SDC";
+/** Valor do seletor de hotel que abre os campos de "cadastrar outro hotel". */
+export const NOVO_HOTEL = "novo";
+
+/**
+ * Retorno da SDC para a hospedagem: qual hotel ela reservou (um já cadastrado ou um novo, cadastrado na hora), número
+ * da reserva, valor total e forma de pagamento.
+ */
+export const registrarRetornoDeHospedagemSchema = z
+  .object({
+    pedidoId: id,
+    localId: z.preprocess((valor) => (valor === NOVO_HOTEL ? undefined : valor), id.optional()),
+    novoHotel: novoHotelSchema.optional(),
+    valorCentavos: dinheiro,
+    numeroReserva: z.string().trim().min(1, "Informe o número da reserva.").max(60, "Use até 60 caracteres."),
+    formaPagamento: z.string().trim().min(2, "Informe a forma de pagamento (ex.: Faturado SDC).").max(60, "Use até 60 caracteres."),
+    observacaoSdc: textoOpcional(500),
+  })
+  .refine((retorno) => (retorno.localId === undefined) !== (retorno.novoHotel === undefined), {
+    path: ["localId"],
+    message: "Escolha o hotel que a SDC reservou ou cadastre um novo.",
+  });
 export type RegistrarRetornoDeHospedagem = z.output<typeof registrarRetornoDeHospedagemSchema>;
 
 const periodoValido = { path: ["checkOut"], message: "O check-out precisa ser depois do check-in." };
 
+/** `localId` vazio = hotel a definir pela SDC (o time monta os quartos e pede; o hotel vem no retorno). */
 export const criarHospedagemSchema = z
-  .object({ eventoId: id, localId: id, checkIn: data, checkOut: data, observacao: textoOpcional(500) })
+  .object({ eventoId: id, localId: id.optional(), checkIn: data, checkOut: data, observacao: textoOpcional(500) })
   .refine((hospedagem) => hospedagem.checkOut > hospedagem.checkIn, periodoValido);
 export type CriarHospedagem = z.output<typeof criarHospedagemSchema>;
 
 export const alterarHospedagemSchema = z
   .object({
     hospedagemId: id,
-    localId: id,
+    localId: id.optional(),
     checkIn: data,
     checkOut: data,
     observacao: textoOpcional(500),
@@ -172,6 +210,7 @@ export const adicionarQuartoSchema = z.object({
 });
 export type AdicionarQuarto = z.output<typeof adicionarQuartoSchema>;
 
+export const removerHospedagemSchema = z.object({ hospedagemId: id });
 export const removerQuartoSchema = z.object({ quartoId: id });
 export const porNoQuartoSchema = z.object({ quartoId: id, convocacaoId: id });
 export type PorNoQuarto = z.output<typeof porNoQuartoSchema>;
@@ -220,6 +259,13 @@ export const salvarAvisoDeVoosSchema = z.object({
     .pipe(z.number().min(DIAS_DO_AVISO_MINIMO, LIMITES_DO_AVISO).max(DIAS_DO_AVISO_MAXIMO, LIMITES_DO_AVISO)),
 });
 export type SalvarAvisoDeVoos = z.output<typeof salvarAvisoDeVoosSchema>;
+
+export const ITENS_DISPENSAVEIS = ["VOO", "HOSPEDAGEM"] as const;
+export type ItemDispensavel = (typeof ITENS_DISPENSAVEIS)[number];
+
+/** O time marca que o evento não precisa de voo (ou não tem hospedagem) e ele sai dos pendentes; `dispensar` falso desfaz. */
+export const dispensarLogisticaDoEventoSchema = z.object({ eventoId: id, item: z.enum(ITENS_DISPENSAVEIS), dispensar: z.stringbool() });
+export type DispensarLogisticaDoEvento = z.output<typeof dispensarLogisticaDoEventoSchema>;
 
 export const criarCaronaSchema = z.object({ eventoId: id, motoristaConvocacaoId: id });
 export type CriarCarona = z.output<typeof criarCaronaSchema>;

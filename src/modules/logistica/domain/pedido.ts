@@ -1,5 +1,5 @@
-// Pedido à SDC, voo e hospedagem (docs/07 §4.5). "A pedir" não é gravado: é a convocação ativa com
-// deslocamento VOO sem pedido ativo.
+// Pedido à SDC, voo e hospedagem (docs/07 §4.5). Nós solicitamos, a SDC compra e o time registra o retorno.
+// "A pedir" não é gravado: é só um lembrete de quem está na escala com deslocamento VOO e sem pedido ativo.
 
 /** Valores do CHECK pedido_sdc_situacao_check. */
 export type SituacaoDoPedido = "PEDIDO" | "EMITIDO" | "ALTERADO" | "CANCELADO";
@@ -64,7 +64,7 @@ function acaoDesconhecida(acao: never): never {
   throw new Error(`ação no pedido desconhecida: ${String(acao)}`);
 }
 
-/** Ativo = conta para o "um pedido de voo por pessoa por evento". */
+/** Ativo = não cancelado. A pessoa pode ter mais de um pedido de voo ativo no mesmo evento (a tela avisa antes). */
 export function pedidoAtivo(situacao: SituacaoDoPedido): boolean {
   return situacao !== "CANCELADO";
 }
@@ -172,22 +172,33 @@ export function textoDoPedidoDeVoo(pedido: {
   return linhas.join("\n");
 }
 
+const quantos = (quantidade: number, um: string, varios: string) => `${quantidade} ${quantidade === 1 ? um : varios}`;
+
+/**
+ * Texto pronto da solicitação de hospedagem ("Copiar pedido"). Quem escolhe e reserva o hotel é a SDC: o time manda o
+ * evento, onde ele acontece, as datas, quantos quartos e pessoas e quem divide com quem. `hotel` só vem preenchido
+ * quando já se sabe qual é (preferência do time ou reserva já registrada).
+ */
 export function textoDoPedidoDeHospedagem(pedido: {
   referencia: string;
   eventoCodigo: string | null;
   eventoNome: string;
-  hotel: string;
-  cidade: string;
+  /** Local e cidade do evento, para a SDC procurar hotel perto. */
+  localDoEvento: string | null;
+  hotel: string | null;
   checkIn: string;
   checkOut: string;
   quartos: { nome: string; capacidade: number; ocupantes: string[] }[];
   observacaoTime: string | null;
 }): string {
+  const pessoas = pedido.quartos.reduce((total, quarto) => total + quarto.ocupantes.length, 0);
   const linhas = [
     `Pedido ${pedido.referencia} — hospedagem`,
     `Evento: ${pedido.eventoCodigo ?? pedido.eventoNome}`,
-    `Hotel: ${pedido.hotel} (${pedido.cidade})`,
+    ...(pedido.localDoEvento ? [`Local do evento: ${pedido.localDoEvento}`] : []),
+    ...(pedido.hotel ? [`Hotel: ${pedido.hotel}`] : []),
     `Check-in ${dataCurta(pedido.checkIn)} · check-out ${dataCurta(pedido.checkOut)}`,
+    `${quantos(pedido.quartos.length, "quarto", "quartos")} · ${quantos(pessoas, "pessoa", "pessoas")}`,
     ...pedido.quartos.map((quarto) => `${quarto.nome} (${quarto.capacidade} ${quarto.capacidade === 1 ? "pessoa" : "pessoas"}): ${quarto.ocupantes.join(", ") || "—"}`),
   ];
   if (pedido.observacaoTime) linhas.push(`Observação: ${pedido.observacaoTime}`);

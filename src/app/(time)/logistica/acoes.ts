@@ -14,12 +14,14 @@ import {
   criarHospedagem,
   definirCarona,
   definirPeriodoDoOcupante,
+  dispensarLogisticaDoEvento,
   porNoQuarto,
   registrarPedidoDeHospedagem,
   registrarPedidoDeVoo,
   registrarRetornoDaSdc,
   registrarRetornoDeHospedagem,
   removerCarona,
+  removerHospedagem,
   removerQuarto,
   tirarDaCarona,
   tirarDoQuarto,
@@ -35,6 +37,7 @@ import {
   criarHospedagemSchema,
   definirCaronaSchema,
   definirPeriodoDoOcupanteSchema,
+  dispensarLogisticaDoEventoSchema,
   moverDeQuartoSchema,
   porNoQuartoSchema,
   registrarPedidoDeHospedagemSchema,
@@ -42,6 +45,7 @@ import {
   registrarRetornoDeHospedagemSchema,
   registrarRetornoDeVooSchema,
   removerCaronaSchema,
+  removerHospedagemSchema,
   removerQuartoSchema,
   tirarDaCaronaSchema,
   tirarDoQuartoSchema,
@@ -62,12 +66,23 @@ const destinoDoPedido = z
   .regex(/^\/(logistica\/voos|eventos\/[0-9a-f-]{36}\/logistica)$/i)
   .catch("/logistica/voos");
 
-/** Depois de registrar, abre o painel do pedido com "Copiar pedido" (a SDC ainda não tem portal). */
+/** Depois de registrar, abre o painel do pedido com "Copiar pedido" (a SDC ainda não tem portal), já no evento do pedido. */
 export async function registrarPedidoDeVooAcao(_estado: ResultadoAcao, form: FormData): Promise<ResultadoAcao> {
   return executarAcao(form, registrarPedidoDeVooSchema, "logistica.gerir", async (dados, ator) => {
     const pedido = await registrarPedidoDeVoo(dados, ator, new Date());
     revalidarLogistica(pedido.eventoId);
-    redirect(`${destinoDoPedido.parse(form.get("destino"))}?ref=${pedido.referencia}&registrado=1`);
+    const destino = destinoDoPedido.parse(form.get("destino"));
+    redirect(`${destino}?${destino === "/logistica/voos" ? `evento=${pedido.eventoId}&` : ""}ref=${pedido.referencia}&registrado=1`);
+  });
+}
+
+/** "Este evento não precisa de voo" / "este evento não tem hospedagem" (e o desfazer dos dois). */
+export async function dispensarLogisticaDoEventoAcao(_estado: ResultadoAcao, form: FormData): Promise<ResultadoAcao> {
+  return executarAcao(form, dispensarLogisticaDoEventoSchema, "logistica.gerir", async (dados, ator) => {
+    await dispensarLogisticaDoEvento(dados, ator);
+    revalidarLogistica(dados.eventoId);
+    if (dados.item === "VOO") return dados.dispensar ? "Evento marcado como sem voo: ele sai do aviso. Dá para desfazer." : "O evento voltou a contar no aviso de voos.";
+    return dados.dispensar ? "Evento marcado como sem hospedagem. Dá para desfazer." : "O evento voltou a ter hospedagem para montar.";
   });
 }
 
@@ -101,7 +116,7 @@ export async function registrarRetornoDeHospedagemAcao(_estado: ResultadoAcao, f
   return executarAcao(form, registrarRetornoDeHospedagemSchema, "logistica.registrar_retorno_sdc", async (dados, ator) => {
     const pedido = await registrarRetornoDeHospedagem(dados, ator, new Date());
     revalidarLogistica(pedido.eventoId);
-    return `Reserva do pedido ${pedido.referencia} registrada.`;
+    return `Reserva do pedido ${pedido.referencia} registrada: o hotel já aparece na hospedagem e na rooming list.`;
   });
 }
 
@@ -109,7 +124,7 @@ export async function criarHospedagemAcao(_estado: ResultadoAcao, form: FormData
   return executarAcao(form, criarHospedagemSchema, "logistica.gerir", async (dados, ator) => {
     await criarHospedagem(dados, ator, new Date());
     revalidarLogistica(dados.eventoId);
-    return "Hospedagem definida. Agora crie os quartos.";
+    return dados.localId ? "Hospedagem aberta. Agora crie os quartos." : "Hospedagem aberta, com o hotel a definir pela SDC. Agora crie os quartos.";
   });
 }
 
@@ -118,6 +133,14 @@ export async function alterarHospedagemAcao(_estado: ResultadoAcao, form: FormDa
     const eventoId = await alterarHospedagem(dados, ator, new Date());
     revalidarLogistica(eventoId);
     return "Hospedagem atualizada.";
+  });
+}
+
+export async function removerHospedagemAcao(_estado: ResultadoAcao, form: FormData): Promise<ResultadoAcao> {
+  return executarAcao(form, removerHospedagemSchema, "logistica.gerir", async (dados, ator) => {
+    const eventoId = await removerHospedagem(dados.hospedagemId, ator, new Date());
+    revalidarLogistica(eventoId);
+    return "Hospedagem removida.";
   });
 }
 

@@ -7,7 +7,7 @@ import {
   type TrechoDesejado,
   transicaoDoPedido,
 } from "../domain/pedido";
-import { instanteDeSaoPaulo } from "../domain/datas";
+import { dataEmSaoPaulo, instanteDeSaoPaulo } from "../domain/datas";
 import type {
   AlterarPedido,
   CancelarPedido,
@@ -22,7 +22,8 @@ import type {
 
 export type ContextoDaAcao = { usuarioId: string; instante: Date };
 
-export type ConvocacaoTravada = { convocacaoId: string; pessoaId: string; eventoId: string; ativa: boolean; deslocamento: string | null };
+/** Evento do pedido, travado. `dataFim` no fuso de São Paulo (AAAA-MM-DD). */
+export type EventoDoPedido = { id: string; dataFim: string; cancelado: boolean };
 
 export type PedidoTravado = {
   id: string;
@@ -57,8 +58,14 @@ export type RegistroDoPedido = {
 };
 
 export type RepositorioPedidos = {
-  travarConvocacao(convocacaoId: string): Promise<ConvocacaoTravada | null>;
-  pedidoDeVooAtivo(eventoId: string, pessoaId: string): Promise<string | null>;
+  /** Trava o evento (serializa os pedidos dele). Nulo = não existe ou foi apagado. */
+  travarEvento(eventoId: string): Promise<EventoDoPedido | null>;
+  /** Pessoa ativa do cadastro de staff (core.pessoa ativa com pessoa_evento). Nulo = não é staff ou está inativa. */
+  staffAtivo(pessoaId: string): Promise<{ pessoaId: string; nome: string } | null>;
+  /** Convocação principal ativa da pessoa no evento, se ela já estiver na escala (vínculo opcional do pedido). */
+  convocacaoPrincipal(eventoId: string, pessoaId: string): Promise<string | null>;
+  /** Referências dos pedidos de voo ativos da pessoa no evento. */
+  pedidosDeVooAtivos(eventoId: string, pessoaId: string): Promise<string[]>;
   inserirPedido(pedido: {
     tipo: TipoDoPedido;
     eventoId: string;
@@ -81,16 +88,19 @@ export type RepositorioPedidos = {
       para: SituacaoDoPedido;
       instante: Date;
       observacaoTime?: string | null;
-      emissao?: { valorCentavos: number; observacaoSdc: string | null; usuarioId: string };
+      emissao?: { valorCentavos: number; observacaoSdc: string | null; usuarioId: string; formaPagamento?: string | null };
       cancelamento?: { usuarioId: string; motivo: string };
     },
   ): Promise<boolean>;
   registrarEmissaoDosTrechos(pedidoId: string, trechos: TrechoEmitido[], instante: Date): Promise<void>;
-  /** Hospedagem do evento ainda sem pedido, travada. */
-  travarHospedagemSemPedido(hospedagemId: string): Promise<{ eventoId: string; pedidoId: string | null; localTipo: string } | null>;
+  /** Hospedagem travada, para pedir à SDC. `localTipo` nulo = hotel ainda não definido (a SDC escolhe). */
+  travarHospedagemSemPedido(hospedagemId: string): Promise<{ eventoId: string; pedidoId: string | null; localTipo: string | null; quartos: number } | null>;
   vincularHospedagem(hospedagemId: string, pedidoId: string | null, instante: Date): Promise<void>;
   desvincularHospedagemDoPedido(pedidoId: string, instante: Date): Promise<void>;
-  registrarReserva(pedidoId: string, numeroReserva: string, instante: Date): Promise<void>;
+  /** Tipo do local (HOTEL, APARTAMENTO, EVENTO). Nulo = não existe ou foi arquivado. */
+  tipoDoLocal(localId: string): Promise<string | null>;
+  /** Grava na hospedagem do pedido o hotel que a SDC reservou e o número da reserva. false = o pedido não tem hospedagem. */
+  registrarReserva(pedidoId: string, reserva: { numeroReserva: string; localId: string }, instante: Date): Promise<boolean>;
   registrar(registro: RegistroDoPedido & { usuarioId: string }): Promise<void>;
 };
 
@@ -106,24 +116,37 @@ function destinoDaAcao(pedido: PedidoTravado, acao: AcaoNoPedido): SituacaoDoPed
   return transicao.para;
 }
 
+/**
+ * Pedido de voo como na planilha: evento + pessoa do staff. Não depende da escala (o voo é pedido até 3 meses antes,
+ * em geral antes de a escala existir): a convocação é só um vínculo, preenchido quando a pessoa já está na escala.
+ * A pessoa pode ter mais de um pedido ativo no evento (ida e volta + um trecho a mais), desde que quem registra
+ * confirme que é outra compra.
+ */
 export async function registrarPedidoDeVoo(
   repo: RepositorioPedidos,
   entrada: RegistrarPedidoDeVoo,
   { usuarioId, instante }: ContextoDaAcao,
-): Promise<{ id: string; referencia: string; eventoId: string }> {
-  const convocacao = await repo.travarConvocacao(entrada.convocacaoId);
-  if (!convocacao) throw new ErroDaLogistica("A pessoa não está mais nesta escala. Recarregue a página.");
-  if (!convocacao.ativa) throw new ErroDaLogistica("A pessoa saiu da escala deste evento: não dá para pedir voo.");
-  if (convocacao.deslocamento !== "VOO") throw new ErroDaLogistica("O deslocamento desta pessoa não é Avião. Mude o deslocamento para Avião na escala.");
+): Promise<{ id: string; referencia: string; eventoId: string; outrosAtivos: string[] }> {
+  const evento = await repo.travarEvento(entrada.eventoId);
+  if (!evento) throw new ErroDaLogistica("Evento não encontrado. Recarregue a página.");
+  if (evento.cancelado) throw new ErroDaLogistica("Este evento foi cancelado: não dá para pedir voo para ele.");
+  if (evento.dataFim < dataEmSaoPaulo(instante)) throw new ErroDaLogistica("Este evento já terminou: não dá para pedir voo para ele.");
+  const pessoa = await repo.staffAtivo(entrada.pessoaId);
+  if (!pessoa) throw new ErroDaLogistica("Esta pessoa não está ativa no cadastro de staff. Confira em Pessoas.");
 
-  const existente = await repo.pedidoDeVooAtivo(convocacao.eventoId, convocacao.pessoaId);
-  if (existente) throw new ErroDaLogistica(`Esta pessoa já tem o pedido ${existente} para este evento. Altere esse pedido.`);
+  const outrosAtivos = await repo.pedidosDeVooAtivos(evento.id, pessoa.pessoaId);
+  if (outrosAtivos.length > 0 && !entrada.outraCompra) {
+    throw new ErroDaLogistica(
+      `${pessoa.nome} já tem ${outrosAtivos.length === 1 ? `o pedido ${outrosAtivos[0]}` : `os pedidos ${outrosAtivos.join(", ")}`} para este evento. ` +
+        "Se for uma compra a mais (um trecho extra, por exemplo), marque \"É outra compra para a mesma pessoa\" e registre de novo.",
+    );
+  }
 
   const pedido = await repo.inserirPedido({
     tipo: "VOO",
-    eventoId: convocacao.eventoId,
-    pessoaId: convocacao.pessoaId,
-    convocacaoId: convocacao.convocacaoId,
+    eventoId: evento.id,
+    pessoaId: pessoa.pessoaId,
+    convocacaoId: await repo.convocacaoPrincipal(evento.id, pessoa.pessoaId),
     observacaoTime: entrada.observacaoTime ?? null,
     usuarioId,
     instante,
@@ -131,13 +154,13 @@ export async function registrarPedidoDeVoo(
   await repo.substituirTrechosDesejados(pedido.id, entrada.trechos.map(trechoDesejado), instante);
   await repo.registrar({
     pedidoId: pedido.id,
-    eventoId: convocacao.eventoId,
+    eventoId: evento.id,
     acao: "PEDIDO_REGISTRADO",
     statusPara: "PEDIDO",
     usuarioId,
-    dados: { referencia: pedido.referencia, tipo: "VOO", trechos: entrada.trechos.map((trecho) => trecho.sentido) },
+    dados: { referencia: pedido.referencia, tipo: "VOO", trechos: entrada.trechos.map((trecho) => trecho.sentido), ...(outrosAtivos.length > 0 ? { outrosAtivos } : {}) },
   });
-  return { ...pedido, eventoId: convocacao.eventoId };
+  return { ...pedido, eventoId: evento.id, outrosAtivos };
 }
 
 function trechoDesejado(trecho: RegistrarPedidoDeVoo["trechos"][number]): TrechoDesejado {
@@ -252,7 +275,9 @@ export async function registrarPedidoDeHospedagem(
   const hospedagem = await repo.travarHospedagemSemPedido(entrada.hospedagemId);
   if (!hospedagem) throw new ErroDaLogistica("Hospedagem não encontrada. Recarregue a página.");
   if (hospedagem.pedidoId) throw new ErroDaLogistica("Esta hospedagem já tem pedido à SDC.");
-  if (hospedagem.localTipo !== "HOTEL") throw new ErroDaLogistica("Apartamento da IAM não passa pela SDC.");
+  if (hospedagem.localTipo === "APARTAMENTO") throw new ErroDaLogistica("Apartamento da IAM não passa pela SDC.");
+  // O pedido diz à SDC quantos quartos e quem divide com quem: sem quarto não há o que pedir.
+  if (hospedagem.quartos === 0) throw new ErroDaLogistica("Monte os quartos antes de pedir a hospedagem à SDC.");
 
   const pedido = await repo.inserirPedido({
     tipo: "HOSPEDAGEM",
@@ -275,21 +300,30 @@ export async function registrarPedidoDeHospedagem(
   return { ...pedido, eventoId: hospedagem.eventoId };
 }
 
+/**
+ * Retorno da SDC para a hospedagem: é aqui que o hotel entra (quem escolhe e reserva é a SDC), com o número da
+ * reserva, o valor total e a forma de pagamento. `localId` já vem resolvido pelo fluxo (hotel cadastrado ou criado na hora).
+ */
 export async function registrarRetornoDeHospedagem(
   repo: RepositorioPedidos,
-  entrada: RegistrarRetornoDeHospedagem,
+  entrada: Omit<RegistrarRetornoDeHospedagem, "localId" | "novoHotel"> & { localId: string },
   { usuarioId, instante }: ContextoDaAcao,
 ): Promise<PedidoTravado> {
   const pedido = await pedidoTravado(repo, entrada.pedidoId);
   if (pedido.tipo !== "HOSPEDAGEM") throw new ErroDaLogistica("Este pedido é de voo: registre os dados do voo.");
   const para = destinoDaAcao(pedido, "REGISTRAR_RETORNO");
+  const tipoDoLocal = await repo.tipoDoLocal(entrada.localId);
+  if (tipoDoLocal === null) throw new ErroDaLogistica("Hotel não encontrado. Escolha outro ou cadastre o hotel que a SDC reservou.");
+  if (tipoDoLocal !== "HOTEL") throw new ErroDaLogistica("Escolha um hotel: a SDC não reserva apartamento da IAM nem local de evento.");
   const mudou = await repo.mudarPedido(
     pedido.id,
     { de: pedido.situacao },
-    { para, instante, emissao: { valorCentavos: entrada.valorCentavos, observacaoSdc: entrada.observacaoSdc ?? null, usuarioId } },
+    { para, instante, emissao: { valorCentavos: entrada.valorCentavos, observacaoSdc: entrada.observacaoSdc ?? null, usuarioId, formaPagamento: entrada.formaPagamento } },
   );
   if (!mudou) throw new LogisticaMudouError(`o pedido ${pedido.referencia} mudou`);
-  await repo.registrarReserva(pedido.id, entrada.numeroReserva, instante);
+  if (!(await repo.registrarReserva(pedido.id, { numeroReserva: entrada.numeroReserva, localId: entrada.localId }, instante))) {
+    throw new LogisticaMudouError(`o pedido ${pedido.referencia} ficou sem hospedagem`);
+  }
   await repo.registrar({
     pedidoId: pedido.id,
     eventoId: pedido.eventoId,
@@ -297,7 +331,7 @@ export async function registrarRetornoDeHospedagem(
     statusDe: pedido.situacao,
     statusPara: para,
     usuarioId,
-    dados: { emNomeDe: "SDC", valorCentavos: entrada.valorCentavos, temNumeroReserva: Boolean(entrada.numeroReserva) },
+    dados: { emNomeDe: "SDC", valorCentavos: entrada.valorCentavos, temNumeroReserva: Boolean(entrada.numeroReserva), localId: entrada.localId, formaPagamento: entrada.formaPagamento },
   });
   return { ...pedido, situacao: para };
 }

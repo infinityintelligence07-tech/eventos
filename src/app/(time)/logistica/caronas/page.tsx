@@ -5,6 +5,9 @@ import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 import { parametro } from "../_componentes/situacoes";
 
+// Sem isto o build (que roda sem sessão) grava a página como um redirecionamento fixo para o login.
+export const dynamic = "force-dynamic";
+
 /**
  * As caronas são montadas junto com os quartos, na tela de Hospedagem do evento. O endereço antigo continua valendo:
  * leva para lá (mantendo o evento escolhido), direto na seção de caronas.

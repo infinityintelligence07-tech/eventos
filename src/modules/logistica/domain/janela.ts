@@ -53,48 +53,52 @@ export function precisaPedir(janela: JanelaDeCompra): boolean {
   }
 }
 
-export type EventoComPassagensAPedir = {
+/**
+ * Polo de casa (Americana): os eventos dele não entram no aviso de voos, porque a equipe é de lá. Decisão do time em
+ * 24/11/2026. O pedido de voo continua liberado para esses eventos; só o aviso é que não aparece.
+ */
+export const POLO_DE_CASA = "AM";
+
+export function eventoDeCasa(poloCodigo: string | null | undefined): boolean {
+  return poloCodigo === POLO_DE_CASA;
+}
+
+export type EventoSemPedidoDeVoo = {
   eventoId: string;
   codigo: string | null;
   nome: string;
   dataInicio: string;
-  /** Pessoas que vão de avião e ainda não têm pedido ativo. */
-  passagens: number;
+  /** Lembrete da escala: pessoas marcadas como Avião neste evento (que ainda não tem nenhum pedido). */
+  marcadasComoAviao: number;
   janela: Exclude<JanelaDeCompra, "FORA_DA_JANELA">;
   /** Dias até o evento. */
   dias: number;
 };
 
 /**
- * O aviso da tela (Início e Voos): eventos que já entraram na janela e ainda têm passagem a pedir, o mais próximo
- * primeiro. Recebe uma linha por passagem a pedir.
+ * O aviso da tela (Início e Voos), por evento: os que já entraram no prazo do aviso e ainda não têm nenhum pedido de
+ * voo, o mais próximo primeiro. O pedido vem antes da escala, então não depende de ninguém estar marcado como Avião.
+ * Ficam de fora os eventos que o time marcou como "não precisa de voo" e os que já começaram.
  */
-export function eventosComPassagensAPedir(
-  aPedir: { evento: { id: string; codigo: string | null; nome: string; dataInicio: string } }[],
+export function eventosSemPedidoDeVoo(
+  eventos: { id: string; codigo: string | null; nome: string; dataInicio: string; semVoo: boolean }[],
+  comPedidoAtivo: ReadonlySet<string>,
+  marcadasComoAviao: ReadonlyMap<string, number>,
   hoje: string,
   diasDoAviso: number = DIAS_ABRE_A_JANELA,
-): EventoComPassagensAPedir[] {
-  const porEvento = new Map<string, EventoComPassagensAPedir>();
-  for (const { evento } of aPedir) {
-    const existente = porEvento.get(evento.id);
-    if (existente) {
-      existente.passagens += 1;
-      continue;
-    }
-    const { janela, dias } = janelaDeCompra(evento.dataInicio, hoje, diasDoAviso);
-    if (janela === "FORA_DA_JANELA") continue;
-    porEvento.set(evento.id, { eventoId: evento.id, codigo: evento.codigo, nome: evento.nome, dataInicio: evento.dataInicio, passagens: 1, janela, dias });
-  }
-  return [...porEvento.values()].sort((a, b) => a.dias - b.dias || a.nome.localeCompare(b.nome, "pt-BR"));
+): EventoSemPedidoDeVoo[] {
+  return eventos
+    .filter((evento) => !evento.semVoo && !comPedidoAtivo.has(evento.id))
+    .flatMap((evento) => {
+      const { janela, dias } = janelaDeCompra(evento.dataInicio, hoje, diasDoAviso);
+      if (janela === "FORA_DA_JANELA" || dias < 0) return [];
+      return [{ eventoId: evento.id, codigo: evento.codigo, nome: evento.nome, dataInicio: evento.dataInicio, marcadasComoAviao: marcadasComoAviao.get(evento.id) ?? 0, janela, dias }];
+    })
+    .sort((a, b) => a.dias - b.dias || a.nome.localeCompare(b.nome, "pt-BR"));
 }
 
 /** "faltam 12 dias", "falta 1 dia", "é hoje". */
 export function textoDosDiasQueFaltam(dias: number): string {
   if (dias <= 0) return "é hoje";
   return dias === 1 ? "falta 1 dia" : `faltam ${dias} dias`;
-}
-
-/** "4 passagens a pedir" / "1 passagem a pedir". */
-export function textoDasPassagensAPedir(passagens: number): string {
-  return passagens === 1 ? "1 passagem a pedir" : `${passagens} passagens a pedir`;
 }

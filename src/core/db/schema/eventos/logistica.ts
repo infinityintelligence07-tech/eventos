@@ -9,7 +9,6 @@ import {
   text,
   timestamp,
   unique,
-  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -18,8 +17,10 @@ import { local } from "./cadastros";
 import { convocacao, evento } from "./evento";
 import { eventosSchema } from "./schemas";
 
-// Pedidos à SDC (agência): voo de um passageiro (ida e/ou volta) ou reserva de hotel.
-// Uma numeração para os dois, SDC-000001, que a fatura da SDC vai citar.
+// Pedidos à SDC (agência): voo de um passageiro (ida e/ou volta) ou reserva de hotel. Nós solicitamos, a SDC compra
+// e o time registra o retorno. Uma numeração para os dois, SDC-000001, que a fatura da SDC vai citar.
+// O pedido de voo é da pessoa no evento (evento_id + pessoa_id) e pode vir antes da escala: convocacao_id é um vínculo
+// opcional. A mesma pessoa pode ter mais de um pedido ativo no mesmo evento (ida e volta + um trecho a mais).
 export const pedidoSdcReferenciaSeq = eventosSchema.sequence("pedido_sdc_referencia_seq");
 
 export const pedidoSdc = eventosSchema.table(
@@ -49,6 +50,8 @@ export const pedidoSdc = eventosSchema.table(
     canceladoEm: timestamp("cancelado_em", { withTimezone: true }),
     canceladoPor: uuid("cancelado_por").references(() => usuario.id, { onDelete: "set null" }),
     motivoCancelamento: text("motivo_cancelamento"),
+    // Como a compra foi paga, informado no retorno da SDC (ex.: "Faturado SDC"). Hoje só a hospedagem preenche.
+    formaPagamento: text("forma_pagamento"),
     criadoEm: timestamp("criado_em", { withTimezone: true }).notNull().defaultNow(),
     atualizadoEm: timestamp("atualizado_em", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -60,10 +63,6 @@ export const pedidoSdc = eventosSchema.table(
     index("pedido_sdc_retorno_registrado_por_idx").on(table.retornoRegistradoPor),
     index("pedido_sdc_cancelado_por_idx").on(table.canceladoPor),
     index("pedido_sdc_situacao_idx").on(table.situacao),
-    // Um pedido de voo ativo por pessoa por evento.
-    uniqueIndex("pedido_sdc_voo_ativo_unique")
-      .on(table.eventoId, table.pessoaId)
-      .where(sql`${table.tipo} = 'VOO' AND ${table.situacao} <> 'CANCELADO'`),
     check("pedido_sdc_referencia_check", sql`${table.referencia} ~ '^SDC-[0-9]{6,}$'`),
     check("pedido_sdc_tipo_check", sql`${table.tipo} IN ('VOO', 'HOSPEDAGEM')`),
     check("pedido_sdc_passageiro_check", sql`(${table.tipo} = 'VOO') = (${table.pessoaId} IS NOT NULL)`),
@@ -71,6 +70,7 @@ export const pedidoSdc = eventosSchema.table(
     check("pedido_sdc_valor_check", sql`${table.valorCentavos} IS NULL OR ${table.valorCentavos} >= 0`),
     check("pedido_sdc_emitido_check", sql`${table.situacao} <> 'EMITIDO' OR ${table.emitidoEm} IS NOT NULL`),
     check("pedido_sdc_cancelado_check", sql`(${table.situacao} = 'CANCELADO') = (${table.canceladoEm} IS NOT NULL)`),
+    check("pedido_sdc_forma_pagamento_check", sql`${table.formaPagamento} IS NULL OR length(${table.formaPagamento}) BETWEEN 1 AND 60`),
   ],
 );
 
@@ -120,7 +120,8 @@ export const trechoVoo = eventosSchema.table(
   ],
 );
 
-// Onde a equipe dorme num evento: hotel pela SDC (com pedido) ou apartamento da IAM (sem pedido).
+// Onde a equipe dorme num evento. O time monta os quartos primeiro; quem escolhe e reserva o hotel é a SDC, então
+// local_id fica vazio até o retorno do pedido (ou é o apartamento da IAM, que não passa pela SDC).
 export const hospedagem = eventosSchema.table(
   "hospedagem",
   {
@@ -128,9 +129,7 @@ export const hospedagem = eventosSchema.table(
     eventoId: uuid("evento_id")
       .notNull()
       .references(() => evento.id, { onDelete: "restrict" }),
-    localId: uuid("local_id")
-      .notNull()
-      .references(() => local.id, { onDelete: "restrict" }),
+    localId: uuid("local_id").references(() => local.id, { onDelete: "restrict" }),
     pedidoId: uuid("pedido_id")
       .unique()
       .references(() => pedidoSdc.id, { onDelete: "restrict" }),

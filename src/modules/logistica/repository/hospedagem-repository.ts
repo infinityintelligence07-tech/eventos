@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, lt, gt, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull, lt, gt, or, sql } from "drizzle-orm";
 
 import { pessoa } from "@/core/db/schema/core";
 import type { Executor } from "@/core/db/database";
@@ -26,8 +26,18 @@ export type QuartoDaHospedagem = {
 
 export type HospedagemDoEvento = {
   id: string;
-  local: { id: string; nome: string; tipo: "HOTEL" | "APARTAMENTO"; endereco: string | null; cidade: string; uf: string };
-  pedido: { id: string; referencia: string; situacao: SituacaoDoPedido; valorCentavos: number | null; observacaoTime: string | null; atualizadoEm: string } | null;
+  /** Nulo = hotel ainda não definido: a SDC escolhe e reserva, e ele entra no retorno do pedido. */
+  local: { id: string; nome: string; tipo: "HOTEL" | "APARTAMENTO"; endereco: string | null; cidade: string; uf: string } | null;
+  pedido: {
+    id: string;
+    referencia: string;
+    situacao: SituacaoDoPedido;
+    valorCentavos: number | null;
+    formaPagamento: string | null;
+    observacaoTime: string | null;
+    observacaoSdc: string | null;
+    atualizadoEm: string;
+  } | null;
   checkIn: string;
   checkOut: string;
   numeroReserva: string | null;
@@ -57,6 +67,8 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
   equipeDoEvento(eventoId: string): Promise<PessoaDaEquipe[]>;
   /** Quantas pessoas ativas na escala do evento não estão marcadas para hotel (o lembrete "falta marcar alguém?"). */
   naEscalaSemHotel(eventoId: string): Promise<number>;
+  /** Quantas hospedagens o evento tem (com ou sem hotel definido). */
+  hospedagensDoEventoQuantas(eventoId: string): Promise<number>;
 } {
   async function quartosTravados(condicao: ReturnType<typeof eq>): Promise<QuartoTravado[]> {
     // Inner join: o FOR UPDATE trava o quarto e a hospedagem dele.
@@ -111,7 +123,9 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
           referencia: pedidoSdc.referencia,
           situacao: pedidoSdc.situacao,
           valorCentavos: pedidoSdc.valorCentavos,
+          formaPagamento: pedidoSdc.formaPagamento,
           observacaoTime: pedidoSdc.observacaoTime,
+          observacaoSdc: pedidoSdc.observacaoSdc,
           pedidoAtualizadoEm: pedidoSdc.atualizadoEm,
           checkIn: hospedagem.checkIn,
           checkOut: hospedagem.checkOut,
@@ -120,10 +134,10 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
           atualizadoEm: hospedagem.atualizadoEm,
         })
         .from(hospedagem)
-        .innerJoin(local, eq(local.id, hospedagem.localId))
+        .leftJoin(local, eq(local.id, hospedagem.localId))
         .leftJoin(pedidoSdc, eq(pedidoSdc.id, hospedagem.pedidoId))
         .where(eq(hospedagem.eventoId, eventoId))
-        .orderBy(asc(hospedagem.checkIn), asc(local.nome));
+        .orderBy(asc(hospedagem.checkIn), asc(hospedagem.criadoEm));
       if (linhas.length === 0) return [];
 
       const quartos = await executor
@@ -162,7 +176,10 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
 
       return linhas.map((linha) => ({
         id: linha.id,
-        local: { id: linha.localId, nome: linha.localNome, tipo: linha.localTipo as "HOTEL" | "APARTAMENTO", endereco: linha.endereco, cidade: linha.cidade, uf: linha.uf },
+        local:
+          linha.localId && linha.localNome && linha.cidade && linha.uf
+            ? { id: linha.localId, nome: linha.localNome, tipo: linha.localTipo as "HOTEL" | "APARTAMENTO", endereco: linha.endereco, cidade: linha.cidade, uf: linha.uf }
+            : null,
         pedido:
           linha.pedidoId && linha.referencia && linha.situacao && linha.pedidoAtualizadoEm
             ? {
@@ -170,7 +187,9 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
                 referencia: linha.referencia,
                 situacao: linha.situacao as SituacaoDoPedido,
                 valorCentavos: linha.valorCentavos,
+                formaPagamento: linha.formaPagamento,
                 observacaoTime: linha.observacaoTime,
+                observacaoSdc: linha.observacaoSdc,
                 atualizadoEm: linha.pedidoAtualizadoEm.toISOString(),
               }
             : null,
@@ -232,6 +251,11 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
       return linhas.length;
     },
 
+    async hospedagensDoEventoQuantas(eventoId) {
+      const [linha] = await executor.select({ total: count() }).from(hospedagem).where(eq(hospedagem.eventoId, eventoId));
+      return linha?.total ?? 0;
+    },
+
     async eventoExiste(eventoId) {
       const [linha] = await executor.select({ id: evento.id }).from(evento).where(and(eq(evento.id, eventoId), isNull(evento.deletedAt)));
       return Boolean(linha);
@@ -245,14 +269,22 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
     async inserirHospedagem({ eventoId, localId, checkIn, checkOut, observacao, usuarioId, instante }) {
       const [linha] = await executor
         .insert(hospedagem)
-        .values({ eventoId, localId, checkIn, checkOut, observacao: observacao ?? null, criadoPor: usuarioId, criadoEm: instante, atualizadoEm: instante })
+        .values({ eventoId, localId: localId ?? null, checkIn, checkOut, observacao: observacao ?? null, criadoPor: usuarioId, criadoEm: instante, atualizadoEm: instante })
         .returning({ id: hospedagem.id });
       return linha!.id;
     },
 
     async travarHospedagem(hospedagemId) {
       const [linha] = await executor
-        .select({ id: hospedagem.id, eventoId: hospedagem.eventoId, checkIn: hospedagem.checkIn, checkOut: hospedagem.checkOut })
+        .select({
+          id: hospedagem.id,
+          eventoId: hospedagem.eventoId,
+          localId: hospedagem.localId,
+          pedidoId: hospedagem.pedidoId,
+          numeroReserva: hospedagem.numeroReserva,
+          checkIn: hospedagem.checkIn,
+          checkOut: hospedagem.checkOut,
+        })
         .from(hospedagem)
         .where(eq(hospedagem.id, hospedagemId))
         .for("update");
@@ -271,10 +303,19 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
     async atualizarHospedagem({ hospedagemId, localId, checkIn, checkOut, observacao, atualizadoEm }, instante) {
       const alteradas = await executor
         .update(hospedagem)
-        .set({ localId, checkIn, checkOut, observacao: observacao ?? null, atualizadoEm: instante })
+        .set({ localId: localId ?? null, checkIn, checkOut, observacao: observacao ?? null, atualizadoEm: instante })
         .where(and(eq(hospedagem.id, hospedagemId), mesmaVersao(hospedagem.atualizadoEm, atualizadoEm)))
         .returning({ id: hospedagem.id });
       return alteradas.length === 1;
+    },
+
+    async quartosDaHospedagem(hospedagemId) {
+      const [linha] = await executor.select({ total: count() }).from(quarto).where(eq(quarto.hospedagemId, hospedagemId));
+      return linha?.total ?? 0;
+    },
+
+    async removerHospedagem(hospedagemId) {
+      await executor.delete(hospedagem).where(eq(hospedagem.id, hospedagemId));
     },
 
     async quartoComNome(hospedagemId, nome) {

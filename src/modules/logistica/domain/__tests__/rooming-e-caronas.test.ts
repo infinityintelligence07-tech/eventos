@@ -2,9 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import { lugaresLivres, podeEntrarNaCarona } from "../caronas";
 import { misturaSexos, nomeComPeriodo, periodoProprio, podeOcupar, podeTrocar, type QuartoDoRooming, sugerirRooming } from "../rooming";
+import { textoDoPedidoDeHospedagem } from "../pedido";
 import {
   centavosDoTexto,
+  criarHospedagemSchema,
   definirPeriodoDoOcupanteSchema,
+  dispensarLogisticaDoEventoSchema,
+  FORMA_DE_PAGAMENTO_PADRAO,
+  NOVO_HOTEL,
+  registrarRetornoDeHospedagemSchema,
   destinoDaTroca,
   destinoNoQuarto,
   moverDeQuartoSchema,
@@ -174,15 +180,78 @@ describe("schemas da logística", () => {
   const ida = { sentido: "IDA", origemIata: "poa", destinoIata: "MAO", dataDesejada: "2026-11-05" };
 
   it("pedido de voo: IATA em maiúsculas, sem sentido repetido, volta depois da ida", () => {
-    expect(registrarPedidoDeVooSchema.parse({ convocacaoId, trechos: [ida] }).trechos[0]?.origemIata).toBe("POA");
-    expect(registrarPedidoDeVooSchema.safeParse({ convocacaoId, trechos: [ida, ida] }).success).toBe(false);
+    // O pedido é de um evento e de uma pessoa do staff (a convocação não entra: o voo vem antes da escala).
+    const pedido = { eventoId: convocacaoId, pessoaId: convocacaoId };
+    expect(registrarPedidoDeVooSchema.parse({ ...pedido, trechos: [ida] }).trechos[0]?.origemIata).toBe("POA");
+    expect(registrarPedidoDeVooSchema.safeParse({ convocacaoId, trechos: [ida] }).success).toBe(false);
+    expect(registrarPedidoDeVooSchema.parse({ ...pedido, trechos: [ida] }).outraCompra).toBeUndefined();
+    expect(registrarPedidoDeVooSchema.parse({ ...pedido, trechos: [ida], outraCompra: "on" }).outraCompra).toBe(true);
+    expect(registrarPedidoDeVooSchema.safeParse({ ...pedido, trechos: [ida, ida] }).success).toBe(false);
     expect(
       registrarPedidoDeVooSchema.safeParse({
-        convocacaoId,
+        ...pedido,
         trechos: [ida, { sentido: "VOLTA", origemIata: "MAO", destinoIata: "POA", dataDesejada: "2026-11-04" }],
       }).success,
     ).toBe(false);
-    expect(registrarPedidoDeVooSchema.safeParse({ convocacaoId, trechos: [{ ...ida, destinoIata: "POA" }] }).success).toBe(false);
+    expect(registrarPedidoDeVooSchema.safeParse({ ...pedido, trechos: [{ ...ida, destinoIata: "POA" }] }).success).toBe(false);
+  });
+
+  it("retorno da hospedagem: o hotel que a SDC reservou (cadastrado ou novo), reserva, valor e forma de pagamento", () => {
+    const base = { pedidoId: convocacaoId, valorCentavos: "2.400,00", numeroReserva: " RES-1 ", formaPagamento: FORMA_DE_PAGAMENTO_PADRAO };
+    const cadastrado = registrarRetornoDeHospedagemSchema.parse({ ...base, localId: convocacaoId });
+    expect(cadastrado).toMatchObject({ localId: convocacaoId, valorCentavos: 240000, numeroReserva: "RES-1", formaPagamento: "Faturado SDC" });
+    expect(cadastrado.novoHotel).toBeUndefined();
+    // "Cadastrar outro hotel…" manda o marcador no lugar do id e os campos do hotel novo.
+    const novo = registrarRetornoDeHospedagemSchema.parse({ ...base, localId: NOVO_HOTEL, novoHotel: { nome: " Hotel Central ", cidade: "Manaus", uf: "am" } });
+    expect(novo.localId).toBeUndefined();
+    expect(novo.novoHotel).toEqual({ nome: "Hotel Central", cidade: "Manaus", uf: "AM" });
+    // Um dos dois, nunca nenhum nem os dois; e a forma de pagamento é obrigatória.
+    expect(registrarRetornoDeHospedagemSchema.safeParse(base).success).toBe(false);
+    expect(registrarRetornoDeHospedagemSchema.safeParse({ ...base, localId: NOVO_HOTEL }).success).toBe(false);
+    expect(registrarRetornoDeHospedagemSchema.safeParse({ ...base, localId: convocacaoId, novoHotel: { nome: "Hotel", cidade: "Manaus", uf: "AM" } }).success).toBe(false);
+    expect(registrarRetornoDeHospedagemSchema.safeParse({ ...base, localId: convocacaoId, formaPagamento: "" }).success).toBe(false);
+    expect(registrarRetornoDeHospedagemSchema.safeParse({ ...base, novoHotel: { nome: "H", cidade: "Manaus", uf: "AMA" } }).success).toBe(false);
+  });
+
+  it("hospedagem nasce sem hotel (a SDC escolhe) e os marcadores do evento aceitam marcar e desfazer", () => {
+    const periodo = { checkIn: "2026-12-14", checkOut: "2026-12-18" };
+    expect(criarHospedagemSchema.parse({ eventoId: convocacaoId, ...periodo }).localId).toBeUndefined();
+    expect(criarHospedagemSchema.parse({ eventoId: convocacaoId, localId: convocacaoId, ...periodo }).localId).toBe(convocacaoId);
+    expect(criarHospedagemSchema.safeParse({ eventoId: convocacaoId, checkIn: "2026-12-18", checkOut: "2026-12-14" }).success).toBe(false);
+    expect(dispensarLogisticaDoEventoSchema.parse({ eventoId: convocacaoId, item: "VOO", dispensar: "true" })).toEqual({ eventoId: convocacaoId, item: "VOO", dispensar: true });
+    expect(dispensarLogisticaDoEventoSchema.parse({ eventoId: convocacaoId, item: "HOSPEDAGEM", dispensar: "false" }).dispensar).toBe(false);
+    expect(dispensarLogisticaDoEventoSchema.safeParse({ eventoId: convocacaoId, item: "CARONA", dispensar: "true" }).success).toBe(false);
+  });
+
+  it("texto da solicitação de hospedagem: evento, onde ele acontece, datas, quartos e pessoas; hotel só quando já existe", () => {
+    const pedido = {
+      referencia: "SDC-000007",
+      eventoCodigo: "CONF_AM_60",
+      eventoNome: "Confronto",
+      localDoEvento: "Centro de Convenções — Manaus (AM)",
+      hotel: null,
+      checkIn: "2026-12-14",
+      checkOut: "2026-12-18",
+      quartos: [
+        { nome: "Quarto 1", capacidade: 2, ocupantes: ["Pessoa Um", "Pessoa Dois"] },
+        { nome: "Quarto 2", capacidade: 1, ocupantes: ["Pessoa Três"] },
+        { nome: "Quarto 3", capacidade: 2, ocupantes: [] },
+      ],
+      observacaoTime: "Perto do evento",
+    };
+    expect(textoDoPedidoDeHospedagem(pedido).split("\n")).toEqual([
+      "Pedido SDC-000007 — hospedagem",
+      "Evento: CONF_AM_60",
+      "Local do evento: Centro de Convenções — Manaus (AM)",
+      "Check-in 14/12/2026 · check-out 18/12/2026",
+      "3 quartos · 3 pessoas",
+      "Quarto 1 (2 pessoas): Pessoa Um, Pessoa Dois",
+      "Quarto 2 (1 pessoa): Pessoa Três",
+      "Quarto 3 (2 pessoas): —",
+      "Observação: Perto do evento",
+    ]);
+    const comHotel = textoDoPedidoDeHospedagem({ ...pedido, localDoEvento: null, hotel: "Hotel Central — Manaus (AM)", quartos: [pedido.quartos[1]!], observacaoTime: null });
+    expect(comHotel.split("\n")).toEqual(["Pedido SDC-000007 — hospedagem", "Evento: CONF_AM_60", "Hotel: Hotel Central — Manaus (AM)", "Check-in 14/12/2026 · check-out 18/12/2026", "1 quarto · 1 pessoa", "Quarto 2 (1 pessoa): Pessoa Três"]);
   });
 
   it("retorno da SDC: valor em centavos, código do voo e chegada depois da partida", () => {

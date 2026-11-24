@@ -208,7 +208,10 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da escala no banco", () => {
 
   it("põe e tira pessoas: entra confirmada; vaga esgotada, repetida; hotel e deslocamento são da pessoa no evento", async () => {
     const staff = await linhaDa("STAFF");
+    // O voo costuma ser pedido antes da escala: o pedido que a pessoa já tinha no evento passa a apontar para a convocação.
+    const { id: pedidoDaAna } = await um(`insert into eventos.pedido_sdc (tipo, evento_id, pessoa_id) values ('VOO', $1, $2) returning id`, [eventoId, pessoas["Ana Perto"]]);
     const ana = await escalas.porNaVaga({ eventoId, escalaId: staff.id, pessoaId: pessoas["Ana Perto"]!, sugestaoScore: 90 }, quem());
+    expect(await um(`select convocacao_id from eventos.pedido_sdc where id = $1`, [pedidoDaAna])).toEqual({ convocacao_id: ana.convocacaoId });
     await expect(escalas.porNaVaga({ eventoId, escalaId: staff.id, pessoaId: pessoas["Ana Perto"]! }, quem())).rejects.toThrow(/já está/);
     const bia = await escalas.porNaVaga({ eventoId, escalaId: staff.id, pessoaId: pessoas["Bia Longe"]! }, quem());
     await expect(escalas.porNaVaga({ eventoId, escalaId: staff.id, pessoaId: pessoas["Caio Sem Funcao"]! }, quem())).rejects.toThrow(/já estão preenchidas/);

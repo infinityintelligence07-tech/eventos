@@ -38,8 +38,58 @@ const diaEmSaoPaulo = (coluna: typeof evento.inicio | typeof evento.fim) =>
 
 const versao = sql<string>`to_char(${evento.atualizadoEm} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
 
+/** Marcadores da logística guardados no evento: o time decide por evento e pode desfazer. */
+export type MarcadorDaLogistica = "SEM_VOO" | "SEM_HOSPEDAGEM";
+
+const colunaDoMarcador = (marcador: MarcadorDaLogistica) => {
+  switch (marcador) {
+    case "SEM_VOO":
+      return evento.semVoo;
+    case "SEM_HOSPEDAGEM":
+      return evento.semHospedagem;
+    default: {
+      const desconhecido: never = marcador;
+      throw new Error(`marcador desconhecido: ${String(desconhecido)}`);
+    }
+  }
+};
+
 export function criarRepositorioEvento(executor: Executor) {
   return {
+    /** Nulo = o evento não existe (ou foi apagado). */
+    async marcadoresDaLogistica(eventoId: string): Promise<{ semVoo: boolean; semHospedagem: boolean } | null> {
+      const [linha] = await executor
+        .select({ semVoo: evento.semVoo, semHospedagem: evento.semHospedagem })
+        .from(evento)
+        .where(and(eq(evento.id, eventoId), isNull(evento.deletedAt)));
+      return linha ?? null;
+    },
+
+    /** Só grava se o valor muda. false = já estava assim (ou o evento sumiu). */
+    async definirMarcadorDaLogistica(eventoId: string, marcador: MarcadorDaLogistica, valor: boolean): Promise<boolean> {
+      const coluna = colunaDoMarcador(marcador);
+      const alterados = await executor
+        .update(evento)
+        .set(marcador === "SEM_VOO" ? { semVoo: valor } : { semHospedagem: valor })
+        .where(and(eq(evento.id, eventoId), isNull(evento.deletedAt), eq(coluna, !valor)))
+        .returning({ id: evento.id });
+      return alterados.length === 1;
+    },
+
+    async registrarMarcadorDaLogistica(
+      eventoId: string,
+      { marcador, valor, usuarioId, motivo }: { marcador: MarcadorDaLogistica; valor: boolean; usuarioId: string; motivo?: string },
+    ): Promise<void> {
+      await registrarAcao(executor, {
+        entidade: "EVENTO",
+        entidadeId: eventoId,
+        eventoId,
+        acao: `${marcador}_${valor ? "MARCADO" : "DESFEITO"}`,
+        usuarioId,
+        dados: motivo ? { motivo } : {},
+      });
+    },
+
     async dadosDoEvento(eventoId: string): Promise<EventoDoResumo | null> {
       const [linha] = await executor
         .select({

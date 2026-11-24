@@ -1,8 +1,8 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import type { Executor } from "@/core/db/database";
 import { pessoa } from "@/core/db/schema/core";
-import { carona, convocacao, evento, hospedagem, pedidoSdc, quarto, quartoOcupante } from "@/core/db/schema/eventos";
+import { carona, convocacao, escala, evento, hospedagem, pedidoSdc, quarto, quartoOcupante } from "@/core/db/schema/eventos";
 
 // Trechos de SQL repetidos nos repositórios da logística.
 
@@ -24,6 +24,25 @@ export async function transferirLogisticaDaConvocacao(executor: Executor, { de, 
   await executor.update(pedidoSdc).set({ convocacaoId: para }).where(eq(pedidoSdc.convocacaoId, de));
 }
 
+/**
+ * A pessoa entrou na escala do evento: os pedidos de voo que ela já tinha ali (o voo é pedido antes da escala) passam a
+ * apontar para a convocação principal. É só um vínculo de conveniência: o pedido é da pessoa no evento e vale sem ele.
+ * Chamado pelo fluxo da escala, na mesma transação.
+ */
+export async function vincularPedidosDeVooDaPessoa(executor: Executor, { eventoId, pessoaId }: { eventoId: string; pessoaId: string }): Promise<void> {
+  const [principal] = await executor
+    .select({ id: convocacao.id })
+    .from(convocacao)
+    .innerJoin(escala, eq(escala.id, convocacao.escalaId))
+    .where(and(eq(escala.eventoId, eventoId), isNull(escala.deletedAt), eq(convocacao.pessoaId, pessoaId), inArray(convocacao.status, CONVOCACAO_ATIVA), convocacaoPrincipal))
+    .limit(1);
+  if (!principal) return;
+  await executor
+    .update(pedidoSdc)
+    .set({ convocacaoId: principal.id })
+    .where(and(eq(pedidoSdc.eventoId, eventoId), eq(pedidoSdc.pessoaId, pessoaId), eq(pedidoSdc.tipo, "VOO"), isNull(pedidoSdc.convocacaoId)));
+}
+
 export const nomeDaPessoa = sql<string>`coalesce(${pessoa.nomeSocial}, ${pessoa.nomeCompleto})`;
 
 export const inicioDoEvento = sql<string>`to_char(${evento.inicio} at time zone 'America/Sao_Paulo', 'YYYY-MM-DD')`;
@@ -35,7 +54,7 @@ export const eventoTerminaDesde = (dia: string) => sql`(${evento.fim} at time zo
 /** Compare-and-set por versão: a tela manda o atualizado_em em ISO (milissegundos); o banco guarda microssegundos. */
 export const mesmaVersao = (coluna: unknown, iso: string) => sql`date_trunc('milliseconds', ${coluna}) = ${iso}::timestamptz`;
 
-type TabelaTravavel = typeof convocacao | typeof carona | typeof hospedagem | typeof quarto;
+type TabelaTravavel = typeof convocacao | typeof carona | typeof hospedagem | typeof quarto | typeof evento;
 
 /**
  * Trava só a linha da tabela principal. O Postgres não aceita "FOR UPDATE OF" com nome qualificado pelo schema

@@ -1,7 +1,6 @@
 "use client";
 
-import { Hotel, Plus } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { BedDouble, Hotel, Plus } from "lucide-react";
 import { useState } from "react";
 import { type AcaoDoFormulario, ErroDoFormulario, useAcao } from "@/app/(time)/_componentes/ui";
 
@@ -10,41 +9,109 @@ import { Botao, BotaoDeEnvio } from "../../_componentes/ui/botao";
 import { CampoDeSelecao, CampoDeTexto, CampoDeTextoLongo } from "../../_componentes/ui/campo";
 import { PainelLateral } from "../../_componentes/ui/dialogo";
 
-export function FormularioRegistrarReserva({
+export type OpcaoDeLocal = { valor: string; rotulo: string };
+
+// Constantes do domínio repetidas aqui: este arquivo roda no navegador e o índice do módulo traz os repositórios.
+const NOVO_HOTEL = "novo";
+const FORMA_DE_PAGAMENTO_PADRAO = "Faturado SDC";
+
+/**
+ * "Registrar reserva": o retorno da SDC para a hospedagem. É aqui que o hotel entra (quem escolhe e reserva é a SDC):
+ * um hotel já cadastrado ou um novo, cadastrado na hora com o mínimo. Junto vão a reserva, o valor total e o pagamento.
+ */
+export function BotaoRegistrarReserva({
   acao,
   pedidoId,
-  valorInicial,
-  aoConcluirIrPara,
+  referencia,
+  hoteis,
+  inicial,
+  cidadeDoEvento,
 }: {
   acao: AcaoDoFormulario;
   pedidoId: string;
-  valorInicial: string;
-  aoConcluirIrPara: string;
+  referencia: string;
+  /** Hotéis de Configurações › Locais e hotéis. */
+  hoteis: OpcaoDeLocal[];
+  inicial: { localId: string | null; numeroReserva: string | null; valor: string; formaPagamento: string | null };
+  /** Sugestão para o cadastro de um hotel novo: a cidade do evento. */
+  cidadeDoEvento: { cidade: string; uf: string } | null;
 }) {
-  const router = useRouter();
-  const { despachar, erros, estado } = useAcao(acao, () => router.push(aoConcluirIrPara, { scroll: false }));
+  const [aberto, setAberto] = useState(false);
+  const { despachar, erros, estado } = useAcao(acao, () => setAberto(false));
+  const [hotel, setHotel] = useState(inicial.localId && hoteis.some((item) => item.valor === inicial.localId) ? inicial.localId : hoteis.length === 0 ? NOVO_HOTEL : "");
   return (
-    <form action={despachar} aria-label="Registrar reserva informada pela SDC">
-      <ErroDoFormulario estado={estado} />
-      <input type="hidden" name="pedidoId" value={pedidoId} />
-      <Aviso tom="neutro" className="mb-4">
-        Você está registrando a reserva informada pela SDC. O registro fica marcado como feito pelo time.
-      </Aviso>
-      <div className="grid grid-cols-2 gap-3">
-        <CampoDeTexto nome="numeroReserva" rotulo="Número da reserva" obrigatorio erros={erros("numeroReserva")} />
-        <CampoDeTexto nome="valorCentavos" rotulo="Valor (R$)" obrigatorio numerico inputMode="decimal" defaultValue={valorInicial} placeholder="2.400,00" erros={erros("valorCentavos")} />
-      </div>
-      <CampoDeTextoLongo className="mt-3" nome="observacaoSdc" rotulo="Observação da SDC" maxLength={500} erros={erros("observacaoSdc")} />
-      <div className="mt-5 flex justify-end">
-        <BotaoDeEnvio textoCarregando="Registrando…">Registrar reserva</BotaoDeEnvio>
-      </div>
-    </form>
+    <>
+      <Botao tamanho="pequeno" variante="secundario" icone={<Hotel size={16} aria-hidden />} onClick={() => setAberto(true)}>
+        Registrar reserva
+      </Botao>
+      <PainelLateral aberto={aberto} aoFechar={() => setAberto(false)} titulo={`Registrar reserva · ${referencia}`}>
+        <form action={despachar} aria-label="Registrar reserva informada pela SDC">
+          <ErroDoFormulario estado={estado} />
+          <input type="hidden" name="pedidoId" value={pedidoId} />
+          <Aviso tom="neutro" className="mb-4">
+            Você está registrando a reserva informada pela SDC: o hotel que ela escolheu, o número da reserva, o valor e a forma de pagamento. O registro fica marcado como feito pelo time.
+          </Aviso>
+          <CampoDeSelecao
+            nome="localId"
+            rotulo="Hotel reservado pela SDC"
+            obrigatorio
+            vazio="Escolha o hotel"
+            value={hotel}
+            onChange={(mudanca) => setHotel(mudanca.target.value)}
+            opcoes={[...hoteis, { valor: NOVO_HOTEL, rotulo: "Cadastrar outro hotel…" }]}
+            ajuda="Não está na lista? Escolha &quot;Cadastrar outro hotel…&quot; e preencha aqui mesmo."
+            erros={erros("localId")}
+          />
+          {hotel === NOVO_HOTEL && (
+            <fieldset className="mt-3 rounded-[var(--ds-radius-md)] border border-[var(--ds-separator)] p-4">
+              <legend className="px-1 text-[13px] font-medium">Novo hotel</legend>
+              <CampoDeTexto nome="novoHotel.nome" rotulo="Nome do hotel" obrigatorio maxLength={120} erros={erros("novoHotel.nome")} />
+              <div className="mt-3 grid grid-cols-[1fr_96px] gap-3">
+                <CampoDeTexto nome="novoHotel.cidade" rotulo="Cidade" obrigatorio maxLength={80} defaultValue={cidadeDoEvento?.cidade ?? ""} erros={erros("novoHotel.cidade")} />
+                <CampoDeTexto nome="novoHotel.uf" rotulo="UF" obrigatorio maxLength={2} defaultValue={cidadeDoEvento?.uf ?? ""} erros={erros("novoHotel.uf")} />
+              </div>
+              <div className="mt-3 grid grid-cols-[1fr_96px] gap-3">
+                <CampoDeTexto nome="novoHotel.logradouro" rotulo="Endereço (rua)" maxLength={160} erros={erros("novoHotel.logradouro")} />
+                <CampoDeTexto nome="novoHotel.numero" rotulo="Número" maxLength={20} erros={erros("novoHotel.numero")} />
+              </div>
+              <CampoDeTexto
+                className="mt-3"
+                nome="novoHotel.bairro"
+                rotulo="Bairro"
+                maxLength={80}
+                ajuda="O hotel entra em Configurações › Locais e hotéis, onde dá para completar CEP e mapa. O endereço vai na copy de hospedagem."
+                erros={erros("novoHotel.bairro")}
+              />
+            </fieldset>
+          )}
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <CampoDeTexto nome="numeroReserva" rotulo="Número da reserva" obrigatorio defaultValue={inicial.numeroReserva ?? ""} erros={erros("numeroReserva")} />
+            <CampoDeTexto nome="valorCentavos" rotulo="Valor total (R$)" obrigatorio numerico inputMode="decimal" defaultValue={inicial.valor} placeholder="2.400,00" erros={erros("valorCentavos")} />
+          </div>
+          <CampoDeTexto
+            className="mt-3"
+            nome="formaPagamento"
+            rotulo="Forma de pagamento"
+            obrigatorio
+            maxLength={60}
+            defaultValue={inicial.formaPagamento ?? FORMA_DE_PAGAMENTO_PADRAO}
+            erros={erros("formaPagamento")}
+          />
+          <CampoDeTextoLongo className="mt-3" nome="observacaoSdc" rotulo="Observação da SDC" maxLength={500} erros={erros("observacaoSdc")} />
+          <div className="mt-5 flex justify-end gap-2">
+            <Botao onClick={() => setAberto(false)}>Cancelar</Botao>
+            <BotaoDeEnvio textoCarregando="Registrando…">Registrar reserva</BotaoDeEnvio>
+          </div>
+        </form>
+      </PainelLateral>
+    </>
   );
 }
 
-export type OpcaoDeLocal = { valor: string; rotulo: string };
-
-/** "Definir hotel" (cria) ou "Editar hotel" (com hospedagemId e a versão). */
+/**
+ * "Montar quartos" (abre a hospedagem do evento) ou "Editar" (com hospedagemId e a versão). O hotel é opcional: em
+ * branco, quem escolhe e reserva é a SDC e ele entra no retorno do pedido.
+ */
 export function BotaoDefinirHospedagem({
   acao,
   rotulo,
@@ -58,19 +125,20 @@ export function BotaoDefinirHospedagem({
   rotulo: string;
   eventoId: string;
   locais: OpcaoDeLocal[];
-  hospedagem?: { id: string; localId: string; checkIn: string; checkOut: string; observacao: string | null; atualizadoEm: string };
+  hospedagem?: { id: string; localId: string | null; checkIn: string; checkOut: string; observacao: string | null; atualizadoEm: string };
   periodoSugerido: { checkIn: string; checkOut: string };
   primario?: boolean;
 }) {
   const [aberto, setAberto] = useState(false);
   const { despachar, erros, estado } = useAcao(acao, () => setAberto(false));
+  const titulo = hospedagem ? "Editar hospedagem" : "Montar quartos";
   return (
     <>
-      <Botao variante={primario ? "primario" : "secundario"} tamanho={primario ? "normal" : "pequeno"} icone={primario ? <Hotel size={18} aria-hidden /> : undefined} onClick={() => setAberto(true)}>
+      <Botao variante={primario ? "primario" : "secundario"} tamanho={primario ? "normal" : "pequeno"} icone={primario ? <BedDouble size={18} aria-hidden /> : undefined} onClick={() => setAberto(true)}>
         {rotulo}
       </Botao>
-      <PainelLateral aberto={aberto} aoFechar={() => setAberto(false)} titulo={hospedagem ? "Editar hospedagem" : "Definir hospedagem"}>
-        <form action={despachar} aria-label={hospedagem ? "Editar hospedagem" : "Definir hospedagem"}>
+      <PainelLateral aberto={aberto} aoFechar={() => setAberto(false)} titulo={titulo}>
+        <form action={despachar} aria-label={titulo}>
           <ErroDoFormulario estado={estado} />
           {hospedagem ? (
             <>
@@ -78,29 +146,31 @@ export function BotaoDefinirHospedagem({
               <input type="hidden" name="atualizadoEm" value={hospedagem.atualizadoEm} />
             </>
           ) : (
-            <input type="hidden" name="eventoId" value={eventoId} />
+            <>
+              <input type="hidden" name="eventoId" value={eventoId} />
+              <Aviso tom="neutro" className="mb-4">
+                Confira as datas de entrada e saída do grupo e depois crie os quartos. Quem escolhe e reserva o hotel é a SDC: você pede com os quartos montados e registra o hotel quando ela responder.
+              </Aviso>
+            </>
           )}
-          {locais.length === 0 ? (
-            <Aviso tom="atencao">Nenhum hotel ou apartamento cadastrado. Cadastre em Configurações › Locais e hotéis.</Aviso>
-          ) : (
-            <CampoDeSelecao
-              nome="localId"
-              rotulo="Hotel ou apartamento"
-              obrigatorio
-              opcoes={locais}
-              defaultValue={hospedagem?.localId}
-              ajuda="Apartamento da IAM não passa pela SDC."
-              erros={erros("localId")}
-            />
-          )}
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            <CampoDeTexto nome="checkIn" rotulo="Check-in" type="date" obrigatorio defaultValue={hospedagem?.checkIn ?? periodoSugerido.checkIn} erros={erros("checkIn")} />
-            <CampoDeTexto nome="checkOut" rotulo="Check-out" type="date" obrigatorio defaultValue={hospedagem?.checkOut ?? periodoSugerido.checkOut} erros={erros("checkOut")} />
+          <div className="grid grid-cols-2 gap-3">
+            <CampoDeTexto nome="checkIn" rotulo="Entrada (check-in)" type="date" obrigatorio defaultValue={hospedagem?.checkIn ?? periodoSugerido.checkIn} erros={erros("checkIn")} />
+            <CampoDeTexto nome="checkOut" rotulo="Saída (check-out)" type="date" obrigatorio defaultValue={hospedagem?.checkOut ?? periodoSugerido.checkOut} erros={erros("checkOut")} />
           </div>
+          <CampoDeSelecao
+            className="mt-3"
+            nome="localId"
+            rotulo="Onde"
+            vazio="Hotel pela SDC (ela escolhe e reserva)"
+            opcoes={locais}
+            defaultValue={hospedagem?.localId ?? ""}
+            ajuda="Deixe assim quando a SDC for reservar. Escolha um apartamento da IAM (não passa pela SDC) ou um hotel só se ele já estiver definido."
+            erros={erros("localId")}
+          />
           <CampoDeTextoLongo className="mt-3" nome="observacao" rotulo="Observação" maxLength={500} defaultValue={hospedagem?.observacao ?? ""} erros={erros("observacao")} />
           <div className="mt-5 flex justify-end gap-2">
             <Botao onClick={() => setAberto(false)}>Cancelar</Botao>
-            <BotaoDeEnvio textoCarregando="Salvando…">Salvar hospedagem</BotaoDeEnvio>
+            <BotaoDeEnvio textoCarregando="Salvando…">{hospedagem ? "Salvar hospedagem" : "Montar quartos"}</BotaoDeEnvio>
           </div>
         </form>
       </PainelLateral>

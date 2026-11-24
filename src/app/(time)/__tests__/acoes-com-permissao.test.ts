@@ -38,12 +38,14 @@ const ESPERADO: Record<string, Record<string, Permissao>> = {
   },
   "logistica/acoes.ts": {
     registrarPedidoDeVooAcao: "logistica.gerir",
+    dispensarLogisticaDoEventoAcao: "logistica.gerir",
     alterarPedidoAcao: "logistica.gerir",
     cancelarPedidoAcao: "logistica.gerir",
     registrarRetornoDeVooAcao: "logistica.registrar_retorno_sdc",
     registrarRetornoDeHospedagemAcao: "logistica.registrar_retorno_sdc",
     criarHospedagemAcao: "logistica.gerir",
     alterarHospedagemAcao: "logistica.gerir",
+    removerHospedagemAcao: "logistica.gerir",
     registrarPedidoDeHospedagemAcao: "logistica.gerir",
     adicionarQuartoAcao: "logistica.gerir",
     removerQuartoAcao: "logistica.gerir",
@@ -106,7 +108,7 @@ describe("server actions com permissão (docs/09 §4.3)", () => {
     for (const permissao of Object.values(encontradas)) expect(PERMISSOES).toContain(permissao);
   });
 
-  it("61 actions no total", () => {
-    expect(Object.values(ESPERADO).flatMap(Object.keys)).toHaveLength(61);
+  it("63 actions no total", () => {
+    expect(Object.values(ESPERADO).flatMap(Object.keys)).toHaveLength(63);
   });
 });

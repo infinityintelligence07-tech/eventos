@@ -128,7 +128,7 @@ O import do cliente do banco continua **sob demanda** (`await import("@/core/db/
 
 | Módulo | Escreve | Lê de outros (só consulta) |
 |---|---|---|
-| `eventos` (existe) | `evento` (dados: `expectativa_publico`, `pessoas_na_fila`, `local_id`, sincronização), `local`, `tipo_evento` (menos `regra_vagas`) | — |
+| `eventos` (existe) | `evento` (dados: `expectativa_publico`, `pessoas_na_fila`, `local_id`, sincronização, e os marcadores `sem_voo` / `sem_hospedagem` da 0015, decididos na logística), `local`, `tipo_evento` (menos `regra_vagas`) | — |
 | `escala` (existe) | `escala`, `convocacao` (menos `carona_id`), `evento.status_escala` / `aprovado_por` / `aprovado_em`, `tipo_evento.regra_vagas` | `pessoa_evento`, `pessoa_funcao`, `disponibilidade`, `local`, `mensagem` (para COMUNICADA) |
 | `comunicacao` (existe) | `mensagem`, `modelo_copy` | `convocacao`, `escala`, `evento`, `local`, `core.pessoa`, `pessoa_evento`, `hospedagem`, `quarto*`, `trecho_voo` |
 | `disponibilidade` (novo) | `enquete`, `enquete_evento`, `disponibilidade` | `evento`, `core.pessoa`, `pessoa_evento` |
@@ -360,7 +360,17 @@ stateDiagram-v2
 ### 4.5 Pedido à SDC — voo e hospedagem (módulo `logistica`)
 
 Valores novos (`pedido_sdc_situacao_check`): `PEDIDO`, `EMITIDO`, `ALTERADO`, `CANCELADO`.
-"A pedir" (doc 08) **não é gravado**: é a convocação ativa com `deslocamento = 'VOO'` sem pedido ativo.
+"A pedir" (doc 08) **não é gravado**: é só um lembrete de quem está na escala com `deslocamento = 'VOO'` e sem pedido ativo.
+
+**Nós solicitamos, a SDC compra (24/11/2026, migration 0015).** O pedido de voo é da **pessoa no evento** (`evento_id` +
+`pessoa_id`) e não depende da escala, porque o voo é pedido até 3 meses antes, em geral antes de ela existir:
+`registrarPedidoDeVoo({ eventoId, pessoaId, trechos, outraCompra? })` aceita qualquer evento futuro não cancelado e
+qualquer pessoa ativa do staff (`core.pessoa.ativo` com `pessoa_evento`), sem exigir convocação nem deslocamento "Avião".
+`convocacao_id` é um vínculo opcional: preenchido na hora se a pessoa já está na escala e, se ela entrar depois, por
+`vincularPedidosDeVooDaPessoa` (chamado pelo fluxo `porNaVaga`, na mesma transação). A pessoa pode ter **mais de um
+pedido ativo no mesmo evento** (o índice único `pedido_sdc_voo_ativo_unique` saiu): o serviço recusa o segundo com a
+explicação, a não ser que venha `outraCompra` (a caixa "É outra compra para a mesma pessoa" do formulário).
+Na hospedagem a ordem é a mesma: o time monta os quartos e pede; **o hotel entra no retorno da SDC** (§5.3).
 
 ```mermaid
 stateDiagram-v2
@@ -381,7 +391,12 @@ stateDiagram-v2
   de `eventos.configuracao` (chave `dias_aviso_voos`, inteiro de 7 a 365; vazio ou inválido = 90) e são lidos pelo
   **fluxo** (`src/fluxos/logistica/aviso.ts`), que os passa ao domínio por parâmetro. O "atrasado" acompanha o aviso:
   `diasDoAtraso(diasDoAviso) = min(60, ⌊2/3 · diasDoAviso⌋)` (90 ou mais → 60; 45 → 30), para sempre sobrar um trecho
-  "na janela". `eventosComPassagensAPedir` agrupa por evento o aviso da tela. Alimenta Voos e o Início.
+  "na janela". O aviso da tela é **por evento** (`eventosSemPedidoDeVoo`): evento que entrou no prazo, fora as
+  Masterclasses, sem nenhum pedido de voo ativo e que o time não marcou como "não precisa de voo" (`evento.sem_voo`).
+  Alimenta Voos e o Início. O marcador (e o `evento.sem_hospedagem`, o "Sem hospedagem" da planilha) é gravado pelo
+  repositório do módulo `eventos`, dono da tabela, a partir do fluxo `dispensarLogisticaDoEvento`, com `registro_acao`
+  (`SEM_VOO_MARCADO` / `SEM_VOO_DESFEITO` / `SEM_HOSPEDAGEM_MARCADO` / `SEM_HOSPEDAGEM_DESFEITO`); registrar o primeiro
+  pedido de voo ou abrir a hospedagem do evento desfaz o marcador correspondente.
 - Cancelar não apaga: o pedido continua na lista da SDC e na conciliação futura da fatura.
 
 ---
@@ -457,7 +472,7 @@ hotel, que a fatura da SDC vai citar). Formato a confirmar (§11).
 | `tipo` | text not null | `CHECK IN ('VOO','HOSPEDAGEM')` |
 | `evento_id` | uuid not null → `evento` ON DELETE RESTRICT | |
 | `pessoa_id` | uuid → `core.pessoa` ON DELETE RESTRICT | `CHECK ((tipo = 'VOO') = (pessoa_id IS NOT NULL))` |
-| `convocacao_id` | uuid → `convocacao` ON DELETE SET NULL | de qual escala nasceu |
+| `convocacao_id` | uuid → `convocacao` ON DELETE SET NULL | vínculo opcional com a escala (o pedido vale sem ele; 0015) |
 | `situacao` | text not null default `'PEDIDO'` | `CHECK IN ('PEDIDO','EMITIDO','ALTERADO','CANCELADO')` |
 | `valor_centavos` | integer | `CHECK (valor_centavos IS NULL OR valor_centavos >= 0)`; informado pela SDC |
 | `observacao_time` | text | o que a IAM pediu (horário preferido, bagagem) |
@@ -469,11 +484,12 @@ hotel, que a fatura da SDC vai citar). Formato a confirmar (§11).
 | `cancelado_em` | timestamptz | `CHECK ((situacao = 'CANCELADO') = (cancelado_em IS NOT NULL))` |
 | `cancelado_por` | uuid → `core.usuario` ON DELETE SET NULL | |
 | `motivo_cancelamento` | text | |
+| `forma_pagamento` | text | 0015. Informada no retorno da SDC (ex.: "Faturado SDC"); `CHECK` de 1 a 60 caracteres. Hoje só a hospedagem preenche |
 | `criado_em`, `atualizado_em` | timestamptz not null default now() | |
 
 Índices: `evento_id`, `pessoa_id`, `convocacao_id`, `solicitado_por`, `retorno_registrado_por`, `cancelado_por`,
-`situacao`; único parcial `pedido_sdc_voo_ativo_unique (evento_id, pessoa_id) WHERE tipo = 'VOO' AND situacao <> 'CANCELADO'`
-(um pedido de voo ativo por pessoa por evento).
+`situacao`. O único parcial `pedido_sdc_voo_ativo_unique` (um pedido de voo ativo por pessoa por evento) **saiu na 0015**:
+a planilha do time tem mais de uma compra da mesma pessoa no mesmo evento.
 
 **`eventos.trecho_voo`** — ida e volta de um pedido de voo.
 
@@ -492,13 +508,14 @@ hotel, que a fatura da SDC vai citar). Formato a confirmar (§11).
 | `cartao_embarque_url` | text | `CHECK (cartao_embarque_url IS NULL OR cartao_embarque_url ~ '^https://')` (upload fica para depois) |
 | `criado_em`, `atualizado_em` | timestamptz | |
 
-**`eventos.hospedagem`** — onde a equipe dorme num evento (hotel pela SDC ou apartamento da IAM, sem pedido).
+**`eventos.hospedagem`** — onde a equipe dorme num evento. O time monta os quartos e a SDC escolhe o hotel: a
+hospedagem nasce sem hotel e ele entra no retorno do pedido. Apartamento da IAM é o caminho sem pedido.
 
 | Coluna | Tipo | Regra |
 |---|---|---|
 | `id` | uuid PK | |
 | `evento_id` | uuid not null → `evento` ON DELETE RESTRICT | índice |
-| `local_id` | uuid not null → `local` ON DELETE RESTRICT | índice; o serviço exige `local.tipo IN ('HOTEL','APARTAMENTO')` |
+| `local_id` | uuid → `local` ON DELETE RESTRICT | índice. **Opcional desde a 0015**: vazio = hotel a definir pela SDC, preenchido em `registrarRetornoDeHospedagem` (hotel já cadastrado ou criado na hora em `eventos.local`). Quando preenchido, o serviço exige `local.tipo IN ('HOTEL','APARTAMENTO')` |
 | `pedido_id` | uuid → `pedido_sdc` ON DELETE RESTRICT, **unique** | nulo = sem SDC (AP IAM); o serviço exige `pedido_sdc.tipo = 'HOSPEDAGEM'` e o mesmo `evento_id` |
 | `check_in`, `check_out` | date not null | `CHECK (check_out > check_in)` |
 | `numero_reserva` | text | confirmação da SDC/hotel |
@@ -663,12 +680,12 @@ Endereço, CPF e PIX ficam no `sensivel` (GH) e não aparecem nesta rodada.
 
 | | |
 |---|---|
-| Rotas | `logistica/voos` (pedidos entre eventos + aviso de passagens a pedir na janela configurada, padrão D-90; painel do pedido `?ref=SDC-…`), `logistica/hospedagem` (rooming e, logo abaixo, as caronas do mesmo evento), `logistica/caronas` (redireciona para a hospedagem, na seção de caronas), `logistica/creditos` ("em breve"), `eventos/[eventoId]/logistica` (o mesmo, filtrado), `configuracoes/voos` (dias do aviso). No menu são dois itens, Voos (`voos`) e Hospedagem (`hospedagem` com quartos e caronas, `creditos`); a escala do evento tem o atalho "Montar quartos e caronas" |
-| Lê | convocações ativas com deslocamento, pedidos e trechos, hospedagens, quartos e ocupantes, locais `HOTEL`/`APARTAMENTO`, caronas |
-| Escreve | `pedido_sdc`, `trecho_voo`, `hospedagem`, `quarto`, `quarto_ocupante`, `carona`, `convocacao.carona_id`, `registro_acao` |
+| Rotas | `logistica/voos` (pedidos agrupados por mês e por evento, como na planilha + aviso por evento no prazo configurado, padrão D-90; painel do pedido `?ref=SDC-…`; novo pedido com `?novo=1&evento=…&pessoa=…`), `logistica/hospedagem` (rooming e, logo abaixo, as caronas do mesmo evento), `logistica/caronas` (redireciona para a hospedagem, na seção de caronas), `logistica/creditos` ("em breve"), `eventos/[eventoId]/logistica` (o mesmo, filtrado), `configuracoes/voos` (dias do aviso). No menu são dois itens, Voos (`voos`) e Hospedagem (`hospedagem` com quartos e caronas, `creditos`); a escala do evento tem o atalho "Montar quartos e caronas" |
+| Lê | eventos futuros (com ou sem escala), staff ativo, convocações ativas com deslocamento, pedidos e trechos, hospedagens, quartos e ocupantes, locais `HOTEL`/`APARTAMENTO`, caronas |
+| Escreve | `pedido_sdc`, `trecho_voo`, `hospedagem`, `quarto`, `quarto_ocupante`, `carona`, `convocacao.carona_id`, `registro_acao`; pelo repositório do módulo `eventos`: `evento.sem_voo` / `evento.sem_hospedagem` e o hotel novo em `local` (retorno da SDC) |
 | Módulo | `logistica` (novo) |
-| Fluxos | `carregarVoos(filtros, agora)`, `carregarPedido(referencia)`, `registrarPedidoDeVoo`, `alterarPedido`, `cancelarPedido`, `registrarRetornoDaSdc`, `carregarHospedagem(eventoId)`, `criarHospedagem`, `alterarHospedagem`, `registrarPedidoDeHospedagem`, `adicionarQuarto`, `removerQuarto`, `porNoQuarto`, `trocarDeQuarto` (duas pessoas trocam de lugar em um passo), `tirarDoQuarto`, `carregarAvisoDeVoos`, `salvarAvisoDeVoos` (grava em `configuracao` pelo repositório da Comunicação, dono da tabela); onda 2: `sugerirRooming`, `criarCarona`, `definirCarona` |
-| Domínio | `pedido.ts` (§4.5), `janela.ts` (janela do aviso, padrão D-90, e atrasado), `rooming.ts` (sugestão por sexo e `podeTrocar`, puras), `schemas.ts` |
+| Fluxos | `carregarVoos(filtros, agora)`, `carregarPedido(referencia)`, `registrarPedidoDeVoo`, `alterarPedido`, `cancelarPedido`, `registrarRetornoDaSdc`, `carregarHospedagem(eventoId)`, `criarHospedagem`, `alterarHospedagem`, `registrarPedidoDeHospedagem`, `adicionarQuarto`, `removerQuarto`, `porNoQuarto`, `trocarDeQuarto` (duas pessoas trocam de lugar em um passo), `tirarDoQuarto`, `removerHospedagem`, `registrarRetornoDeHospedagem` (hotel cadastrado ou novo, reserva, valor e forma de pagamento), `dispensarLogisticaDoEvento` ("não precisa de voo" / "sem hospedagem", com desfazer), `carregarAvisoDeVoos`, `salvarAvisoDeVoos` (grava em `configuracao` pelo repositório da Comunicação, dono da tabela); onda 2: `sugerirRooming`, `criarCarona`, `definirCarona` |
+| Domínio | `pedido.ts` (§4.5), `janela.ts` (janela do aviso, padrão D-90, atrasado e aviso por evento), `planilha-de-voos.ts` (trajeto e agrupamento mês → evento), `rooming.ts` (sugestão por sexo e `podeTrocar`, puras), `schemas.ts` |
 | Repository | `pedidos-repository.ts`, `hospedagem-repository.ts`, `caronas-repository.ts` |
 
 Server actions (Zod):
@@ -805,7 +822,7 @@ type ItemDoInicio = { chave: string; titulo: string; quantidade: number; href: s
 | `escalas` (B) | escalas a montar (30 dias), aguardando aprovação, devolvidas ("sem resposta há mais de 2 dias" saiu na 0013: quem está na escala já conta como confirmado) |
 | `eventos` (B) | eventos sem código (reaproveita `pendenciasDosEventos`). "Confronto sem fila" saiu do Início em 24/11/2026; a falta da fila aparece só na escala do evento |
 | `comunicacao` (C) | copys com falta de dado, copys desatualizadas |
-| `logistica` (D) | voos a pedir na janela do aviso (padrão D-90, configurável): por evento, passagens a pedir e dias que faltam; pedidos alterados sem novo retorno da SDC |
+| `logistica` (D) | eventos no prazo do aviso (padrão D-90, configurável) ainda sem nenhum pedido de voo, fora os marcados como "não precisa de voo" e as Masterclasses: por evento, dias que faltam; pedidos alterados sem novo retorno da SDC |
 | `custos` (D) | solicitações para auditar (destaque para as críticas) |
 | `disponibilidade` (A) | enquetes que fecham em até 3 dias |
 
@@ -990,6 +1007,7 @@ Onde a doc 08 diverge, vale o que está aqui.
 | Aprovação sem login | Registra data/hora e o usuário de teste. |
 | Motivo em custos | Obrigatório para reprovar e para aprovar com alerta crítico; opcional no resto. |
 | Item 7, janela de voo (24/11/2026) | O D-90 virou configurável em Configurações › Aviso de voos (7 a 365 dias, padrão 90). O "atrasado" deixou de ser 60 fixo: é dois terços do aviso, no máximo 60 (§4.5). O aviso é só na tela, para a líder e o time. |
+| Voos e hotel pela SDC (24/11/2026, migration 0015) | "Nós solicitamos e eles compram." Voo: pedido por evento + pessoa do staff, sem depender da escala; mais de um pedido ativo por pessoa no evento, com confirmação; tela agrupada por mês e evento como a planilha; aviso por evento, com "não precisa de voo". Hospedagem: o time monta os quartos sem hotel, pede à SDC e registra no retorno o hotel, a reserva, o valor e a forma de pagamento; apartamento da IAM continua sem pedido; "sem hospedagem" por evento. Datas de solicitação e de compra são as do registro no sistema. Sem login nem perfil para a SDC (não decidido). |
 | Formulário de custo do staff (24/11/2026) | `/solicitar-custo` substitui o Google Forms: aberto do primeiro dia do evento até 5 dias depois do último (inclusive, fuso de São Paulo); fora do prazo, só o time registra. A pessoa informa só deslocamento e despesas; remuneração e alimentação são fixas e entram sozinhas pela regra (quantidade 1, como a tela do time sugere). Tipo de combustível e data do evento ficam de fora. Correção pelo staff só da reprovada, até 5 dias depois da reprovação. Detalhe na doc 08 §11.4. |
 | Comprovante do custo (24/11/2026) | Anexo no formulário do staff: até 3 arquivos de 8 MB (JPEG, PNG, WebP ou PDF, conferidos pelos bytes), obrigatório quando há deslocamento ou despesa. Storage do Supabase, bucket privado `eventos-comprovantes`, pelo protocolo S3 com chave de acesso S3 (nunca a `service_role`); leitura por rota autenticada que redireciona para URL pré-assinada de 5 minutos. Sem as variáveis, o anexo fica desligado e o formulário funciona sem o campo. |
 | Custo aprovado (24/11/2026) | Mensagem pronta para copiar e mandar no WhatsApp (primeiro nome, evento, protocolo, valor). O sistema não envia. **Construção futura:** envio automático pelo WhatsApp. |
