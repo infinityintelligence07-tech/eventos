@@ -325,7 +325,7 @@ export function EquipeDaFuncao({
               <tr className="border-t border-dashed border-[var(--ds-separator)]">
                 <td colSpan={5} className="px-4 py-3 text-[var(--ds-label-2)]">
                   {abertas === 1 ? "1 vaga aberta" : `${abertas} vagas abertas`}
-                  {!editavel && ". Para preencher, a escala precisa estar em rascunho ou devolvida."}
+                  {!editavel && ". Para preencher, a escala precisa estar em andamento ou devolvida."}
                 </td>
                 <td className="px-4 py-3 text-right">
                   {editavel && (

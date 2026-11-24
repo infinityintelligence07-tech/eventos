@@ -197,7 +197,7 @@ para manter o mesmo código de cor do Calendário. Acrescentar `situacao-AGUARDA
 
 | Tom | Fundo | Texto | Quando |
 |---|---|---|---|
-| Neutro | `bg-[var(--ds-fill-4)]` | `text-[var(--ds-label-2)]` | Sem resposta, rascunho, encerrado |
+| Neutro | `bg-[var(--ds-fill-4)]` | `text-[var(--ds-label-2)]` | Sem resposta, escala em andamento, encerrado |
 | Informação | `bg-[var(--ds-tint-soft)]` | `text-[var(--ds-tint-text)]` | Aguardando, enviada, emitido |
 | Sucesso | `bg-[var(--ds-green-soft)]` | `text-[var(--ds-green-deep)]` | Confirmou, pronta, aprovado, pode |
 | Atenção | `bg-[var(--ds-orange-soft)]` | `text-[var(--ds-orange-deep)]` | Falta dado, desatualizada, alerta |
@@ -396,7 +396,7 @@ Acrescentar `scroll-padding-bottom` no `main` com a altura da barra, para o foco
 
 1. **Cabeçalho:** título "Início"; subtítulo com a hora da última sincronização (mesmo texto do Calendário: "Turmas do IAM Control sincronizadas em 28/10 às 19:30."). À direita, botão secundário "Atualizar" (`RefreshCw`).
 2. **Cartões de número** (grade `grid-cols-2 lg:grid-cols-4 gap-3`), cada rótulo é link para a lista correspondente:
-   - "Escalas a montar" (próximos 30 dias, sem escala ou em rascunho) → `/escalas?situacao=a-montar`
+   - "Escalas a montar" (próximos 30 dias, sem escala ou em andamento) → `/escalas?situacao=a-montar`
    - "Aguardando aprovação" → `/escalas/aprovacao`
    - "Copys bloqueadas" → `/comunicacao?situacao=falta-dado`
    - "Custos para auditar" → `/custos`
@@ -456,8 +456,8 @@ Acrescentar `scroll-padding-bottom` no `main` com a altura da barra, para o foco
 Grade `lg:grid-cols-3 gap-3`:
 
 1. **Andamento** (cartão largura total, primeiro): linha de 6 etapas — Vagas → Escala → Aprovação → Comunicação → Logística → Custos.
-   Cada etapa: ícone de situação (`CircleCheck` feita, `CircleDot` em andamento, `Circle` não começou, `TriangleAlert` com pendência) + nome + detalhe ("18 de 22 vagas", "Aprovada em 05/11", "3 copys bloqueadas").
-   Implementar como `<ol>` com o estado em texto (`sr-only` "concluída", "em andamento"…). A etapa com pendência é link para a aba.
+   Cada etapa: ícone de situação (`CircleCheck` feita, `CircleDot` iniciada, `Circle` não começou, `TriangleAlert` com pendência) + nome + detalhe ("18 de 22 vagas", "Aprovada em 05/11", "3 copys bloqueadas").
+   Implementar como `<ol>` com o estado em texto (`sr-only` "concluída", "iniciada"…; "em andamento" fica só para a situação da escala, no chip do cabeçalho). A etapa com pendência é link para a aba.
    Botão primário à direita do cartão, conforme a etapa atual: "Montar escala" / "Continuar escala" / "Ver aprovação" / "Ir para Comunicação".
 2. **Dados da turma** (2/3): somente leitura, ícone `Lock` + "Vem do IAM Control. Atualiza a cada 30 minutos (última: 28/10 às 19:30)."
    Lista de definição (`dl`) em 2 colunas: Tipo, Edição, Código, Polo, Datas, Local, Meta da turma, Inscritos ativos, Situação no IAM Control.
@@ -489,8 +489,8 @@ Três telas: **lista** (entre eventos), **montar escala** (de um evento) e **apr
 ```mermaid
 stateDiagram-v2
   [*] --> SemEscala
-  SemEscala --> Rascunho: Começar escala
-  Rascunho --> AguardandoAprovacao: Enviar para aprovação
+  SemEscala --> EmAndamento: Começar escala
+  EmAndamento --> AguardandoAprovacao: Enviar para aprovação
   AguardandoAprovacao --> Aprovada: Aprovar (registra data e hora)
   AguardandoAprovacao --> Devolvida: Devolver (comentário opcional)
   Devolvida --> AguardandoAprovacao: Reenviar
@@ -505,8 +505,11 @@ stateDiagram-v2
 
 **Layout:**
 1. Cabeçalho: "Escalas" / subtítulo "Monte e acompanhe a escala de cada evento." Ação secundária à direita: "Fila de aprovação" com contador (pílula) → `/escalas/aprovacao`.
+   Abaixo, "Precisa de ação" com um cartão só, de largura total: **"Escalas a montar"** (eventos, sem Masterclass, que começam nos próximos 30 dias com a escala ainda não aprovada) + contador.
+   Os eventos ficam em grade (`sm:grid-cols-2 xl:grid-cols-3`); cada um mostra nome curto (link para a escala), código, chip da situação, **Início**, **Término**, local (quando houver) e vagas preenchidas.
+   Sem evento: "Nenhuma escala a montar nos próximos 30 dias." "Confronto sem fila" e "Eventos sem código" não aparecem mais aqui (continuam no Início).
 2. Barra de filtros: atalhos de situação **"A montar (N) | Aguardando aprovação (N) | Devolvidas (N) | Aprovadas | Comunicadas | Todas"**; seletores Polo, Tipo e Período ("Próximos 30 dias" padrão, "Próximos 60 dias", "Próximos 90 dias", "Mês…"); busca por código ou nome.
-   "A montar" = sem escala + rascunho. Masterclasses entram, mas podem ser escondidas com o chip "Esconder Masterclasses".
+   "A montar" = sem escala + em andamento. Masterclasses entram, mas podem ser escondidas com o chip "Esconder Masterclasses".
 3. Tabela (ordem: data mais próxima primeiro):
 
 | Coluna | Conteúdo |
@@ -517,7 +520,7 @@ stateDiagram-v2
 | Vagas | barra de progresso fina (`h-1.5 rounded-full bg-[var(--ds-fill-3)]` com preenchimento `bg-[var(--ds-brand)]`) + "18 de 22" (o texto é o que vale; a barra é `aria-hidden`) |
 | Respostas | "15 confirmaram · 2 aguardando · 1 não pode" (ícones + números; só aparece depois de convidar) |
 | Situação | chip `situacao-*` |
-| Ação | botão pequeno: "Começar escala" (sem escala) / "Continuar" (rascunho, devolvida) / "Ver" (demais) |
+| Ação | botão pequeno: "Começar escala" (sem escala) / "Continuar" (em andamento, devolvida) / "Ver" (demais) |
 
 **Estados:**
 - Vazio de verdade (nenhum evento no período): "Nenhum evento nos próximos 30 dias." + "Ver próximos 90 dias".
@@ -569,7 +572,7 @@ stateDiagram-v2
 
 5. **Barra de ação fixa** (3.12):
    - À esquerda, resumo em texto: "18 de 22 vagas preenchidas · 1 função sem número confirmado".
-   - À direita: primário **"Enviar para aprovação"** (rascunho/devolvida) ou "Reenviar para aprovação" (devolvida).
+   - À direita: primário **"Enviar para aprovação"** (em andamento/devolvida) ou "Reenviar para aprovação" (devolvida).
    - Fica com `aria-disabled` e o motivo visível enquanto houver função sem número confirmado: "Confirme o número de vagas de: Staff." (a lista é link e leva ao campo).
    - Se houver vaga aberta, o envio é permitido com confirmação: "Enviar com 4 vagas abertas? A líder vai ver quais funções estão incompletas." (Enviar mesmo assim / Continuar montando).
    - Depois de aprovada a barra mostra só o resumo + link "Ir para Comunicação".
@@ -1016,7 +1019,7 @@ Use sempre estes rótulos. Os `switch` sobre esses valores devem ter o caso `def
 | Valor | Rótulo | Ícone |
 |---|---|---|
 | SEM_ESCALA | Sem escala | `CircleDashed` |
-| RASCUNHO | Escala em rascunho | `PencilLine` |
+| RASCUNHO | Escala em andamento (o valor no banco continua `RASCUNHO`) | `PencilLine` |
 | AGUARDANDO_APROVACAO (novo) | Aguardando aprovação | `Hourglass` |
 | DEVOLVIDA (novo, ver 14) | Devolvida | `Undo2` |
 | APROVADA | Escala aprovada | `BadgeCheck` |
