@@ -546,3 +546,31 @@ a[class*="situacao-"]:hover {
 .resposta-evento input { margin-top: 2px; }
 .resposta-evento span { display: grid; gap: 2px; min-width: 0; }
 .resposta-evento small { font-size: 12.5px; font-weight: 500; }
+
+/* Pop-up "resposta gravada" (<dialog>): cartão escuro como o da entrada, que é escura nos dois temas do sistema. */
+.resposta-gravada {
+  margin: auto;
+  width: min(360px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: 0;
+  border-radius: 22px;
+  background: #0d111f;
+  color: #f5f5f7;
+  text-align: center;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+    0 30px 80px rgba(0, 0, 0, 0.6);
+}
+.resposta-gravada::backdrop { background: rgba(0, 0, 0, 0.62); }
+.resposta-gravada-conteudo { display: grid; justify-items: center; gap: 16px; padding: 28px 24px 24px; }
+.resposta-gravada-icone {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: rgba(48, 209, 88, 0.16);
+  color: #7ee2a0;
+}
+.resposta-gravada h2 { margin: 0; font-size: 19px; line-height: 1.3; font-weight: 700; color: #ffffff; text-wrap: balance; }
