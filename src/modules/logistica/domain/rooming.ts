@@ -17,6 +17,24 @@ export function podeOcupar(quarto: QuartoDoRooming, pessoa: { convocacaoId: stri
   return { ok: true };
 }
 
+type PessoaDoRooming = { convocacaoId: string; sexo: Sexo | null };
+
+/**
+ * Trocar duas pessoas de lugar (cada uma vai para o quarto da outra, num passo só, mesmo com os dois quartos cheios).
+ * Cada uma precisa caber no quarto da outra depois que a outra sai; `quartoId` diz qual quarto recusou.
+ */
+export function podeTrocar(
+  a: { quarto: QuartoDoRooming; pessoa: PessoaDoRooming },
+  b: { quarto: QuartoDoRooming; pessoa: PessoaDoRooming },
+): { ok: true } | { ok: false; motivo: RecusaDoQuarto; quartoId: string } {
+  const sem = (quarto: QuartoDoRooming, convocacaoId: string) => ({ ...quarto, ocupantes: quarto.ocupantes.filter((ocupante) => ocupante.convocacaoId !== convocacaoId) });
+  const aNoQuartoDeB = podeOcupar(sem(b.quarto, b.pessoa.convocacaoId), a.pessoa);
+  if (!aNoQuartoDeB.ok) return { ...aNoQuartoDeB, quartoId: b.quarto.id };
+  const bNoQuartoDeA = podeOcupar(sem(a.quarto, a.pessoa.convocacaoId), b.pessoa);
+  if (!bNoQuartoDeA.ok) return { ...bNoQuartoDeA, quartoId: a.quarto.id };
+  return { ok: true };
+}
+
 export function mensagemDaRecusa(motivo: RecusaDoQuarto, nomeDoQuarto: string): string {
   switch (motivo) {
     case "QUARTO_CHEIO":

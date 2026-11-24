@@ -4,7 +4,7 @@ import { z } from "zod";
 import { situacaoDaEscrita } from "@/fluxos/_base";
 import { carregarHospedagem } from "@/fluxos/logistica";
 
-import { CabecalhoDaLogistica } from "../_componentes/cabecalho-da-logistica";
+import { CabecalhoDeHospedagem } from "../_componentes/cabecalho-da-logistica";
 import { SecaoDeHospedagem } from "../_componentes/secao-de-hospedagem";
 import { parametro } from "../_componentes/situacoes";
 import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
@@ -18,7 +18,7 @@ export default async function PaginaHospedagem({ searchParams }: { searchParams:
   const [dados, escrita] = await Promise.all([carregarHospedagem(eventoId, new Date()), situacaoDaEscrita()]);
   return (
     <>
-      <CabecalhoDaLogistica />
+      <CabecalhoDeHospedagem />
       <SecaoDeHospedagem dados={dados} escrita={escrita.liberada} comSeletorDeEvento />
     </>
   );

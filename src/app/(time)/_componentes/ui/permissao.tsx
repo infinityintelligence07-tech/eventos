@@ -18,6 +18,8 @@ export function motivoSemPermissao(permissao: Permissao): string {
       return "Só a líder pode reabrir a auditoria.";
     case "config.link_custos":
       return "Só a líder pode mudar o link de custos.";
+    case "config.aviso_de_voos":
+      return "Só a líder pode mudar o aviso de voos.";
     case "config.regras_vagas":
       return "Só a líder pode mudar as regras de vagas.";
     case "config.regras_custo":

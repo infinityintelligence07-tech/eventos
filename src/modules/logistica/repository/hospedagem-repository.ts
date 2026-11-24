@@ -55,6 +55,8 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
   hospedagensDoEvento(eventoId: string): Promise<HospedagemDoEvento[]>;
   /** Quem está na escala do evento marcada para hotel, com o quarto em que já está (se houver). */
   equipeDoEvento(eventoId: string): Promise<PessoaDaEquipe[]>;
+  /** Quantas pessoas ativas na escala do evento não estão marcadas para hotel (o lembrete "falta marcar alguém?"). */
+  naEscalaSemHotel(eventoId: string): Promise<number>;
 } {
   async function quartosTravados(condicao: ReturnType<typeof eq>): Promise<QuartoTravado[]> {
     // Inner join: o FOR UPDATE trava o quarto e a hospedagem dele.
@@ -219,6 +221,15 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
         .where(and(eq(escala.eventoId, eventoId), marcadaParaHotel))
         .orderBy(asc(nomeDaPessoa));
       return linhas.map((linha) => ({ ...linha, sexo: linha.sexo as Sexo | null }));
+    },
+
+    async naEscalaSemHotel(eventoId) {
+      const linhas = await executor
+        .select({ convocacaoId: convocacao.id })
+        .from(convocacao)
+        .innerJoin(escala, eq(escala.id, convocacao.escalaId))
+        .where(and(eq(escala.eventoId, eventoId), ativaNaEscala, eq(convocacao.precisaHotel, false)));
+      return linhas.length;
     },
 
     async eventoExiste(eventoId) {

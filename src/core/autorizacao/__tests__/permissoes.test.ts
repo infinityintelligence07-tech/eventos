@@ -21,6 +21,7 @@ const MATRIZ: Record<Permissao, { time: boolean; lider: boolean }> = {
   "config.locais": { time: true, lider: true },
   "config.modelos_copy": { time: true, lider: true },
   "config.link_custos": { time: false, lider: true },
+  "config.aviso_de_voos": { time: false, lider: true },
   "config.regras_vagas": { time: false, lider: true },
   "config.regras_custo": { time: false, lider: true },
   "config.acesso_do_time": { time: false, lider: true },

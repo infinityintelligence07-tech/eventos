@@ -201,7 +201,7 @@ type Permissao =
   | "comunicacao.enviar" | "disponibilidade.gerir" | "disponibilidade.registrar_resposta" | "pessoas.editar"
   | "logistica.gerir" | "logistica.registrar_retorno_sdc" | "custos.registrar" | "custos.auditar"
   | "custos.reabrir_auditoria" | "config.locais" | "config.modelos_copy" | "config.link_custos"
-  | "config.regras_vagas" | "config.regras_custo";
+  | "config.aviso_de_voos" | "config.regras_vagas" | "config.regras_custo";
 pode(ator: Pick<Ator, "perfis">, permissao: Permissao): boolean   // switch exaustivo por perfil
 class AcessoNegadoError extends Error {}                            // traduzida por mensagemDoErro
 ```
@@ -229,10 +229,11 @@ A leitura de todas as telas vale para os dois perfis. Não há permissão só de
 | `config.locais` | ✓ | ✓ | — |
 | `config.modelos_copy` | ✓ | ✓ | — |
 | `config.link_custos` | — | ✓ | muda todas as copys de escalação |
+| `config.aviso_de_voos` | — | ✓ | muda quando o aviso de passagens a pedir aparece para todo o time |
 | `config.regras_vagas` | — | ✓ | — |
 | `config.regras_custo` | — | ✓ | dinheiro |
 
-### 4.3 Todas as server actions (13 arquivos, `rg -l "use server" src/app`)
+### 4.3 Todas as server actions (15 arquivos, `rg -l "use server" src/app`)
 
 | Arquivo | Action → permissão |
 |---|---|
@@ -243,10 +244,11 @@ A leitura de todas as telas vale para os dois perfis. Não há permissão só de
 | `disponibilidade/nova/acoes.ts` | `abrirEnqueteAcao` → `disponibilidade.gerir` |
 | `disponibilidade/[enqueteId]/acoes.ts` | `encerrarEnqueteAcao`, `reabrirEnqueteAcao` → `disponibilidade.gerir`; `registrarRespostaAcao` → `disponibilidade.registrar_resposta` |
 | `pessoas/[pessoaId]/acoes.ts` | `salvarPerfilAcao`, `definirFuncoesAcao`, `salvarVeiculoAcao`, `salvarCoordenadasAcao` → `pessoas.editar` |
-| `logistica/acoes.ts` | `registrarPedidoDeVooAcao`, `alterarPedidoAcao`, `cancelarPedidoAcao`, `criarHospedagemAcao`, `alterarHospedagemAcao`, `registrarPedidoDeHospedagemAcao`, `adicionarQuartoAcao`, `removerQuartoAcao`, `porNoQuartoAcao`, `tirarDoQuartoAcao`, `definirPeriodoDoOcupanteAcao`, `aplicarRoomingSugeridoAcao`, `criarCaronaAcao`, `removerCaronaAcao`, `definirCaronaAcao`, `tirarDaCaronaAcao` → `logistica.gerir`; `registrarRetornoDeVooAcao`, `registrarRetornoDeHospedagemAcao` → `logistica.registrar_retorno_sdc` |
+| `logistica/acoes.ts` | `registrarPedidoDeVooAcao`, `alterarPedidoAcao`, `cancelarPedidoAcao`, `criarHospedagemAcao`, `alterarHospedagemAcao`, `registrarPedidoDeHospedagemAcao`, `adicionarQuartoAcao`, `removerQuartoAcao`, `porNoQuartoAcao`, `moverDeQuartoAcao`, `tirarDoQuartoAcao`, `definirPeriodoDoOcupanteAcao`, `aplicarRoomingSugeridoAcao`, `criarCaronaAcao`, `removerCaronaAcao`, `definirCaronaAcao`, `tirarDaCaronaAcao` → `logistica.gerir`; `registrarRetornoDeVooAcao`, `registrarRetornoDeHospedagemAcao` → `logistica.registrar_retorno_sdc` |
 | `custos/acoes.ts` | `registrarSolicitacaoAcao`, `corrigirSolicitacaoAcao`, `calcularPreviaAcao` (não grava) → `custos.registrar`; `aprovarSolicitacaoAcao`, `reprovarSolicitacaoAcao` → `custos.auditar`; `reabrirAuditoriaAcao` → `custos.reabrir_auditoria` |
 | `configuracoes/locais/acoes.ts` | `salvarLocalAcao`, `arquivarLocalAcao` → `config.locais` |
 | `configuracoes/modelos-de-copy/acoes.ts` | `salvarModeloAcao`, `definirModeloAtivoAcao`, `previaDoModeloAcao` (não grava) → `config.modelos_copy`; `salvarLinkDeCustosAcao` → `config.link_custos` |
+| `configuracoes/voos/acoes.ts` | `salvarAvisoDeVoosAcao` → `config.aviso_de_voos` |
 | `configuracoes/vagas/acoes.ts` | `salvarRegraDeVagas`, `recalcularVagasDoTipo` → `config.regras_vagas` |
 | `configuracoes/regras-de-custo/acoes.ts` | `criarVigenciaDeRegraAcao`, `desativarRegraAcao` → `config.regras_custo` |
 

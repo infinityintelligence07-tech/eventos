@@ -5,6 +5,8 @@ import { ErroDaLogistica, LogisticaMudouError } from "@/modules/logistica";
 export type ItemDoInicio = {
   chave: string;
   titulo: string;
+  /** Quando o texto depende de configuração (dias do aviso de voos); sem ela, o Início usa a microcopy fixa. */
+  explicacao?: string;
   quantidade: number;
   href: string;
   exemplos: { rotulo: string; detalhe?: string; href: string }[];

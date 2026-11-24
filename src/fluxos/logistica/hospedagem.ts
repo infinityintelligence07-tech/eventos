@@ -20,6 +20,7 @@ import {
   sugerirRooming,
   textoDoPedidoDeHospedagem,
   textoDoRooming,
+  type TrocarDeQuarto,
 } from "@/modules/logistica";
 
 import { traduzirErros } from "./comum";
@@ -38,6 +39,8 @@ export type HospedagemDoEventoCarregada = {
   /** Quem o time marcou para hotel na escala do evento (só essas pessoas entram em quarto). */
   equipe: PessoaDaEquipe[];
   semQuarto: PessoaDaEquipe[];
+  /** Pessoas ativas na escala do evento que não estão marcadas para hotel (para lembrar de conferir a escala). */
+  naEscalaSemHotel: number;
   /** Quantas pessoas sem quarto a sugestão por sexo consegue alocar. */
   sugestaoAloca: number;
 };
@@ -49,9 +52,9 @@ export async function carregarHospedagem(eventoId: string | null, agora: Date): 
   const repo = criarRepositorioHospedagem(db);
   const [eventos, locais] = await Promise.all([pedidos.eventosDaLogistica({ desde: dataEmSaoPaulo(agora) }), repo.locaisDeHospedagem()]);
   const evento = eventoId ? (eventos.find((item) => item.id === eventoId) ?? (await pedidos.eventoPorId(eventoId))) : (eventos[0] ?? null);
-  if (!evento) return { eventos, evento: null, hospedagens: [], locais, equipe: [], semQuarto: [], sugestaoAloca: 0 };
+  if (!evento) return { eventos, evento: null, hospedagens: [], locais, equipe: [], semQuarto: [], naEscalaSemHotel: 0, sugestaoAloca: 0 };
 
-  const [hospedagens, equipe] = await Promise.all([repo.hospedagensDoEvento(evento.id), repo.equipeDoEvento(evento.id)]);
+  const [hospedagens, equipe, naEscalaSemHotel] = await Promise.all([repo.hospedagensDoEvento(evento.id), repo.equipeDoEvento(evento.id), repo.naEscalaSemHotel(evento.id)]);
   const semQuarto = equipe.filter((pessoa) => pessoa.quartoId === null);
   const quartos = hospedagens.flatMap((hospedagem) =>
     hospedagem.quartos.map((quarto) => ({ id: quarto.id, capacidade: quarto.capacidade, sexo: quarto.sexo, ocupantes: quarto.ocupantes })),
@@ -62,6 +65,7 @@ export async function carregarHospedagem(eventoId: string | null, agora: Date): 
     locais,
     equipe,
     semQuarto,
+    naEscalaSemHotel,
     sugestaoAloca: sugerirRooming(semQuarto, quartos).alocacoes.length,
     hospedagens: hospedagens.map((hospedagem) => {
       const quartosEmTexto = hospedagem.quartos.map((quarto) => ({ nome: quarto.nome, capacidade: quarto.capacidade, ocupantes: quarto.ocupantes.map((ocupante) => nomeComPeriodo(ocupante.nome, ocupante)) }));
@@ -112,6 +116,11 @@ export function removerQuarto(quartoId: string, ator: AtorDaEscrita, agora: Date
 /** Pôr no quarto ou "Mover para…" outro quarto. */
 export function porNoQuarto(entrada: PorNoQuarto, ator: AtorDaEscrita, agora: Date) {
   return traduzirErros(() => transacao(ator, (tx) => servicoDeHospedagem.porNoQuarto(criarRepositorioHospedagem(tx), entrada, contexto(ator.usuarioId, agora))));
+}
+
+/** Duas pessoas de quartos diferentes trocam de lugar em um passo (funciona com os dois quartos cheios). */
+export function trocarDeQuarto(entrada: TrocarDeQuarto, ator: AtorDaEscrita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDeHospedagem.trocarDeQuarto(criarRepositorioHospedagem(tx), entrada, contexto(ator.usuarioId, agora))));
 }
 
 export function tirarDoQuarto(entrada: PorNoQuarto, ator: AtorDaEscrita, agora: Date) {

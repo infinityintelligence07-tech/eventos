@@ -48,6 +48,7 @@ const ESPERADO: Record<string, Record<string, Permissao>> = {
     adicionarQuartoAcao: "logistica.gerir",
     removerQuartoAcao: "logistica.gerir",
     porNoQuartoAcao: "logistica.gerir",
+    moverDeQuartoAcao: "logistica.gerir",
     tirarDoQuartoAcao: "logistica.gerir",
     definirPeriodoDoOcupanteAcao: "logistica.gerir",
     aplicarRoomingSugeridoAcao: "logistica.gerir",
@@ -72,6 +73,7 @@ const ESPERADO: Record<string, Record<string, Permissao>> = {
     previaDoModeloAcao: "config.modelos_copy",
     salvarLinkDeCustosAcao: "config.link_custos",
   },
+  "configuracoes/voos/acoes.ts": { salvarAvisoDeVoosAcao: "config.aviso_de_voos" },
   "configuracoes/vagas/acoes.ts": { salvarRegraDeVagas: "config.regras_vagas", recalcularVagasDoTipo: "config.regras_vagas" },
   "configuracoes/regras-de-custo/acoes.ts": { criarVigenciaDeRegraAcao: "config.regras_custo", desativarRegraAcao: "config.regras_custo" },
 };
@@ -94,7 +96,7 @@ function permissoesDasActions(arquivo: string): Record<string, string | null> {
 describe("server actions com permissão (docs/09 §4.3)", () => {
   const arquivos = globSync("**/acoes.ts", { cwd: RAIZ }).filter((arquivo) => readFileSync(path.join(RAIZ, arquivo), "utf8").includes('"use server"'));
 
-  it("os 14 arquivos de actions são os da tabela", () => {
+  it("os 15 arquivos de actions são os da tabela", () => {
     expect(arquivos.sort()).toEqual(Object.keys(ESPERADO).sort());
   });
 
@@ -104,7 +106,7 @@ describe("server actions com permissão (docs/09 §4.3)", () => {
     for (const permissao of Object.values(encontradas)) expect(PERMISSOES).toContain(permissao);
   });
 
-  it("59 actions no total", () => {
-    expect(Object.values(ESPERADO).flatMap(Object.keys)).toHaveLength(59);
+  it("61 actions no total", () => {
+    expect(Object.values(ESPERADO).flatMap(Object.keys)).toHaveLength(61);
   });
 });

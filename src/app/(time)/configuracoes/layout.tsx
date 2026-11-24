@@ -14,6 +14,7 @@ const ABAS: (AbaDaPagina & { permissao: Permissao })[] = [
   { href: "/configuracoes/vagas", rotulo: "Vagas por tipo de evento", permissao: "config.regras_vagas" },
   { href: "/configuracoes/modelos-de-copy", rotulo: "Modelos de copy", permissao: "config.modelos_copy" },
   { href: "/configuracoes/locais", rotulo: "Locais e hotéis", permissao: "config.locais" },
+  { href: "/configuracoes/voos", rotulo: "Aviso de voos", permissao: "config.aviso_de_voos" },
   { href: "/configuracoes/acesso", rotulo: "Acesso do time", permissao: "config.acesso_do_time" },
 ];
 

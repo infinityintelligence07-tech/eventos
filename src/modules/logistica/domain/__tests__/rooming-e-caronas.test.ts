@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import { lugaresLivres, podeEntrarNaCarona } from "../caronas";
-import { misturaSexos, nomeComPeriodo, periodoProprio, podeOcupar, type QuartoDoRooming, sugerirRooming } from "../rooming";
-import { centavosDoTexto, definirPeriodoDoOcupanteSchema, registrarPedidoDeVooSchema, registrarRetornoDeVooSchema } from "../schemas";
+import { misturaSexos, nomeComPeriodo, periodoProprio, podeOcupar, podeTrocar, type QuartoDoRooming, sugerirRooming } from "../rooming";
+import {
+  centavosDoTexto,
+  definirPeriodoDoOcupanteSchema,
+  destinoDaTroca,
+  destinoNoQuarto,
+  moverDeQuartoSchema,
+  registrarPedidoDeVooSchema,
+  registrarRetornoDeVooSchema,
+} from "../schemas";
 
 const quarto = (id: string, capacidade: number, sexo: "F" | "M" | null, ocupantes: ("F" | "M" | null)[] = []): QuartoDoRooming => ({
   id,
@@ -30,6 +38,43 @@ describe("podeOcupar", () => {
   it("mistura de sexos ignora quem está sem sexo", () => {
     expect(misturaSexos([{ sexo: "F" }, { sexo: null }])).toBe(false);
     expect(misturaSexos([{ sexo: "F" }, { sexo: "M" }])).toBe(true);
+  });
+});
+
+describe("podeTrocar (duas pessoas trocam de lugar em um passo)", () => {
+  const ocupante = (quartoDaPessoa: QuartoDoRooming, indice: number) => quartoDaPessoa.ocupantes[indice]!;
+
+  it("dois quartos cheios do mesmo sexo: a troca cabe, porque cada uma ocupa a cama que a outra deixou", () => {
+    const a = quarto("a", 2, "F", ["F", "F"]);
+    const b = quarto("b", 2, null, ["F", "F"]);
+    expect(podeOcupar(b, ocupante(a, 0))).toEqual({ ok: false, motivo: "QUARTO_CHEIO" });
+    expect(podeTrocar({ quarto: a, pessoa: ocupante(a, 0) }, { quarto: b, pessoa: ocupante(b, 1) })).toEqual({ ok: true });
+  });
+
+  it.each<[string, QuartoDoRooming, number, QuartoDoRooming, number, ReturnType<typeof podeTrocar>]>([
+    ["quem vem não é do sexo do quarto de destino", quarto("a", 2, "F", ["F", "F"]), 0, quarto("b", 2, null, ["M", "F"]), 0, { ok: false, motivo: "SEXO_DIFERENTE", quartoId: "a" }],
+    ["quem vai não é do sexo do outro quarto", quarto("a", 2, null, ["M", "F"]), 0, quarto("b", 2, "F", ["F", "F"]), 0, { ok: false, motivo: "SEXO_DIFERENTE", quartoId: "b" }],
+    ["sem sexo no cadastro indo para quarto separado por sexo", quarto("a", 2, "M", ["M"]), 0, quarto("b", 2, null, [null]), 0, { ok: false, motivo: "SEM_SEXO_NO_CADASTRO", quartoId: "a" }],
+    ["quartos mistos aceitam qualquer troca", quarto("a", 1, null, ["M"]), 0, quarto("b", 3, null, ["F", null]), 1, { ok: true }],
+  ])("%s", (_caso, quartoA, indiceA, quartoB, indiceB, esperado) => {
+    expect(podeTrocar({ quarto: quartoA, pessoa: ocupante(quartoA, indiceA) }, { quarto: quartoB, pessoa: ocupante(quartoB, indiceB) })).toEqual(esperado);
+  });
+
+  it("o seletor \"Mover para…\" vira mover (quarto com vaga) ou trocar (pessoa de outro quarto)", () => {
+    const quartoAtual = "018f4e2a-0000-7000-8000-000000000001";
+    const convocacao = "018f4e2a-0000-7000-8000-000000000002";
+    const outroQuarto = "018f4e2a-0000-7000-8000-000000000003";
+    const outraPessoa = "018f4e2a-0000-7000-8000-000000000004";
+    const ler = (destino: unknown) => moverDeQuartoSchema.safeParse({ quartoId: quartoAtual, convocacaoId: convocacao, destino });
+
+    expect(ler(destinoNoQuarto(outroQuarto))).toEqual({ success: true, data: { mover: { quartoId: outroQuarto, convocacaoId: convocacao } } });
+    expect(ler(destinoDaTroca(outroQuarto, outraPessoa))).toEqual({
+      success: true,
+      data: { trocar: { quartoId: quartoAtual, convocacaoId: convocacao, comQuartoId: outroQuarto, comConvocacaoId: outraPessoa } },
+    });
+    for (const invalido of [undefined, "", outroQuarto, `quarto:${outroQuarto}:${outraPessoa}`, `troca:${outroQuarto}`, "troca:a:b", `outro:${outroQuarto}`]) {
+      expect(ler(invalido).success).toBe(false);
+    }
   });
 });
 

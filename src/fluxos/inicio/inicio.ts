@@ -23,6 +23,8 @@ import {
 export type ItemDoInicio = {
   chave: string;
   titulo: string;
+  /** Explicação montada pela origem (ex.: os dias configurados do aviso de voos); sem ela vale a microcopy da tela. */
+  explicacao?: string;
   quantidade: number;
   href: string;
   exemplos: { rotulo: string; detalhe?: string; href: string }[];
@@ -51,7 +53,8 @@ const FONTES: { origem: OrigemDoInicio; nome: string; carregar: (agora: Date) =>
   { origem: "escalas", nome: "Escalas", carregar: dasEscalas },
   { origem: "eventos", nome: "Eventos", carregar: dosEventos },
   { origem: "comunicacao", nome: "Comunicação", carregar: daComunicacao },
-  { origem: "logistica", nome: "Voos e Hospedagem", carregar: daLogistica },
+  // As pendências da logística no Início são as de voo (passagens a pedir e pedidos alterados).
+  { origem: "logistica", nome: "Voos", carregar: daLogistica },
   { origem: "custos", nome: "Custos", carregar: dosCustos },
   { origem: "disponibilidade", nome: "Disponibilidade", carregar: daDisponibilidade },
 ];

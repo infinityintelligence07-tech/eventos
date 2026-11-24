@@ -1,5 +1,20 @@
 export { dataEmSaoPaulo, diasEntre, somarDias } from "./domain/datas";
-export { DIAS_ABRE_A_JANELA, DIAS_ATRASADO, type JanelaDeCompra, janelaDeCompra, precisaPedir } from "./domain/janela";
+export {
+  CHAVE_DIAS_DO_AVISO_DE_VOOS,
+  DIAS_ABRE_A_JANELA,
+  DIAS_ATRASADO,
+  DIAS_DO_AVISO_MAXIMO,
+  DIAS_DO_AVISO_MINIMO,
+  diasDoAtraso,
+  diasDoAvisoConfigurado,
+  type EventoComPassagensAPedir,
+  eventosComPassagensAPedir,
+  type JanelaDeCompra,
+  janelaDeCompra,
+  precisaPedir,
+  textoDasPassagensAPedir,
+  textoDosDiasQueFaltam,
+} from "./domain/janela";
 export {
   aguardandoSdc,
   pedidoAtivo,
@@ -22,6 +37,7 @@ export {
   type Periodo,
   periodoProprio,
   podeOcupar,
+  podeTrocar,
   type QuartoDoRooming,
   rotuloDaCapacidade,
   rotuloDoSexoDoQuarto,
@@ -42,11 +58,16 @@ export {
   type CriarHospedagem,
   type DefinirCarona,
   type DefinirPeriodoDoOcupante,
+  destinoDaTroca,
+  destinoNoQuarto,
+  type MoverDeQuarto,
+  moverDeQuartoSchema,
   type PorNoQuarto,
   type RegistrarPedidoDeHospedagem,
   type RegistrarPedidoDeVoo,
   type RegistrarRetornoDeHospedagem,
   type RegistrarRetornoDeVoo,
+  type SalvarAvisoDeVoos,
   alterarHospedagemSchema,
   alterarPedidoSchema,
   aplicarRoomingSugeridoSchema,
@@ -63,9 +84,12 @@ export {
   registrarRetornoDeVooSchema,
   removerCaronaSchema,
   removerQuartoSchema,
+  salvarAvisoDeVoosSchema,
   SENTIDOS,
   tirarDaCaronaSchema,
   tirarDoQuartoSchema,
+  type TrocarDeQuarto,
+  trocarDeQuartoSchema,
 } from "./domain/schemas";
 export * as servicoDePedidos from "./service/pedidos";
 export * as servicoDeHospedagem from "./service/hospedagem";

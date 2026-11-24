@@ -1,6 +1,6 @@
 import { ErroDaLogistica, LogisticaMudouError } from "../domain/erros";
-import { mensagemDaRecusa, type Periodo, periodoProprio, podeOcupar, type QuartoDoRooming, type Sexo, sugerirRooming, textoDoPeriodo } from "../domain/rooming";
-import type { AdicionarQuarto, AlterarHospedagem, CriarHospedagem, DefinirPeriodoDoOcupante, PorNoQuarto } from "../domain/schemas";
+import { mensagemDaRecusa, type Periodo, periodoProprio, podeOcupar, podeTrocar, type QuartoDoRooming, type Sexo, sugerirRooming, textoDoPeriodo } from "../domain/rooming";
+import type { AdicionarQuarto, AlterarHospedagem, CriarHospedagem, DefinirPeriodoDoOcupante, PorNoQuarto, TrocarDeQuarto } from "../domain/schemas";
 import type { ContextoDaAcao } from "./pedidos";
 
 // Hospedagem e rooming list (docs/07 §5.3): ocupantes < capacidade, sexo do quarto, convocação ativa do mesmo
@@ -124,6 +124,50 @@ export async function porNoQuarto(
     dados: { convocacaoId: convocacao.convocacaoId, quartoId: quarto.id, deQuartoId: convocacao.quartoId },
   });
   return { eventoId: quarto.eventoId, mudou: true, nomeDoQuarto: quarto.nome };
+}
+
+/**
+ * Duas pessoas de quartos diferentes trocam de lugar em um passo (sem passar por "sem quarto"), mesmo com os dois
+ * quartos cheios. Vale o mesmo que em porNoQuarto: escala ativa do evento, marcadas para hotel e sexo do quarto.
+ */
+export async function trocarDeQuarto(
+  repo: RepositorioHospedagem,
+  entrada: TrocarDeQuarto,
+  { usuarioId }: ContextoDaAcao,
+): Promise<{ eventoId: string; nomeDoQuarto: string; nomeDoOutroQuarto: string }> {
+  if (entrada.quartoId === entrada.comQuartoId) throw new ErroDaLogistica("As duas pessoas já estão no mesmo quarto.");
+  if (entrada.convocacaoId === entrada.comConvocacaoId) throw new ErroDaLogistica("Escolha outra pessoa para trocar de lugar.");
+
+  // Sempre na mesma ordem (id), para duas trocas cruzadas não ficarem esperando uma pela outra.
+  const travados = new Map<string, QuartoTravado | null>();
+  for (const quartoId of [entrada.quartoId, entrada.comQuartoId].sort()) travados.set(quartoId, await repo.travarQuarto(quartoId));
+  const quarto = travados.get(entrada.quartoId);
+  const outroQuarto = travados.get(entrada.comQuartoId);
+  if (!quarto || !outroQuarto) throw new ErroDaLogistica("Quarto não encontrado. Recarregue a página.");
+  if (quarto.eventoId !== outroQuarto.eventoId) throw new ErroDaLogistica("Os dois quartos precisam ser do mesmo evento.");
+
+  const convocacoes = new Map<string, Awaited<ReturnType<RepositorioHospedagem["travarConvocacao"]>>>();
+  for (const convocacaoId of [entrada.convocacaoId, entrada.comConvocacaoId].sort()) convocacoes.set(convocacaoId, await repo.travarConvocacao(convocacaoId));
+  const pessoa = convocacoes.get(entrada.convocacaoId);
+  const outraPessoa = convocacoes.get(entrada.comConvocacaoId);
+  // Alguém saiu do quarto (ou mudou de quarto) depois que a tela foi aberta.
+  if (pessoa?.quartoId !== quarto.id || outraPessoa?.quartoId !== outroQuarto.id) throw new LogisticaMudouError("a pessoa já não estava no quarto");
+  for (const convocacao of [pessoa, outraPessoa]) {
+    if (convocacao.eventoId !== quarto.eventoId) throw new ErroDaLogistica("Esta pessoa não está na escala deste evento.");
+    if (!convocacao.ativa) throw new ErroDaLogistica("Uma das pessoas saiu da escala deste evento: tire-a do quarto em vez de trocar.");
+    if (!convocacao.precisaHotel) throw new ErroDaLogistica("Uma das pessoas não está marcada para hotel. Marque \"Hotel\" na escala do evento antes de trocar.");
+  }
+
+  const verificacao = podeTrocar({ quarto, pessoa }, { quarto: outroQuarto, pessoa: outraPessoa });
+  if (!verificacao.ok) throw new ErroDaLogistica(mensagemDaRecusa(verificacao.motivo, verificacao.quartoId === quarto.id ? quarto.nome : outroQuarto.nome));
+
+  await repo.porOcupante(outroQuarto.id, pessoa.convocacaoId);
+  await repo.porOcupante(quarto.id, outraPessoa.convocacaoId);
+  const dados = { convocacaoId: pessoa.convocacaoId, quartoId: outroQuarto.id, comConvocacaoId: outraPessoa.convocacaoId, comQuartoId: quarto.id };
+  for (const hospedagemId of new Set([quarto.hospedagemId, outroQuarto.hospedagemId])) {
+    await repo.registrar({ hospedagemId, eventoId: quarto.eventoId, acao: "OCUPANTES_TROCADOS", usuarioId, dados });
+  }
+  return { eventoId: quarto.eventoId, nomeDoQuarto: outroQuarto.nome, nomeDoOutroQuarto: quarto.nome };
 }
 
 export async function tirarDoQuarto(repo: RepositorioHospedagem, entrada: PorNoQuarto, { usuarioId }: ContextoDaAcao): Promise<string> {
