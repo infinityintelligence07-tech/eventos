@@ -389,7 +389,7 @@ function AvisoDeCompra({ aviso, base, parametros, escrita }: { aviso: VoosCarreg
         ))}
       </ul>
       <p className="mt-2 text-[12px] text-[var(--ds-label-2)]">
-        O aviso começa {aviso.diasDoAviso} dias antes do evento e conta como atrasado a partir de {aviso.diasDoAtraso} dias. Evento marcado como &quot;não precisa de voo&quot; sai do aviso.{" "}
+        O aviso começa {aviso.diasDoAviso} dias antes do evento e conta como atrasado a partir de {aviso.diasDoAtraso} dias. Eventos do polo Americana e os marcados como &quot;não precisa de voo&quot; ficam fora do aviso; o pedido continua liberado para eles.{" "}
         <Link href="/configuracoes/voos" className="font-medium text-[var(--ds-tint-text)] hover:underline">
           Configurações
         </Link>

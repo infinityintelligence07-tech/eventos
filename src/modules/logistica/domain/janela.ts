@@ -53,6 +53,16 @@ export function precisaPedir(janela: JanelaDeCompra): boolean {
   }
 }
 
+/**
+ * Polo de casa (Americana): os eventos dele não entram no aviso de voos, porque a equipe é de lá. Decisão do time em
+ * 24/11/2026. O pedido de voo continua liberado para esses eventos; só o aviso é que não aparece.
+ */
+export const POLO_DE_CASA = "AM";
+
+export function eventoDeCasa(poloCodigo: string | null | undefined): boolean {
+  return poloCodigo === POLO_DE_CASA;
+}
+
 export type EventoSemPedidoDeVoo = {
   eventoId: string;
   codigo: string | null;

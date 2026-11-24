@@ -8,6 +8,7 @@ export {
   diasDoAtraso,
   diasDoAvisoConfigurado,
   type EventoSemPedidoDeVoo,
+  eventoDeCasa,
   eventosSemPedidoDeVoo,
   type JanelaDeCompra,
   janelaDeCompra,

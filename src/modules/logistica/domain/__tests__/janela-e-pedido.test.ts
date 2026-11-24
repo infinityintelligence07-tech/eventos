@@ -5,6 +5,7 @@ import {
   DIAS_ABRE_A_JANELA,
   diasDoAtraso,
   diasDoAvisoConfigurado,
+  eventoDeCasa,
   eventosSemPedidoDeVoo,
   janelaDeCompra,
   precisaPedir,
@@ -259,5 +260,12 @@ describe("máquina do pedido à SDC (§4.5)", () => {
         "Observação: Bagagem de mão",
       ].join("\n"),
     );
+  });
+});
+
+describe("polo de casa", () => {
+  it("só o polo Americana (AM) fica fora do aviso de voos; sem polo ou outro polo entra", () => {
+    expect(eventoDeCasa("AM")).toBe(true);
+    expect([eventoDeCasa("POA"), eventoDeCasa("am"), eventoDeCasa(null), eventoDeCasa(undefined)]).toEqual([false, false, false, false]);
   });
 });

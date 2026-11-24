@@ -1,6 +1,6 @@
 import { and, asc, count, desc, eq, inArray, isNull, ne, notInArray, sql, type SQL } from "drizzle-orm";
 
-import { pessoa, usuario } from "@/core/db/schema/core";
+import { pessoa, polo, usuario } from "@/core/db/schema/core";
 import type { Executor } from "@/core/db/database";
 import { registrarAcao } from "@/core/db/registro-acao";
 import { convocacao, escala, evento, hospedagem, local, pedidoSdc, pessoaEvento, quarto, tipoEvento, trechoVoo } from "@/core/db/schema/eventos";
@@ -25,8 +25,8 @@ export type EventoDaLogistica = {
   semHospedagem: boolean;
 };
 
-/** Evento de hoje em diante, não cancelado, com a sigla do tipo (o aviso de voos deixa as Masterclasses de fora). */
-export type EventoFuturo = EventoDaLogistica & { tipoSigla: string | null };
+/** Evento de hoje em diante, não cancelado, com a sigla do tipo e o código do polo (o aviso de voos deixa de fora as Masterclasses e o polo de casa). */
+export type EventoFuturo = EventoDaLogistica & { tipoSigla: string | null; poloCodigo: string | null };
 
 export type PassageiroDeVoo = {
   convocacaoId: string;
@@ -159,10 +159,11 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
 
     async eventosFuturos({ desde }) {
       return executor
-        .select({ ...colunasDoEvento, tipoSigla: tipoEvento.sigla })
+        .select({ ...colunasDoEvento, tipoSigla: tipoEvento.sigla, poloCodigo: polo.codigo })
         .from(evento)
         .leftJoin(local, eq(local.id, evento.localId))
         .leftJoin(tipoEvento, eq(tipoEvento.id, evento.tipoEventoId))
+        .leftJoin(polo, eq(polo.id, evento.poloId))
         .where(and(isNull(evento.deletedAt), ne(evento.status, "CANCELADO"), eventoTerminaDesde(desde)))
         .orderBy(asc(inicioDoEvento), asc(evento.codigo));
     },

@@ -534,6 +534,12 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
       `insert into eventos.evento (nome, codigo, inicio, fim, status, tipo_evento_id)
        select 'MC_AM_MANAUS', 'MC_AM_MANAUS', '2027-02-11T22:00:00Z', '2027-02-12T01:00:00Z', 'PLANEJADO', id from eventos.tipo_evento where sigla = 'MC'`,
     );
+    // Evento do polo de casa (Americana): a equipe é de lá, então fica fora do aviso mesmo no prazo e sem pedido.
+    await teste.sql(
+      `with casa as (insert into core.polo (codigo, nome) values ('AM', 'Americana') returning id)
+       insert into eventos.evento (nome, codigo, inicio, fim, status, polo_id)
+       select 'CASA_AM_905', 'CASA_AM_905', '2027-02-09T12:00:00Z', '2027-02-09T22:00:00Z', 'PLANEJADO', id from casa`,
+    );
 
     const doEvento = async () => {
       const voos = await carregarVoos({ eventoId: evento.id }, agora);
@@ -560,7 +566,8 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
     const geral = await carregarVoos({}, agora);
     expect(geral.avisoDeCompra.eventos.map((item) => item.codigo)).toContain("AVISO_AM_902");
     expect(geral.avisoDeCompra.eventos.map((item) => item.codigo)).not.toContain("MC_AM_MANAUS");
-    expect(geral.eventos.map((item) => item.codigo)).toEqual(expect.arrayContaining(["AVISO_AM_902", "MC_AM_MANAUS"]));
+    expect(geral.avisoDeCompra.eventos.map((item) => item.codigo)).not.toContain("CASA_AM_905");
+    expect(geral.eventos.map((item) => item.codigo)).toEqual(expect.arrayContaining(["AVISO_AM_902", "MC_AM_MANAUS", "CASA_AM_905"]));
 
     // "Este evento não precisa de voo": sai do aviso (Início e Voos), fica na lista para desfazer, com registro.
     expect(await dispensarLogisticaDoEvento({ eventoId: evento.id, item: "VOO", dispensar: true }, ator())).toEqual({ mudou: true });

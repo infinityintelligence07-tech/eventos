@@ -9,6 +9,7 @@ import {
   diasDoAtraso,
   type EventoDaLogistica,
   type EventoSemPedidoDeVoo,
+  eventoDeCasa,
   eventosSemPedidoDeVoo,
   type GrupoDoMes,
   type JanelaDeCompra,
@@ -93,7 +94,7 @@ function montarAviso({
   hoje,
   eventoId,
 }: {
-  futuros: (EventoDaLogistica & { tipoSigla: string | null })[];
+  futuros: (EventoDaLogistica & { tipoSigla: string | null; poloCodigo: string | null })[];
   pedidos: PedidoDaSdc[];
   passageiros: { evento: { id: string } }[];
   diasDoAviso: number;
@@ -103,7 +104,8 @@ function montarAviso({
   const comPedidoAtivo = new Set(pedidos.filter((pedido) => pedido.tipo === "VOO" && pedidoAtivo(pedido.situacao)).map((pedido) => pedido.evento.id));
   const marcadasComoAviao = new Map<string, number>();
   for (const { evento } of passageiros) marcadasComoAviao.set(evento.id, (marcadasComoAviao.get(evento.id) ?? 0) + 1);
-  const candidatos = futuros.filter((evento) => !ehMasterclass({ tipoSigla: evento.tipoSigla ?? "" }) && (!eventoId || evento.id === eventoId));
+  // Fora do aviso: Masterclasses e os eventos do polo de casa (a equipe é de lá). O pedido continua liberado para eles.
+  const candidatos = futuros.filter((evento) => !ehMasterclass({ tipoSigla: evento.tipoSigla ?? "" }) && !eventoDeCasa(evento.poloCodigo) && (!eventoId || evento.id === eventoId));
   return { diasDoAviso, diasDoAtraso: diasDoAtraso(diasDoAviso), eventos: eventosSemPedidoDeVoo(candidatos, comPedidoAtivo, marcadasComoAviao, hoje, diasDoAviso) };
 }
 
