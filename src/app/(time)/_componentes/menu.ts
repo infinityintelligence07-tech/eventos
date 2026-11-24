@@ -14,7 +14,8 @@ export type ItemDoMenu =
 
 /**
  * `raizes` acendem o item também nas subrotas (ex.: /escalas/aprovacao acende Escalas). Voos e Hospedagem dividem
- * /logistica: Caronas fica com Voos (como a pessoa chega) e Créditos de hotel com Hospedagem (onde ela dorme).
+ * /logistica: Voos fica só com as passagens; Hospedagem junta quartos e caronas (montados na mesma passada, a partir
+ * da escala) e os créditos de hotel.
  */
 export const ROTAS_DO_MENU: { nome: ItemDoMenu; href: string; raizes: string[] }[] = [
   { nome: "Início", href: "/inicio", raizes: ["/inicio"] },
@@ -23,8 +24,8 @@ export const ROTAS_DO_MENU: { nome: ItemDoMenu; href: string; raizes: string[] }
   { nome: "Comunicação", href: "/comunicacao", raizes: ["/comunicacao"] },
   { nome: "Disponibilidade", href: "/disponibilidade", raizes: ["/disponibilidade"] },
   { nome: "Pessoas", href: "/pessoas", raizes: ["/pessoas"] },
-  { nome: "Voos", href: "/logistica/voos", raizes: ["/logistica/voos", "/logistica/caronas"] },
-  { nome: "Hospedagem", href: "/logistica/hospedagem", raizes: ["/logistica/hospedagem", "/logistica/creditos"] },
+  { nome: "Voos", href: "/logistica/voos", raizes: ["/logistica/voos"] },
+  { nome: "Hospedagem", href: "/logistica/hospedagem", raizes: ["/logistica/hospedagem", "/logistica/caronas", "/logistica/creditos"] },
   { nome: "Custos", href: "/custos", raizes: ["/custos"] },
   { nome: "Configurações", href: "/configuracoes/regras-de-custo", raizes: ["/configuracoes"] },
 ];

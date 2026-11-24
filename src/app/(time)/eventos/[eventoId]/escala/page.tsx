@@ -7,6 +7,7 @@ import { permissoesDoAtor } from "@/app/(time)/_servidor/usuario-atual";
 import { carregarMontagem, type MontagemDaEscala, sugerirPessoas } from "@/fluxos/escalas";
 
 import { Aviso, FaixaSomenteLeitura } from "../../../_componentes/ui/aviso";
+import { BotaoLink } from "../../../_componentes/ui/botao-link";
 import { Cartao } from "../../../_componentes/ui/cartao";
 import { TITULO_DE_SECAO } from "../../../_componentes/ui/classes";
 import { EstadoVazio } from "../../../_componentes/ui/estados";
@@ -205,9 +206,15 @@ export default async function PaginaEscalaDoEvento({ params, searchParams }: Par
 
       {montagem.linhas.length > 0 && (
         <section aria-labelledby="equipe" className="mb-6">
-          <h2 id="equipe" className={`${TITULO_DE_SECAO} mb-2`}>
-            Equipe
-          </h2>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h2 id="equipe" className={TITULO_DE_SECAO}>
+              Equipe
+            </h2>
+            {/* Quem foi marcado com Hotel ou Carona aqui é distribuído em quartos e carros na Hospedagem do evento. */}
+            <BotaoLink href={`/logistica/hospedagem?evento=${evento.id}`} tamanho="pequeno">
+              Montar quartos e caronas
+            </BotaoLink>
+          </div>
           <div className="grid grid-cols-1 gap-3">
             {montagem.linhas.map((linha) => (
               <EquipeDaFuncao

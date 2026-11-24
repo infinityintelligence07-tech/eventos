@@ -42,7 +42,7 @@ export default async function PaginaLogisticaDoEvento({ params, searchParams }: 
     <>
       <SecaoDeVoos dados={voos} pedido={pedido} base={`/eventos/${eventoId}/logistica`} parametros={parametros} escrita={escrita.liberada} comSeletorDeEvento={false} />
       <SecaoDeHospedagem dados={hospedagem} escrita={escrita.liberada} comSeletorDeEvento={false} />
-      <SecaoDeCaronas dados={caronas} escrita={escrita.liberada} comSeletorDeEvento={false} />
+      <SecaoDeCaronas dados={caronas} escrita={escrita.liberada} />
     </>
   );
 }
