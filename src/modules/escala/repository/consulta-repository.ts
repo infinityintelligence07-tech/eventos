@@ -111,6 +111,8 @@ export type EventoDaLista = {
   poloCodigo: string | null;
   dataInicio: string;
   dataFim: string;
+  /** Local do evento, quando o IAM Control já informou. */
+  local: { nome: string; cidade: string; uf: string } | null;
   status: string;
   statusEscala: StatusEscala;
   vagas: number;
@@ -410,6 +412,9 @@ export function criarConsultaDaEscala(executor: Executor) {
         polo_codigo: string | null;
         data_inicio: string;
         data_fim: string;
+        local_nome: string | null;
+        local_cidade: string | null;
+        local_uf: string | null;
         status: string;
         status_escala: string;
         vagas: number;
@@ -435,6 +440,7 @@ export function criarConsultaDaEscala(executor: Executor) {
         select ev.id, ev.codigo, ev.nome, t.sigla as tipo_sigla, t.nome as tipo_nome, ev.edicao, po.codigo as polo_codigo,
                to_char(ev.inicio at time zone 'America/Sao_Paulo', 'YYYY-MM-DD') as data_inicio,
                to_char(ev.fim at time zone 'America/Sao_Paulo', 'YYYY-MM-DD') as data_fim,
+               lo.nome as local_nome, lo.cidade as local_cidade, lo.uf as local_uf,
                ev.status, ev.status_escala,
                coalesce(sum(l.quantidade_vagas), 0)::int as vagas,
                coalesce(sum(least(l.ativas, l.quantidade_vagas)), 0)::int as preenchidas,
@@ -447,6 +453,7 @@ export function criarConsultaDaEscala(executor: Executor) {
           from ${evento} ev
           join ${tipoEvento} t on t.id = ev.tipo_evento_id
           left join ${polo} po on po.id = ev.polo_id
+          left join eventos.local lo on lo.id = ev.local_id
           left join linhas l on l.evento_id = ev.id
           left join lateral (
             select r.criado_em, r.comentario from ${registroAcao} r
@@ -457,7 +464,7 @@ export function criarConsultaDaEscala(executor: Executor) {
            ${de ? sql`and to_char(ev.fim at time zone 'America/Sao_Paulo', 'YYYY-MM-DD') >= ${de}` : sql``}
            ${ate ? sql`and to_char(ev.inicio at time zone 'America/Sao_Paulo', 'YYYY-MM-DD') <= ${ate}` : sql``}
            ${statusEscala?.length ? sql`and ev.status_escala in (${sql.join(statusEscala.map((status) => sql`${status}`), sql`, `)})` : sql``}
-         group by ev.id, t.sigla, t.nome, po.codigo, dev.criado_em, dev.comentario
+         group by ev.id, t.sigla, t.nome, po.codigo, lo.nome, lo.cidade, lo.uf, dev.criado_em, dev.comentario
          order by ev.inicio, ev.nome`);
       return resultado.rows.map((linha) => ({
         id: linha.id,
@@ -469,6 +476,10 @@ export function criarConsultaDaEscala(executor: Executor) {
         poloCodigo: linha.polo_codigo,
         dataInicio: linha.data_inicio,
         dataFim: linha.data_fim,
+        local:
+          linha.local_nome !== null && linha.local_cidade !== null && linha.local_uf !== null
+            ? { nome: linha.local_nome, cidade: linha.local_cidade, uf: linha.local_uf }
+            : null,
         status: linha.status,
         statusEscala: linha.status_escala as StatusEscala,
         vagas: linha.vagas,
