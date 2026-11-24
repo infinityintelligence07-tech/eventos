@@ -6,12 +6,11 @@ import {
   type PendenciaDoCadastro,
   pendenciasDoCadastro,
   type PerfilDoStaff,
-  rotuloDaCamiseta,
   rotuloDaFuncao,
   rotuloDaPendencia,
+  rotuloDoModelo,
   rotuloDoNivel,
   rotuloDoSexo,
-  rotuloDoVeiculo,
   rotuloSimNao,
   type Sexo,
 } from "../cadastro";
@@ -60,16 +59,11 @@ describe("o que falta no cadastro", () => {
 });
 
 describe("rótulos", () => {
-  it("camiseta, função, veículo e sim/não", () => {
-    expect(rotuloDaCamiseta("BABY_LOOK", "M")).toBe("Baby look M");
-    expect(rotuloDaCamiseta("CAMISETA", null)).toBe("Camiseta");
-    expect(rotuloDaCamiseta(null, "G")).toBe("Tamanho G");
-    expect(rotuloDaCamiseta(null, null)).toBeNull();
+  it("modelo de camiseta, função e sim/não", () => {
+    expect(rotuloDoModelo("BABY_LOOK")).toBe("Baby look");
+    expect(rotuloDoModelo("CAMISETA")).toBe("Camiseta");
     expect(rotuloDaFuncao({ nome: "Pai / mãe", nivel: "TRAINEE" })).toBe("Pai / mãe · trainee");
     expect(rotuloDaFuncao({ nome: "Staff", nivel: "HABILITADO" })).toBe("Staff");
-    expect(rotuloDoVeiculo({ lugares: 1, consumoKmL: null })).toBe("1 lugar");
-    expect(rotuloDoVeiculo({ lugares: 4, consumoKmL: null })).toBe("4 lugares");
-    expect(rotuloDoVeiculo(null)).toBeNull();
     expect([true, false, null].map(rotuloSimNao)).toEqual(["Sim", "Não", "—"]);
     expect(rotuloDoSexo("F")).toBe("Feminino");
     expect(rotuloDoNivel("TRAINEE")).toBe("Trainee");
@@ -78,7 +72,7 @@ describe("rótulos", () => {
   it("valores fora do CHECK são erro de programação", () => {
     expect(() => rotuloDoSexo("X" as Sexo)).toThrow(/desconhecido/);
     expect(() => rotuloDoNivel("SENIOR" as NivelNaFuncao)).toThrow(/desconhecido/);
-    expect(() => rotuloDaCamiseta("REGATA" as ModeloDeCamiseta, null)).toThrow(/desconhecido/);
+    expect(() => rotuloDoModelo("REGATA" as ModeloDeCamiseta)).toThrow(/desconhecido/);
   });
 });
 

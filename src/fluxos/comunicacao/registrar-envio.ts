@@ -53,7 +53,7 @@ function traduzirErroDaEscala(erro: unknown): unknown {
 export type EnvioRegistradoNaTela = {
   eventoId: string;
   nome: string;
-  /** A pessoa passou de "na escala" para "aguardando resposta". */
+  /** Esta foi a primeira copy de escalação da pessoa: ela acaba de ser avisada. */
   convidada: boolean;
   /** Foi a última copy de escalação: a escala virou COMUNICADA. */
   comunicada: boolean;

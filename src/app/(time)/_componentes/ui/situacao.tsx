@@ -21,7 +21,7 @@ export function rotuloDaSituacao(situacao: SituacaoNoCalendario): string {
     case "SEM_ESCALA":
       return "Sem escala";
     case "RASCUNHO":
-      return "Escala em rascunho";
+      return "Escala em andamento";
     case "AGUARDANDO_APROVACAO":
       return "Aguardando aprovação";
     case "DEVOLVIDA":

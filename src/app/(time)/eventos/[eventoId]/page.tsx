@@ -43,7 +43,8 @@ function textoDaSituacao(situacao: SituacaoDaEtapa): string {
     case "FEITA":
       return "concluída";
     case "EM_ANDAMENTO":
-      return "em andamento";
+      // "Em andamento" é a situação da escala (chip do cabeçalho); a etapa usa outra palavra para não confundir.
+      return "iniciada";
     case "PENDENCIA":
       return "com pendência";
     case "NAO_COMECOU":

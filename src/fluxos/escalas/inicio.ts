@@ -4,9 +4,8 @@ import { dataEmSaoPaulo, DIAS_PARA_MONTAR_ESCALA, somarDias } from "@/modules/ev
 
 import { EXEMPLOS_NO_INICIO, type ItemDoInicio } from "./comum";
 
-// Itens das Escalas no Início (docs/07 §7.3).
+// Itens das Escalas no Início (docs/07 §7.3). "Pessoas sem resposta" saiu: quem está na escala já conta como confirmado.
 
-const DIAS_SEM_RESPOSTA = 2;
 const UM_DIA_MS = 24 * 60 * 60 * 1000;
 
 const identificacao = (evento: Pick<EventoDaLista, "codigo" | "nome">) => evento.codigo ?? evento.nome;
@@ -22,11 +21,10 @@ function haQuanto(instante: Date, agora: Date): string {
 export async function resumoParaInicio(agora: Date): Promise<ItemDoInicio[]> {
   const consulta = criarConsultaDaEscala(await bancoParaLeitura());
   const hoje = dataEmSaoPaulo(agora);
-  const [proximos, aguardando, devolvidas, semResposta] = await Promise.all([
+  const [proximos, aguardando, devolvidas] = await Promise.all([
     consulta.eventosDaLista({ de: hoje, ate: somarDias(hoje, DIAS_PARA_MONTAR_ESCALA), statusEscala: ["SEM_ESCALA", "RASCUNHO"] }),
     consulta.eventosDaLista({ statusEscala: ["AGUARDANDO_APROVACAO"] }),
     consulta.eventosDaLista({ de: hoje, statusEscala: ["DEVOLVIDA"] }),
-    consulta.semResposta(new Date(agora.getTime() - DIAS_SEM_RESPOSTA * UM_DIA_MS), hoje),
   ]);
   const ativos = (lista: EventoDaLista[]) => lista.filter((evento) => evento.status !== "CANCELADO" && evento.status !== "CONCLUIDO");
   const aMontar = ativos(proximos).filter((evento) => evento.tipoSigla !== "MC");
@@ -65,17 +63,6 @@ export async function resumoParaInicio(agora: Date): Promise<ItemDoInicio[]> {
         rotulo: identificacao(evento),
         detalhe: evento.comentarioDaDevolucao?.split("\n")[0]?.slice(0, 80) || undefined,
         href: escala(evento.id),
-      })),
-    },
-    {
-      chave: "escalas-sem-resposta",
-      titulo: "Pessoas sem resposta",
-      quantidade: semResposta.length,
-      href: "/escalas?situacao=aprovadas",
-      exemplos: semResposta.slice(0, EXEMPLOS_NO_INICIO).map((item) => ({
-        rotulo: `${item.nome} · ${item.codigo ?? "evento sem código"}`,
-        detalhe: item.funcao,
-        href: escala(item.eventoId),
       })),
     },
   ];

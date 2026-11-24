@@ -1,12 +1,22 @@
 import { bancoParaLeitura } from "@/fluxos/_base";
-import { criarRepositorioCalendario, dataEmSaoPaulo, type Pendencias, pendenciasDosEventos, somarDias } from "@/modules/eventos";
+import { criarConsultaDaEscala, type EventoDaLista } from "@/modules/escala";
+import { criarRepositorioCalendario, dataEmSaoPaulo, DIAS_PARA_MONTAR_ESCALA, type EventoNoCalendario, pendenciasDosEventos, somarDias } from "@/modules/eventos";
 
-/** Pendências olham este horizonte à frente, independente dos filtros da lista. */
-const DIAS_DE_PENDENCIAS = 90;
+export type EscalaAMontar = EventoNoCalendario & Pick<EventoDaLista, "preenchidas" | "local">;
 
-/** Cartões "Precisa de ação" da aba Escalas: escalas a montar, Confronto sem fila e eventos sem código. */
-export async function pendenciasDasEscalas(agora: Date): Promise<Pendencias> {
+/**
+ * Cartão "Escalas a montar" da aba Escalas: eventos (sem Masterclass) que começam nos próximos dias com a escala
+ * ainda não aprovada. A regra é a mesma do Início (`pendenciasDosEventos`); a lista só acrescenta local e vagas preenchidas.
+ */
+export async function escalasAMontar(agora: Date): Promise<EscalaAMontar[]> {
+  const db = await bancoParaLeitura();
   const hoje = dataEmSaoPaulo(agora);
-  const eventos = await criarRepositorioCalendario(await bancoParaLeitura()).eventosDoPeriodo({ de: hoje, ate: somarDias(hoje, DIAS_DE_PENDENCIAS) });
-  return pendenciasDosEventos(eventos, hoje);
+  const periodo = { de: hoje, ate: somarDias(hoje, DIAS_PARA_MONTAR_ESCALA) };
+  const [eventos, daLista] = await Promise.all([criarRepositorioCalendario(db).eventosDoPeriodo(periodo), criarConsultaDaEscala(db).eventosDaLista(periodo)]);
+  const extras = new Map(daLista.map((evento) => [evento.id, evento]));
+  return pendenciasDosEventos(eventos, hoje).escalasAMontar.map((evento) => ({
+    ...evento,
+    preenchidas: extras.get(evento.id)?.preenchidas ?? 0,
+    local: extras.get(evento.id)?.local ?? null,
+  }));
 }

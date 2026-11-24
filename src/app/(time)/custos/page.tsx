@@ -3,10 +3,12 @@ import type { Metadata } from "next";
 import { permissoesDoAtor } from "@/app/(time)/_servidor/usuario-atual";
 import { situacaoDaEscrita } from "@/fluxos/_base";
 import { carregarFilaDeAuditoria, carregarSolicitacao } from "@/fluxos/custos";
+import { caminhoDoFormularioDeCusto } from "@/modules/custos";
 
 import { CabecalhoDaPagina } from "../_componentes/ui/cabecalho";
 import { BotaoRegistrarSolicitacao, filtroDosParametros, parametrosDeCustos, SecaoDeCustos } from "./_componentes/secao-de-custos";
 import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
+import { enderecoDoSite } from "@/app/(time)/_servidor/endereco-do-site";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Custos" };
@@ -15,11 +17,12 @@ export default async function PaginaCustos({ searchParams }: { searchParams: Pro
   await exigirAtor();
   const parametros = parametrosDeCustos(await searchParams);
   const filtro = { ...filtroDosParametros(parametros), eventoId: parametros.evento };
-  const [dados, solicitacao, escrita, permissoes] = await Promise.all([
+  const [dados, solicitacao, escrita, permissoes, site] = await Promise.all([
     carregarFilaDeAuditoria(filtro, new Date()),
     parametros.protocolo ? carregarSolicitacao(parametros.protocolo, filtro) : null,
     situacaoDaEscrita(),
     permissoesDoAtor("custos.reabrir_auditoria"),
+    enderecoDoSite(),
   ]);
   return (
     <>
@@ -29,7 +32,8 @@ export default async function PaginaCustos({ searchParams }: { searchParams: Pro
         acoes={escrita.liberada && <BotaoRegistrarSolicitacao href="/custos/nova" />}
       />
       <SecaoDeCustos dados={dados} solicitacao={solicitacao} base="/custos" parametros={parametros} escrita={escrita.liberada}
-        podeReabrirAuditoria={permissoes["custos.reabrir_auditoria"]} comSeletorDeEvento />
+        podeReabrirAuditoria={permissoes["custos.reabrir_auditoria"]} comSeletorDeEvento
+        linkDoFormulario={site ? `${site}${caminhoDoFormularioDeCusto()}` : null} />
     </>
   );
 }

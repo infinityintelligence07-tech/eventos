@@ -7,21 +7,27 @@ export type ItemDoMenu =
   | "Comunicação"
   | "Disponibilidade"
   | "Pessoas"
-  | "Voos e Hospedagem"
+  | "Voos"
+  | "Hospedagem"
   | "Custos"
   | "Configurações";
 
-/** `raiz` acende o item também nas subrotas (ex.: /logistica/hospedagem acende Logística). */
-export const ROTAS_DO_MENU: { nome: ItemDoMenu; href: string; raiz: string }[] = [
-  { nome: "Início", href: "/inicio", raiz: "/inicio" },
-  { nome: "Calendário", href: "/calendario", raiz: "/calendario" },
-  { nome: "Escalas", href: "/escalas", raiz: "/escalas" },
-  { nome: "Comunicação", href: "/comunicacao", raiz: "/comunicacao" },
-  { nome: "Disponibilidade", href: "/disponibilidade", raiz: "/disponibilidade" },
-  { nome: "Pessoas", href: "/pessoas", raiz: "/pessoas" },
-  { nome: "Voos e Hospedagem", href: "/logistica/voos", raiz: "/logistica" },
-  { nome: "Custos", href: "/custos", raiz: "/custos" },
-  { nome: "Configurações", href: "/configuracoes/regras-de-custo", raiz: "/configuracoes" },
+/**
+ * `raizes` acendem o item também nas subrotas (ex.: /escalas/aprovacao acende Escalas). Voos e Hospedagem dividem
+ * /logistica: Voos fica só com as passagens; Hospedagem junta quartos e caronas (montados na mesma passada, a partir
+ * da escala) e os créditos de hotel.
+ */
+export const ROTAS_DO_MENU: { nome: ItemDoMenu; href: string; raizes: string[] }[] = [
+  { nome: "Início", href: "/inicio", raizes: ["/inicio"] },
+  { nome: "Calendário", href: "/calendario", raizes: ["/calendario"] },
+  { nome: "Escalas", href: "/escalas", raizes: ["/escalas"] },
+  { nome: "Comunicação", href: "/comunicacao", raizes: ["/comunicacao"] },
+  { nome: "Disponibilidade", href: "/disponibilidade", raizes: ["/disponibilidade"] },
+  { nome: "Pessoas", href: "/pessoas", raizes: ["/pessoas"] },
+  { nome: "Voos", href: "/logistica/voos", raizes: ["/logistica/voos"] },
+  { nome: "Hospedagem", href: "/logistica/hospedagem", raizes: ["/logistica/hospedagem", "/logistica/caronas", "/logistica/creditos"] },
+  { nome: "Custos", href: "/custos", raizes: ["/custos"] },
+  { nome: "Configurações", href: "/configuracoes/regras-de-custo", raizes: ["/configuracoes"] },
 ];
 
 /**
@@ -40,7 +46,8 @@ export function rotasDoMenu(ator: Pick<Ator, "perfis">): typeof ROTAS_DO_MENU {
 const ABA_DO_EVENTO: Record<string, ItemDoMenu> = {
   escala: "Escalas",
   comunicacao: "Comunicação",
-  logistica: "Voos e Hospedagem",
+  // A aba Logística do evento junta voos, hospedagem e caronas: abre em Voos, então acende Voos.
+  logistica: "Voos",
   custos: "Custos",
 };
 
@@ -51,5 +58,5 @@ const ABA_DO_EVENTO: Record<string, ItemDoMenu> = {
 export function itemAtivoDoMenu(caminho: string): ItemDoMenu | null {
   const doEvento = /^\/eventos\/[^/]+(?:\/([^/]+))?/.exec(caminho);
   if (doEvento) return (doEvento[1] && ABA_DO_EVENTO[doEvento[1]]) || "Calendário";
-  return ROTAS_DO_MENU.find((rota) => caminho === rota.raiz || caminho.startsWith(`${rota.raiz}/`))?.nome ?? null;
+  return ROTAS_DO_MENU.find((rota) => rota.raizes.some((raiz) => caminho === raiz || caminho.startsWith(`${raiz}/`)))?.nome ?? null;
 }

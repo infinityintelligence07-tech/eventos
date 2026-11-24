@@ -20,7 +20,7 @@ Especificação das 8 abas que faltam no app do time de eventos, no mesmo visual
 7. Comunicação
 8. Disponibilidade
 9. Pessoas
-10. Voos e Hospedagem
+10. Voos e Hospedagem (dois itens no menu: Voos e Hospedagem)
 11. Custos
 12. Configurações
 13. Tabela de situações (rótulo, tom e ícone)
@@ -70,6 +70,22 @@ Especificação das 8 abas que faltam no app do time de eventos, no mesmo visual
 Números em tabela e cartões usam `tabular-nums` (já aplicado em `th`, `td`, `strong`, `time` dentro de `[data-ds]`)
 e ficam alinhados à direita quando são valores para comparar (dinheiro, km, quantidades).
 
+**Negrito = caixa alta.** Em toda tela, o texto em destaque aparece em MAIÚSCULAS. A regra é uma só, em
+`src/app/globals.css` (bloco "Negrito = caixa alta"), e é só visual (`text-transform`): a tela não escreve em
+maiúsculas nem precisa de classe, e o que vai para a área de transferência não muda.
+
+| Vira caixa alta | Fica como está |
+|---|---|
+| Peso 600 ou mais: `font-semibold`, `font-bold`, `<strong>`, `<b>` (títulos, números dos cartões, nome no cartão do Calendário) | Botões e links com cara de botão (o primário é `font-semibold`), atalho de filtro ativo |
+| Nome da linha nas tabelas (`<th scope="row">`): pessoa, evento, função, local | Dentro dele, o que for `font-normal` (segunda linha) e as etiquetas coloridas |
+| `font-medium` de corpo de texto (14 px ou mais, na cor do texto): nomes de pessoa e de evento fora de tabela | `font-medium` com cor própria (links de ação, chips, avisos, erros) ou de 13 px para baixo (rótulos de campo, cabeçalhos de coluna); `label`, `legend`, `summary` |
+| Títulos das telas do staff (login, Meu cadastro, enquete) | Campos (`input`, `select`, `textarea`), `code`, `pre`, links `mailto:` e `http` |
+| No celular, a primeira célula de cada cartão de tabela (lá ela é negrito) | **Copy pronta** (convite, copy de comunicação, prévia do modelo): sempre com a classe `sem-caixa-alta` |
+
+Para tirar um trecho da regra, com tudo o que há dentro: classe `sem-caixa-alta`. Toda copy pronta leva essa classe,
+porque texto selecionado e copiado à mão sai como está na tela. Para um caso isolado valem os utilitários do Tailwind
+(`uppercase`, `normal-case`), que vencem a regra.
+
 ---
 
 ## 2. Navegação e rotas
@@ -85,9 +101,10 @@ O logo passa a levar para `/inicio` quando a tela Início existir.
 | Comunicação | `/comunicacao` | — |
 | Disponibilidade | `/disponibilidade` | `/disponibilidade/nova`, `/disponibilidade/[enqueteId]` |
 | Pessoas | `/pessoas` | `/pessoas/[pessoaId]` |
-| Voos e Hospedagem | `/logistica/voos` | `/logistica/hospedagem`, `/logistica/caronas`, `/logistica/creditos` |
+| Voos | `/logistica/voos` | — |
+| Hospedagem | `/logistica/hospedagem` (quartos e caronas) | `/logistica/creditos`; `/logistica/caronas` redireciona para a Hospedagem, na seção de caronas |
 | Custos | `/custos` | `/custos/nova`; detalhe em painel lateral com `?protocolo=STF-…` |
-| Configurações | `/configuracoes/regras-de-custo` | `/configuracoes/vagas`, `/configuracoes/modelos-de-copy`, `/configuracoes/locais` |
+| Configurações | `/configuracoes/regras-de-custo` | `/configuracoes/vagas`, `/configuracoes/modelos-de-copy`, `/configuracoes/locais`, `/configuracoes/voos` |
 | (sem item no menu) | `/eventos/[eventoId]` | `/eventos/[eventoId]/escala`, `/comunicacao`, `/logistica`, `/custos` |
 
 **Regra de ouro:** o trabalho de um evento acontece sempre em `/eventos/[eventoId]/…`. As abas do menu (Escalas,
@@ -115,6 +132,18 @@ flowchart LR
 - `CartaoDoEvento` vira um `Link` para `/eventos/[id]` (hoje é `div` com `title`). O conteúdo do `title` passa a aparecer
   também no foco do teclado (popover simples ou `aria-describedby` com o texto visível em `sr-only`).
 - Os itens das listas "Precisa de ação" viram links para o evento (e "e mais N" leva para `/escalas` com o filtro certo).
+
+**Calendário do mês (como no IAM Control):**
+- Semana de **segunda a domingo**. Cada evento é **uma faixa contínua** do primeiro ao último dia; na virada da semana a
+  faixa quebra e a ponta cortada fica reta. Eventos simultâneos empilham em linhas (a mais alta livre; quem começa antes
+  escolhe primeiro e, no empate, o mais longo). A regra é `faixasDaSemana` em `modules/eventos/domain/calendario.ts`.
+  A faixa é o mesmo `CartaoDoEvento` (link para o evento, cor da situação, detalhes no `title` e em `sr-only`).
+- Atalho **Todos | Eventos | Palestras** (`?mostrar=eventos|palestras`; sem o parâmetro = Todos). Palestra é a
+  Masterclass (tipo `MC`); evento é todo o resto. Vale junto com Polo e Tipo; o seletor Tipo só oferece os tipos do
+  atalho escolhido (em "Palestras" ele some) e um tipo de fora do atalho é ignorado. Os três números do topo seguem os filtros.
+- Em **Todos**, as Masterclasses continuam recolhidas em cada dia ("3 Masterclasses"), abaixo das faixas; em
+  **Palestras**, cada Masterclass é uma faixa.
+- No celular a grade continua com rolagem horizontal dentro do cartão (largura mínima de 840 px).
 
 **Migalha (breadcrumb)** nas telas internas, acima do título, 13 px `text-[var(--ds-label-2)]`, dentro de
 `<nav aria-label="Você está em">`: `Calendário › CONF_AM_60 › Escala`. O último item tem `aria-current="page"`.
@@ -197,7 +226,7 @@ para manter o mesmo código de cor do Calendário. Acrescentar `situacao-AGUARDA
 
 | Tom | Fundo | Texto | Quando |
 |---|---|---|---|
-| Neutro | `bg-[var(--ds-fill-4)]` | `text-[var(--ds-label-2)]` | Sem resposta, rascunho, encerrado |
+| Neutro | `bg-[var(--ds-fill-4)]` | `text-[var(--ds-label-2)]` | Sem resposta, escala em andamento, encerrado |
 | Informação | `bg-[var(--ds-tint-soft)]` | `text-[var(--ds-tint-text)]` | Aguardando, enviada, emitido |
 | Sucesso | `bg-[var(--ds-green-soft)]` | `text-[var(--ds-green-deep)]` | Confirmou, pronta, aprovado, pode |
 | Atenção | `bg-[var(--ds-orange-soft)]` | `text-[var(--ds-orange-deep)]` | Falta dado, desatualizada, alerta |
@@ -396,7 +425,7 @@ Acrescentar `scroll-padding-bottom` no `main` com a altura da barra, para o foco
 
 1. **Cabeçalho:** título "Início"; subtítulo com a hora da última sincronização (mesmo texto do Calendário: "Turmas do IAM Control sincronizadas em 28/10 às 19:30."). À direita, botão secundário "Atualizar" (`RefreshCw`).
 2. **Cartões de número** (grade `grid-cols-2 lg:grid-cols-4 gap-3`), cada rótulo é link para a lista correspondente:
-   - "Escalas a montar" (próximos 30 dias, sem escala ou em rascunho) → `/escalas?situacao=a-montar`
+   - "Escalas a montar" (próximos 30 dias, sem escala ou em andamento) → `/escalas?situacao=a-montar`
    - "Aguardando aprovação" → `/escalas/aprovacao`
    - "Copys bloqueadas" → `/comunicacao?situacao=falta-dado`
    - "Custos para auditar" → `/custos`
@@ -408,12 +437,10 @@ Acrescentar `scroll-padding-bottom` no `main` com a altura da barra, para o foco
 | Aguardando aprovação | "Escalas enviadas para a líder aprovar." | código · data · "enviada há 2 dias" | Aprovação |
 | Escalas devolvidas | "A líder devolveu para ajustar." | código · comentário (1 linha, se houver) | Montar escala |
 | Escalas a montar | "Eventos nos próximos 30 dias com a escala ainda não aprovada." | código · data · "12 de 22 vagas" | Montar escala |
-| Pessoas sem resposta | "Convidadas há mais de 2 dias sem confirmar." | nome · código · função | Montar escala, com a pessoa destacada |
 | Copys desatualizadas | "Os dados mudaram depois do envio. Copie e envie de novo." | nome · código · o que mudou | Comunicação do evento |
-| Confronto sem fila | (texto atual do Calendário) | código · data | Evento · Resumo, foco no campo "Pessoas na fila" |
 | Pendências da sincronização | "Eventos sem polo cadastrado ou com código repetido no IAM Control." | código ou nome da turma · motivo | Evento · Resumo |
 | Custos para auditar | "Solicitações de custo esperando aprovação do time." | protocolo · nome · chip "Crítico"/"Alerta" | Custos, com o painel aberto |
-| Voos para pedir (D-90) | "Eventos em menos de 90 dias com pessoas que vão de avião e ainda sem pedido à SDC." | código · nº de pessoas | Logística · Voos (aparece quando a fase 3 de dados existir) |
+| Voos a pedir à SDC | "Eventos em 90 dias ou menos com pessoas que vão de avião e ainda sem pedido à SDC." (os dias são os de Configurações › Aviso de voos, §12.5) | por evento na janela: código · "4 passagens a pedir" · "faltam 75 dias" (ou "atrasado · faltam 48 dias"); o contador é o total de passagens | Voos, filtrado pelo evento e por "A pedir". Aparece para a líder e para o time; é o aviso de voos, só na tela |
 
    Cartão com contador 0 continua visível, com a pílula verde "0" e o texto "Nada pendente." — mostra que está tudo em dia.
    Ordem dentro de cada cartão: o mais urgente primeiro (data do evento mais próxima; críticos antes de alertas).
@@ -456,8 +483,8 @@ Acrescentar `scroll-padding-bottom` no `main` com a altura da barra, para o foco
 Grade `lg:grid-cols-3 gap-3`:
 
 1. **Andamento** (cartão largura total, primeiro): linha de 6 etapas — Vagas → Escala → Aprovação → Comunicação → Logística → Custos.
-   Cada etapa: ícone de situação (`CircleCheck` feita, `CircleDot` em andamento, `Circle` não começou, `TriangleAlert` com pendência) + nome + detalhe ("18 de 22 vagas", "Aprovada em 05/11", "3 copys bloqueadas").
-   Implementar como `<ol>` com o estado em texto (`sr-only` "concluída", "em andamento"…). A etapa com pendência é link para a aba.
+   Cada etapa: ícone de situação (`CircleCheck` feita, `CircleDot` iniciada, `Circle` não começou, `TriangleAlert` com pendência) + nome + detalhe ("18 de 22 vagas", "Aprovada em 05/11", "3 copys bloqueadas").
+   Implementar como `<ol>` com o estado em texto (`sr-only` "concluída", "iniciada"…; "em andamento" fica só para a situação da escala, no chip do cabeçalho). A etapa com pendência é link para a aba.
    Botão primário à direita do cartão, conforme a etapa atual: "Montar escala" / "Continuar escala" / "Ver aprovação" / "Ir para Comunicação".
 2. **Dados da turma** (2/3): somente leitura, ícone `Lock` + "Vem do IAM Control. Atualiza a cada 30 minutos (última: 28/10 às 19:30)."
    Lista de definição (`dl`) em 2 colunas: Tipo, Edição, Código, Polo, Datas, Local, Meta da turma, Inscritos ativos, Situação no IAM Control.
@@ -489,8 +516,8 @@ Três telas: **lista** (entre eventos), **montar escala** (de um evento) e **apr
 ```mermaid
 stateDiagram-v2
   [*] --> SemEscala
-  SemEscala --> Rascunho: Começar escala
-  Rascunho --> AguardandoAprovacao: Enviar para aprovação
+  SemEscala --> EmAndamento: Começar escala
+  EmAndamento --> AguardandoAprovacao: Enviar para aprovação
   AguardandoAprovacao --> Aprovada: Aprovar (registra data e hora)
   AguardandoAprovacao --> Devolvida: Devolver (comentário opcional)
   Devolvida --> AguardandoAprovacao: Reenviar
@@ -505,8 +532,11 @@ stateDiagram-v2
 
 **Layout:**
 1. Cabeçalho: "Escalas" / subtítulo "Monte e acompanhe a escala de cada evento." Ação secundária à direita: "Fila de aprovação" com contador (pílula) → `/escalas/aprovacao`.
+   Abaixo, "Precisa de ação" com um cartão só, de largura total: **"Escalas a montar"** (eventos, sem Masterclass, que começam nos próximos 30 dias com a escala ainda não aprovada) + contador.
+   Os eventos ficam em grade (`sm:grid-cols-2 xl:grid-cols-3`); cada um mostra nome curto (link para a escala), código, chip da situação, **Início**, **Término**, local (quando houver) e vagas preenchidas.
+   Sem evento: "Nenhuma escala a montar nos próximos 30 dias." "Confronto sem fila" e "Eventos sem código" não aparecem mais aqui. "Eventos sem código" continua no Início ("Pendências da sincronização"); "Confronto sem fila" saiu também do Início (24/11/2026): a falta da fila aparece só na escala do próprio evento (faixa "Falta o número de pessoas na fila", §6.2).
 2. Barra de filtros: atalhos de situação **"A montar (N) | Aguardando aprovação (N) | Devolvidas (N) | Aprovadas | Comunicadas | Todas"**; seletores Polo, Tipo e Período ("Próximos 30 dias" padrão, "Próximos 60 dias", "Próximos 90 dias", "Mês…"); busca por código ou nome.
-   "A montar" = sem escala + rascunho. Masterclasses entram, mas podem ser escondidas com o chip "Esconder Masterclasses".
+   "A montar" = sem escala + em andamento. Masterclasses entram, mas podem ser escondidas com o chip "Esconder Masterclasses".
 3. Tabela (ordem: data mais próxima primeiro):
 
 | Coluna | Conteúdo |
@@ -515,9 +545,8 @@ stateDiagram-v2
 | Datas | `12/11 a 14/11` |
 | Polo | código |
 | Vagas | barra de progresso fina (`h-1.5 rounded-full bg-[var(--ds-fill-3)]` com preenchimento `bg-[var(--ds-brand)]`) + "18 de 22" (o texto é o que vale; a barra é `aria-hidden`) |
-| Respostas | "15 confirmaram · 2 aguardando · 1 não pode" (ícones + números; só aparece depois de convidar) |
 | Situação | chip `situacao-*` |
-| Ação | botão pequeno: "Começar escala" (sem escala) / "Continuar" (rascunho, devolvida) / "Ver" (demais) |
+| Ação | botão pequeno: "Começar escala" (sem escala) / "Continuar" (em andamento, devolvida) / "Ver" (demais) |
 
 **Estados:**
 - Vazio de verdade (nenhum evento no período): "Nenhum evento nos próximos 30 dias." + "Ver próximos 90 dias".
@@ -553,23 +582,26 @@ stateDiagram-v2
    Evento de vários dias: por padrão cada função vale para todos os dias. Link por linha "Ajustar por dia" expande sub-linhas `12/11`, `13/11`… com o mesmo campo de vagas.
    Uma ação no cabeçalho do cartão: "Confirmar todas as sugestões" (secundário) — confirma de uma vez as funções que têm sugestão e não foram alteradas; **não** confirma Staff do Confronto.
 
-4. **Equipe** (`h2`), uma seção por função (ordem da tabela de vagas), cada uma num cartão com título "Staff líder · 6 de 8" e tabela:
+4. **Equipe** (`h2`, com o atalho **"Montar quartos e caronas"** à direita do título: leva para a Hospedagem daquele evento, `/logistica/hospedagem?evento=…`, onde quem foi marcado com Hotel e com Carona é distribuído em quartos e carros, §10.2 e §10.3), uma seção por função (ordem da tabela de vagas), cada uma num cartão com título "Staff líder · 6 de 8" e tabela:
 
 | Coluna | Conteúdo |
 |---|---|
-| Pessoa | nome (link para a ficha em nova aba, com ícone e `aria-label` "abre em nova aba") + selo "Trainee" quando o nível for TRAINEE |
-| Dias | "Todos" ou `12/11, 13/11` |
-| Situação | chip da convocação (seção 13) + selo "Registrado pelo time" quando for o caso + "alterada depois da aprovação" quando for o caso |
-| Distância | "32,4 km · 40 min" |
-| Deslocamento | seletor compacto: Carro próprio, Carona, Carro da IAM, Uber, Ônibus, Avião, Não se aplica |
-| Ações | "Registrar resposta" (pequeno, secundário; só depois de convidada) + menu "Mais ações": Trocar pessoa, Editar dias, Observação, Remover da escala |
+| Pessoa | nome (link para a ficha em nova aba, com ícone e `aria-label` "abre em nova aba") + selo "Trainee" quando o nível for TRAINEE ou "Não habilitado" quando a pessoa não tem a função (não vale para cargo do evento, como Pai / mãe). Abaixo do nome: chip "Também: DJ" (outras funções no evento) e chip de atenção "Também em MC_POA_POA" (conflito de agenda) |
+| Distância | "32,4 km" |
+| Deslocamento | seletor compacto: Não definido, Carro próprio, Carona, Carro da IAM, Uber, Ônibus, Avião (Moto, A pé e Não se aplica saíram em nov/2026) |
+| Montagem | caixa de seleção: a pessoa participa da montagem |
+| Hotel | caixa de seleção: a pessoa vai precisar de hotel. É a lista de quem a Hospedagem aloca em quarto (seção 10.2). Com a pessoa já num quarto, desmarcar é recusado: "Tire a pessoa do quarto em Hospedagem antes de desmarcar o hotel." |
+| (remover) | só o ícone de lixeira (`aria-label` "Remover [nome] da escala"), com confirmação |
 
+   **Não existe coluna de situação:** quem está na escala conta como confirmado (decisão de nov/2026). A pessoa entra já como `ACEITA`; a tela não mostra nem pede "confirmou / aguardando / não pode", e não há mais campo de observação.
+   Deslocamento, montagem e hotel salvam ao mudar. Deslocamento e hotel são da pessoa no evento: em quem tem duas funções, valem para as duas linhas.
+   Remover: quem nunca recebeu copy some da escala; quem já foi avisada fica guardada como removida, e a confirmação lembra de avisar a pessoa. Depois de aprovada, remover exige reabrir a escala.
+   Dados antigos de quem saiu (não pode / removida) aparecem numa linha discreta abaixo da tabela: "Saíram desta função: [Staff 12] (não pode: motivo); [Staff 15] (removida)."
    Vagas ainda abertas aparecem como linhas tracejadas no fim de cada função: "Vaga aberta" + botão primário pequeno **"Adicionar pessoa"** (abre o painel de sugestões).
-   Conflito de agenda: se a pessoa já está em outra escala no mesmo dia, chip de atenção "Também em MC_POA_POA no dia 12/11".
 
 5. **Barra de ação fixa** (3.12):
    - À esquerda, resumo em texto: "18 de 22 vagas preenchidas · 1 função sem número confirmado".
-   - À direita: primário **"Enviar para aprovação"** (rascunho/devolvida) ou "Reenviar para aprovação" (devolvida).
+   - À direita: primário **"Enviar para aprovação"** (em andamento/devolvida) ou "Reenviar para aprovação" (devolvida).
    - Fica com `aria-disabled` e o motivo visível enquanto houver função sem número confirmado: "Confirme o número de vagas de: Staff." (a lista é link e leva ao campo).
    - Se houver vaga aberta, o envio é permitido com confirmação: "Enviar com 4 vagas abertas? A líder vai ver quais funções estão incompletas." (Enviar mesmo assim / Continuar montando).
    - Depois de aprovada a barra mostra só o resumo + link "Ir para Comunicação".
@@ -592,11 +624,9 @@ stateDiagram-v2
 - Ao adicionar: a pessoa sai da lista, o contador "2 vagas abertas" diminui e o toast diz "[Staff 07] adicionada em Staff líder." com "Desfazer". O painel continua aberto até preencher as vagas ou fechar.
 - Escolher os dias: se o evento tem mais de um dia, cada item tem "Todos os dias" marcado; "Escolher dias" abre checkboxes.
 
-**Painel "Registrar resposta"** (em nome da pessoa):
-- Faixa neutra (3.11): "Você está registrando a resposta de [Staff 07]. Fica marcado como registrado pelo time."
-- Rádio: "Confirmou" / "Não pode". Se "Não pode": campo "Motivo (opcional)".
-- Botão primário "Registrar resposta". Toast: "Resposta de [Staff 07] registrada: não pode."
-- Depois de "Não pode", a linha mostra o botão "Trocar pessoa", que abre o painel de sugestões já filtrado para essa função e dia (substituto conforme a disponibilidade).
+- **Cargo do evento** (Pai / mãe no Confronto): não é função da pessoa, então qualquer staff pode ocupar. O painel troca a linha de explicação ("Pai / mãe é um cargo deste evento: qualquer pessoa do staff pode ocupar…"), não mostra "Habilitado / Não habilitado" e esconde o filtro "Só habilitados nesta função".
+
+**Painel "Registrar resposta":** saiu da tela em nov/2026, junto com a coluna de situação. Para tirar alguém que avisou que não pode, use a lixeira (reabrindo a escala, se já estiver aprovada).
 
 **Remover da escala:** confirmação "Remover [Staff 07] da escala?" — texto: "A vaga volta a ficar aberta." Se a copy já tinha sido enviada: "A copy já foi enviada para essa pessoa. Avise que ela saiu da escala." Botão "Remover".
 
@@ -724,7 +754,7 @@ alimentam a ordem das sugestões na Montar escala. Sem portal do staff, a enquet
 Tabela: Título (link) | Eventos ("6 eventos") | Fecha em ("15/11 às 23:59") | Respostas ("38 de 120 pessoas") | Situação (chip "Aberta" informação / "Encerrada" neutro).
 Atalhos: "Abertas | Encerradas | Todas".
 
-**Resposta pelo próprio staff (`/responder/[enqueteId]`):** cada enquete tem um link, copiado pelo botão "Copiar link" e incluído no convite. Fora do `(time)`, como "Meu cadastro": pede login e que o usuário seja staff, sem perfil do Eventos. A pessoa marca os eventos em que pode servir (os sem marcar contam como "não posso") e pode alterar até a enquete fechar; depois do prazo, só o time registra. A resposta grava sem `registrado_por` e o `registro_acao` leva `propria: true`.
+**Resposta pelo próprio staff (`/responder/[enqueteId]`):** cada enquete tem um link, copiado pelo botão "Copiar link" e incluído no convite. Fora do `(time)`, como "Meu cadastro": pede login e que o usuário seja staff, sem perfil do Eventos. A pessoa marca os eventos em que pode servir (os sem marcar contam como "não posso") e pode alterar até a enquete fechar; depois do prazo, só o time registra. Quando a resposta grava, abre um pop-up (`<dialog>` modal, um botão "Fechar") com "Tudo certo, sua resposta foi gravada!"; não é pergunta antes do envio, aparece de novo a cada alteração gravada e não aparece em erro nem ao recarregar. Fechado o pop-up, fica abaixo dos eventos o resumo "Sua resposta: você pode em 2 de 5 eventos. Você pode alterar até a enquete fechar.". A resposta grava sem `registrado_por` e o `registro_acao` leva `propria: true`.
 
 **Estados:** vazio — "Nenhuma enquete ainda." / "Crie uma enquete para saber quem pode servir nos próximos eventos." + "Nova enquete".
 
@@ -791,13 +821,14 @@ Atalhos: "Abertas | Encerradas | Todas".
 | Coluna | Conteúdo |
 |---|---|
 | Nome | nome social se houver, senão nome completo (link → ficha) |
-| Funções | até 3 chips neutros ("Staff líder", "Pai/mãe"…; trainee com sufixo "· trainee") + "+2" |
+| Funções | até 3 chips neutros ("Staff líder", "Trainee de líder"…; trainee com sufixo "· trainee") + "+2". Pai / mãe não aparece: é cargo do evento, escolhido na escala do Confronto, e não função da pessoa |
 | Cidade | cidade/UF do endereço (sem rua) |
-| Carro | "4 lugares" ou "—" |
-| Camiseta | "Baby look M" / "—" |
+| Carro | "Sim" para quem tem veículo cadastrado, "Não" para quem não tem (os lugares ficam só na ficha) |
 | Fez Confronto | "Sim" / "Não" / "—" |
 | Último evento | `14/09 · CONF_AM_58` |
 | Cadastro | chip "Completo" (sucesso) ou "Falta PIX" / "Falta endereço" (atenção) |
+
+A camiseta (modelo e tamanho) não aparece na lista: fica só na ficha da pessoa (9.2).
 
 **Estados:** vazio por filtro — "Nenhuma pessoa com esses filtros." + "Limpar filtros". Vazio de verdade — "Nenhuma pessoa cadastrada ainda." / "As pessoas vêm do cadastro do GH e, depois, do cadastro feito pelo próprio staff."
 
@@ -823,21 +854,28 @@ Atalhos: "Abertas | Encerradas | Todas".
 
 ## 10. Voos e Hospedagem
 
-**Objetivo:** organizar como cada pessoa chega e onde dorme: pedidos de voo à SDC (D-90), rooming list, caronas e créditos de hotel.
+**Objetivo:** organizar como cada pessoa chega e onde dorme: pedidos de voo à SDC (aviso configurável, padrão D-90), rooming list, caronas e créditos de hotel.
 A SDC ainda não tem portal: o time registra o pedido, envia pelo canal de sempre e **registra o voo emitido** quando a SDC responder.
 
 > Dados: só `carona` e `convocacao.deslocamento` existem hoje. Voos, hotéis, quartos e créditos são da fase 3 do modelo
 > (`voo_pedido`, `hotel`, `hospedagem_reserva`, `quarto`, `quarto_ocupante`, `credito_hotel`). Comece por **Caronas**.
 
-**Rotas:** `/logistica/voos` (padrão), `/logistica/hospedagem`, `/logistica/caronas`, `/logistica/creditos`. No evento:
-`/eventos/[id]/logistica` mostra as mesmas seções filtradas pelo evento, uma abaixo da outra.
+**Dois itens no menu (24/11/2026):** o item único "Voos e Hospedagem" virou **Voos** e **Hospedagem**. As rotas continuam em `/logistica`:
 
-**Cabeçalho comum:** "Voos e Hospedagem" / "Voos, hospedagem e caronas do staff." + abas **Voos (SDC) | Hospedagem | Caronas | Créditos de hotel** + seletor de evento (padrão "Próximos 90 dias").
+| Item do menu | Abre | Abas internas | Acende em |
+|---|---|---|---|
+| **Voos** ("Passagens do staff pela SDC.") | `/logistica/voos` | nenhuma (é uma tela só, sem migalha) | `/logistica/voos` e a aba Logística do evento |
+| **Hospedagem** ("Quartos e caronas de cada evento: quem dorme com quem e quem vai com quem.") | `/logistica/hospedagem` | **Quartos e caronas \| Créditos de hotel** | `/logistica/hospedagem`, `/logistica/caronas`, `/logistica/creditos` |
+
+**Caronas ficam com a Hospedagem** (decisão do Vitor, 24/11/2026: "caronas podemos montar na escala, talvez junto com a montagem de quarto mesmo"). A tela de Hospedagem mostra, para o evento escolhido, os quartos (§10.2) e logo abaixo as caronas (§10.3): o time resolve quem dorme com quem e quem vai com quem numa passada. Não existe mais uma tela só de caronas: `/logistica/caronas` (com ou sem `?evento=`) redireciona para `/logistica/hospedagem…#titulo-caronas`. O cabeçalho da Hospedagem tem o atalho "Ir para as caronas". Chega-se ali pela escala do evento, no atalho "Montar quartos e caronas" (§6.2); as duas faixas da tela têm o link de volta "Abrir a escala".
+`/logistica` continua redirecionando para `/logistica/voos`. No evento, `/eventos/[id]/logistica` mostra as três seções
+(Voos, Hospedagem, Caronas) filtradas pelo evento, uma abaixo da outra, e acende **Voos** no menu (é a seção que abre a página).
+Títulos da aba do navegador: "Voos", "Hospedagem", "Créditos de hotel · Hospedagem". Seletor de evento em Voos e na Hospedagem (o das caronas é o da Hospedagem).
 
 ### 10.1 Voos (pedidos à SDC)
 
 **Layout:**
-1. Faixa de atenção (se houver): "7 pessoas vão de avião para eventos em menos de 90 dias e ainda não têm pedido." + "Ver quem falta".
+1. **Aviso de passagens a pedir** (faixa de atenção, só na tela, para a líder e para o time; aparece quando algum evento já entrou na janela configurada em Configurações › Aviso de voos, §12.5): título "Faltam pedir 7 passagens à SDC" e uma linha por evento, o mais próximo primeiro: "CONF_AM_60 · 12/02 — 4 passagens a pedir · faltam 75 dias" (com "· atrasado" quando passou do limite). O evento é link para a lista filtrada por ele e por "A pedir". Rodapé: "O aviso começa 90 dias antes do evento e o pedido conta como atrasado a partir de 60 dias." + link "Configurações". Na aba Logística do evento a faixa mostra só aquele evento.
 2. Atalhos: "A pedir (7) | Pedido à SDC (5) | Emitidos | Cancelados | Todos". Ação primária: **"Novo pedido"**. Pedidos da SDC atualizam ao vivo.
 3. Tabela:
 
@@ -862,23 +900,35 @@ Toast: "Voo de [Staff 07] registrado. A copy dela foi atualizada." (o voo libera
 
 ### 10.2 Hospedagem (rooming list)
 
-**Layout por evento** (seletor de evento obrigatório nesta aba):
-1. Cartão "Hotel": nome, endereço, check-in/check-out, reserva. Ação "Editar hotel". Sem hotel: estado vazio "Nenhum hotel definido para este evento." + "Definir hotel".
-2. **Sem quarto** (cartão): pessoas escaladas que precisam de hotel e ainda não têm quarto; cada uma com o seletor "Colocar no quarto…".
-3. **Quartos** (grade de cartões `md:grid-cols-2 xl:grid-cols-3`): "Quarto 1 · duplo · 2 de 2"; lista de ocupantes com "Mover para…" e "Tirar do quarto". Aviso de atenção no cartão quando misturar sexos: "Quarto com pessoas de sexos diferentes." "+ Novo quarto" no fim.
-4. Ação no cabeçalho da seção: secundário "Copiar rooming list" (texto pronto para o hotel: quarto, nomes, check-in/out).
+A tela parte de quem o time marcou com "Hotel" na escala do evento (seção 6.2) e serve para dizer **quem fica com quem**.
 
+**Layout por evento** (seletor de evento obrigatório nesta aba), de cima para baixo; depois dos quartos vem a seção de caronas do mesmo evento (§10.3):
+1. **Faixa da escala** (sempre): "8 pessoas marcadas para hotel na escala de CONF_AM_60" + "5 com quarto e 3 sem quarto. Coloque cada pessoa num quarto para definir quem divide com quem." Tom de atenção enquanto houver gente sem quarto, sucesso quando todo mundo tem ("Todo mundo tem quarto. Em cada quarto abaixo dá para ver quem divide com quem.") e informação quando ninguém foi marcado ("Só entra em quarto quem está marcado com Hotel na escala do evento…"). Link **"Abrir a escala"** ("Marcar na escala" quando ninguém foi marcado). Se há gente ativa na escala sem a marca: "4 pessoas da escala não estão marcadas para hotel. Se falta alguém aqui, marque Hotel na escala."
+2. **Sem quarto · N** (cartão, logo abaixo da faixa, antes dos hotéis; só aparece quando há alguém sem quarto, mesmo antes de existir hotel): cada pessoa com função e sexo e o seletor "Colocar no quarto…". A opção do quarto diz quem já está nele: "Quarto 2 · 1 de 2 · Feminino · com Bia" (ou "· vazio"). Ação "Distribuir por sexo (N)". Sem quarto criado: "Defina o hotel e crie os quartos logo abaixo para começar a distribuir."
+3. Cartão "Hotel": nome, endereço, check-in/check-out, reserva. Ação "Editar hotel". Sem hotel: estado vazio "Nenhum hotel definido para este evento." + "Definir hotel".
+4. **Quartos** (grade de cartões `md:grid-cols-2 xl:grid-cols-3`): "Quarto 1 · duplo · 2 de 2" e, na linha de baixo, "Feminino · 2 pessoas dividem o quarto"; lista de ocupantes com "Período", **"Mover para…"** e "Tirar". Aviso de atenção no cartão quando misturar sexos: "Quarto com pessoas de sexos diferentes." "+ Novo quarto" no fim.
+5. Ação no cartão do hotel: secundário "Copiar rooming list" (texto pronto para o hotel: quarto, nomes, check-in/out).
+
+**"Mover para…" em um passo** (seletor de quem já está num quarto), com dois grupos:
+- **Outro quarto:** os quartos com vaga (os cheios aparecem desabilitados, "(cheio)").
+- **Trocar de lugar com:** cada pessoa dos outros quartos, "Dani Lima (Quarto 2)". As duas trocam de quarto de uma vez, mesmo com os dois quartos cheios, sem passar por "Sem quarto". Vale a regra de sempre (sexo do quarto, escala ativa, marcada para hotel); recusada, nada muda. Toast: "Troca feita: as duas pessoas mudaram de lugar entre o Quarto 1 e o Quarto 2. A copy de hospedagem ficou desatualizada."
+
+Só quem está marcado entra em quarto e na distribuição por sexo. Quem já está num quarto continua aparecendo no quarto.
 Arrastar entre quartos é opcional; o seletor "Mover para…" é obrigatório (WCAG 2.5.7). Mudança de quarto deixa a copy de hospedagem desatualizada.
 
 ### 10.3 Caronas
 
-**Layout por evento:**
-1. **Motoristas** (cartões): "[Staff 02] · 4 lugares · 2 ocupados · sai de Canoas, 32,4 km". Lista de passageiros com "Tirar da carona". Ação "Adicionar passageiro" (seletor com quem está sem carona, ordenado pela distância até o motorista).
-2. **Sem carona definida** (tabela): pessoas com deslocamento "Carona" sem motorista — Nome | Cidade | Distância até o evento | "Escolher carona" (seletor de motorista com lugares livres: "[Staff 02] — 2 lugares livres").
-3. Ação "Novo motorista": escolhe entre as pessoas escaladas com carro.
+Seção "Caronas" do evento, logo abaixo dos quartos na Hospedagem (e na aba Logística do evento). Parte de quem está com o
+deslocamento **"Carona"** na escala (seção 6.2); o motorista é alguém da escala com veículo no cadastro (em geral quem está
+como "Carro próprio"), escolhido em "Novo motorista". Quem vai de avião não entra em carona.
+
+**Layout, de cima para baixo:**
+1. Título "Caronas" + ação **"Novo motorista"** (escolhe entre as pessoas escaladas com carro).
+2. **Faixa da escala** (sempre): "5 pessoas marcadas como Carona na escala de CONF_AM_60" + "3 com motorista e 2 sem carona. Escolha o motorista de cada pessoa para definir quem vai com quem." Atenção enquanto houver alguém sem carona; sucesso quando todas têm ("Todo mundo que vai de carona tem motorista…"); informação quando ninguém foi marcado ("Quem vai de carona aparece aqui quando o deslocamento for marcado como Carona na escala do evento…"). Link "Abrir a escala" ("Marcar na escala" quando ninguém foi marcado).
+3. **Sem carona · N** (cartão, antes dos carros; só aparece quando há alguém marcado como Carona sem motorista): nome, função e distância até o evento, da mais perto para a mais longe, com o seletor "Escolher carona…". A opção diz quem já vai no carro: "[Staff 02] — 2 lugares livres · com Bia, Caio". Sem carro com lugar: "Escolha um motorista em "Novo motorista" para começar a distribuir." / "Os carros estão cheios: escolha mais um motorista…".
+4. **Motoristas** (cartões): "[Staff 02] · 4 lugares · 2 ocupados · 32,4 km até o evento". Lista de passageiros com "Tirar da carona". "Adicionar passageiro…" (seletor com quem está sem carona, ordenado pela distância) e "Remover" (os passageiros voltam a ficar sem carona).
 
 Validação: carro cheio — "O carro de [Staff 02] já está com os 4 lugares ocupados."
-Vazio: "Ninguém com carona neste evento." / "Quem vai de carona aparece aqui quando o deslocamento for marcado como Carona na escala." + "Ir para a escala".
 
 ### 10.4 Créditos de hotel
 
@@ -895,7 +945,8 @@ Vazio: "Nenhum crédito de hotel registrado."
 ## 11. Custos
 
 **Objetivo:** o time confere cada solicitação de custo do staff e **aprova ou reprova com motivo**. Só o que for aprovado vai para o financeiro.
-Sem portal do staff, o time também **registra a solicitação** em nome da pessoa.
+O staff envia a solicitação pelo **formulário dele** (`/solicitar-custo`, §11.4), aberto até 5 dias depois do evento; o time também
+**registra a solicitação** em nome da pessoa (§11.3), sem prazo.
 
 ### 11.1 Fila de auditoria
 
@@ -903,6 +954,8 @@ Sem portal do staff, o time também **registra a solicitação** em nome da pess
 
 **Layout:**
 1. Cabeçalho: "Custos" / "Confira as solicitações do staff. Só as aprovadas seguem para o financeiro." + primário **"Registrar solicitação"**.
+   Logo abaixo, o cartão **"Formulário de custo do staff"** com o endereço e o botão **"Copiar link"** (como o link do Meu cadastro em
+   Pessoas). Em `/custos` o link é o geral (`/solicitar-custo`); em `/eventos/[id]/custos`, o direto do evento (`/solicitar-custo/[id]`).
 2. Cartões de número: "Para auditar", "Com alerta crítico", "Aprovadas no mês (R$)", "Reprovadas no mês".
 3. Filtros: atalhos "Para auditar (12) | Aprovadas | Reprovadas | Todas"; Evento; Alerta ("Crítico", "Alerta", "Sem alerta"); busca por protocolo ou nome.
 4. Tabela (ordem em "Para auditar": críticos → alertas → sem alerta; dentro de cada grupo, a mais antiga primeiro):
@@ -910,7 +963,7 @@ Sem portal do staff, o time também **registra a solicitação** em nome da pess
 | Coluna | Conteúdo |
 |---|---|
 | Protocolo | `STF-202611-0012` em mono (botão que abre o painel) |
-| Pessoa | nome + selo "Registrado pelo time" se for o caso |
+| Pessoa | nome + selo "Registrado pelo time" se for o caso (sem selo = enviada pela própria pessoa) |
 | Evento | código |
 | Km | "412,0 km" (direita) |
 | Total | "R$ 486,30" (direita) |
@@ -930,13 +983,35 @@ Sem portal do staff, o time também **registra a solicitação** em nome da pess
 3. **Deslocamentos** (tabela): # | Trecho ("Canoas → Porto Alegre", "ida e volta") | Km | Consumo | Preço do litro | Combustível | Pedágio | Depreciação | Total | Alerta | Comprovante (link "Ver comprovante", nova aba).
    Rodapé: "Km total: 412,0 km" (decisão do doc 03: cada deslocamento conta separado na depreciação, com a soma mostrada).
 4. **Outros itens** (tabela): Categoria (Remuneração, Alimentação, Adicional, Montagem, Outro) | Descrição | Quantidade | Valor | Comprovante. Item que veio da regra: ícone `Calculator` + `sr-only` "valor da regra".
+   **Comprovantes** (seção própria, antes do total): os arquivos que a pessoa anexou à solicitação (§11.4), cada um com nome,
+   tamanho e data. O link abre em nova aba por `/custos/comprovantes/[id]`, que confere o perfil do Eventos e redireciona para um
+   endereço do armazenamento que vale 5 minutos. Sem anexo: "Nenhum comprovante anexado." O visitante da demo não abre anexo.
 5. **Total** em destaque (20 px semibold, direita).
 6. **Parecer anterior** (se reprovada antes e reenviada): "Reprovada em 15/11: falta o comprovante do pedágio."
 7. **Barra de ação fixa do painel:** perigo contorno **"Reprovar"** e primário **"Aprovar"**.
-   - **Aprovar sem alerta:** aprova direto. Toast "STF-202611-0012 aprovada. Seguiu para o financeiro." + "Desfazer". O painel avança para a próxima da fila.
+   - **Aprovar sem alerta:** aprova direto. Toast "STF-202611-0012 aprovada. Seguiu para o financeiro." O painel **fica na solicitação**
+     aprovada, com a faixa "Avise [nome]: copie a mensagem de aprovado abaixo e mande pelo WhatsApp." e a ação "Próxima da fila".
    - **Aprovar com alerta crítico:** modal "Aprovar com alerta crítico?" — texto com o alerta — campo "Motivo da aprovação (obrigatório)" (ex.: "Carro da pessoa é antigo; consumo conferido"). Botão "Aprovar".
    - **Reprovar:** modal "Reprovar STF-202611-0012?" — "A pessoa vai ver o motivo e poderá corrigir e reenviar." Campo "Motivo (obrigatório)". Botão "Reprovar".
+   - **Reprovar:** depois de reprovar, o painel avança para a próxima da fila (a pessoa vê o motivo no formulário dela e pode corrigir, §11.4).
    - Já aprovada/reprovada: a barra mostra "Aprovada em 15/11 às 10:20" e, enquanto o financeiro não tiver pago, o link "Reabrir auditoria" (confirmação simples).
+8. **Mensagem de aprovado** (toda solicitação aprovada, logo depois de aprovar e sempre que o painel for aberto de novo): cartão com o
+   texto pronto e o botão **"Copiar mensagem"** (`BotaoCopiar`). O texto leva o primeiro nome, o evento, o protocolo e o valor aprovado
+   (`mensagemDeCustoAprovado`, no domínio de custos):
+
+   ```
+   Olá, Ana!
+
+   Sua solicitação de custo do evento ASM_POA_234 foi aprovada.
+
+   Protocolo: STF-202611-0012
+   Valor aprovado: R$ 486,30
+
+   O valor seguiu para o financeiro fazer o pagamento. Qualquer dúvida, fale com o time de eventos.
+   ```
+
+   O sistema **não envia nada sozinho**: o time copia e manda pelo WhatsApp. **Construção futura:** envio automático da mensagem
+   de aprovado pelo WhatsApp (e o registro de que foi enviada), junto com o envio das copys.
 
 ### 11.3 Registrar solicitação (em nome da pessoa)
 
@@ -949,6 +1024,75 @@ Sem portal do staff, o time também **registra a solicitação** em nome da pess
 5. **Resumo ao vivo** (cartão à direita em `xl`, abaixo em telas menores): total, km total, alerta que a solicitação vai ter ("Esta solicitação vai entrar com alerta: custo de R$ 0,74 por km.").
 6. Ações: primário "Registrar solicitação", secundário "Cancelar".
    Sucesso: vai para `/custos?protocolo=STF-202611-0013` com toast "Solicitação STF-202611-0013 registrada em nome de [Staff 07]."
+
+### 11.4 Formulário de custo do staff (`/solicitar-custo`)
+
+Substitui o Google Forms "Nova solicitação de custo time IAM". Fora do `(time)`, como "Meu cadastro" e a resposta da enquete: pede
+login e que o usuário seja staff, sem perfil do Eventos. Visual do login (`MolduraDeEntrada`), pensado para o celular.
+
+**Rotas:** `/solicitar-custo` (os eventos da pessoa com o prazo aberto e as solicitações anteriores) e `/solicitar-custo/[eventoId]`
+(o formulário do evento; é também o link direto que o time copia na aba Custos do evento).
+
+**Quem e quando:**
+- A pessoa é a da sessão; nenhum id de pessoa vem do formulário.
+- Só aparecem (e só são aceitos) os eventos em que ela está na escala (convocação sugerida, convidada ou aceita).
+- Evento cancelado não abre o formulário ("Este evento foi cancelado…"); o time ainda pode registrar em nome da pessoa.
+- **Prazo:** abre no primeiro dia do evento e fecha no fim do **5º dia depois do último dia** (inclusive), no fuso de São Paulo
+  (`DIAS_DE_PRAZO_DO_FORMULARIO`, `src/modules/custos/domain/prazo.ts`). Antes: "O formulário abre em 15/12…". Depois: "O prazo
+  acabou em 22/12 (5 dias depois do último dia do evento). Fale com o time de eventos…". O registro em nome da pessoa (§11.3) não tem prazo.
+- Uma solicitação por pessoa e evento (a mesma restrição do banco). Quem já tem solicitação (enviada por ela ou registrada pelo
+  time) vê o protocolo, a situação ("Em conferência pelo time", "Aprovada · aguardando pagamento", "Reprovada: motivo") e o que foi enviado.
+- **Correção:** como no registro do time, só a solicitação **reprovada** é corrigida (pendente não se altera). A pessoa vê o motivo,
+  usa "Corrigir e reenviar" e a solicitação volta para a fila. Prazo da correção: 5 dias depois da reprovação (`DIAS_PARA_CORRIGIR`)
+  ou o prazo do evento, o que acabar depois. Os valores fixos do evento e os itens lançados pelo time ficam como estão; os
+  comprovantes são da solicitação e sobrevivem à correção (a pessoa pode acrescentar ou trocar).
+
+**Campos (o que o sistema não sabe):**
+1. "Você foi com o seu carro?" Sim / Não.
+2. **Deslocamento de carro** (repetível, até 10): de onde saiu, para onde foi, km de um sentido, consumo (vem do Meu cadastro),
+   preço do litro (vem da regra da UF, se houver), pedágio de um sentido, "Ida e volta". Combustível, depreciação e total são
+   calculados pelo servidor e mostrados ao vivo.
+3. **Outras despesas do deslocamento** (repetível, até 10): o que foi + valor (estacionamento, ônibus, aplicativo). Entram como itens "Outro".
+4. **Comprovantes** (só com o anexo ligado): botão "Anexar comprovante" (foto ou PDF; no celular abre câmera, galeria ou arquivos).
+   Até 3 arquivos de 8 MB; JPEG, PNG, WebP ou PDF, conferidos no servidor pelos primeiros bytes do arquivo. Cada arquivo sobe
+   sozinho, assim que é escolhido, e aparece na lista com "Remover"; foto grande é reduzida no navegador (lado maior de 2.000 px)
+   antes de enviar. **Obrigatório** quando há deslocamento ou despesa: sem comprovante o envio é recusado ("Anexe pelo menos um
+   comprovante…"). O que já foi anexado continua lá se a pessoa sair e voltar.
+5. **Valores fixos do evento** (só leitura): remuneração e alimentação da regra de custo do tipo do evento. O staff não pede:
+   entram sozinhos na solicitação, como itens da regra, com o mesmo valor que o registro do time sugere (quantidade 1; regra por
+   hora ou por dia aparece com o aviso "entra 1 hora; o time confere as horas"). Sem regra para o evento, a seção não aparece.
+6. Total da solicitação (calculado, já com os fixos) e botão "Enviar solicitação".
+
+**Sem carro e sem despesa:** a solicitação leva só os valores fixos do evento e não pede comprovante (não há gasto a comprovar).
+Se o evento também não tiver valor fixo, não há o que enviar ("Informe pelo menos um deslocamento de carro ou uma despesa.").
+
+É o mesmo registro do time (validação, cálculo pelas regras, protocolo `STF-…`, fila de auditoria). Grava sem `registrado_por` e o
+`registro_acao` leva `propria: true`; na fila aparece sem o selo "Registrado pelo time".
+
+**Do Google Forms para o sistema:**
+
+| Campo do Forms | No sistema |
+|---|---|
+| Qual seu nome | Não existe: é a pessoa da sessão. |
+| Qual evento | Lista dos eventos da pessoa com o prazo aberto (ou o link direto). |
+| Consumo médio do veículo | Campo do deslocamento, já preenchido com o consumo do Meu cadastro. |
+| Valor do litro e tipo do combustível | Preço do litro: campo do deslocamento. **Tipo do combustível: fora** (não entra no cálculo e o modelo não tem onde guardar). |
+| Data do último dia ou da Masterclass | Fora: o sistema já sabe as datas do evento. |
+| Valor do custo do seu deslocamento | Não se digita: o sistema calcula (combustível, pedágio e depreciação pelas regras) e soma as despesas. |
+| Descrição do lançamento | A descrição de cada despesa; combustível e pedágio saem do deslocamento. |
+| Se utilizou seu veículo, qual a distância (faixas) | Os km de um sentido; a faixa de depreciação sai deles. "Não se aplica" = "Não fui com o meu carro". |
+| Comprovante do deslocamento (arquivo) | Anexo da solicitação (até 3 arquivos), obrigatório quando há deslocamento ou despesa. Tabela `eventos.comprovante_custo`; as colunas antigas `comprovante_url` ficam como estão. |
+
+**Onde ficam os arquivos:** no Storage do Supabase do projeto, bucket **privado** `eventos-comprovantes`, acessado só pelo servidor
+pelo protocolo S3, com uma chave de acesso S3 (que só alcança o Storage; nunca a `service_role`). O nome do objeto é gerado no
+servidor (`custos/<evento>/<id>.<extensão>`), sem nada do nome original. A pessoa abre os próprios anexos e o time abre na
+auditoria, sempre por rota autenticada que redireciona para um endereço pré-assinado de 5 minutos; trocar o id na URL não abre
+anexo de outra pessoa (404). Sem as variáveis `COMPROVANTES_S3_*` o anexo fica **desligado**: o formulário funciona sem o campo e
+sem exigir comprovante. No modo local (`npm run dev:local`) os arquivos vão para `.banco-local/comprovantes`. Para conferir a
+credencial em produção: `npm run comprovantes:testar` (imprime só "ok" ou a etapa que falhou).
+
+**Para o time usar o link:** botão "Copiar link" em Custos (§11.1). Em Configurações › Modelos de copy, o cartão do link de custos
+mostra o endereço do formulário do sistema para copiar e salvar em `link_custos` (a copy de escalação continua usando o valor configurado).
 
 **Estados (Custos):**
 - Fila vazia em "Para auditar": `CircleCheck` — "Nenhuma solicitação para auditar." / "Quando uma solicitação for registrada, ela aparece aqui."
@@ -967,7 +1111,7 @@ Sem portal do staff, o time também **registra a solicitação** em nome da pess
 
 **Objetivo:** editar o que muda as contas do sistema sem mexer no código: regras de custo, regras de vagas, modelos de copy, locais e hotéis.
 
-**Rotas e abas:** **Regras de custo | Vagas por tipo de evento | Modelos de copy | Locais e hotéis**.
+**Rotas e abas:** **Regras de custo | Vagas por tipo de evento | Modelos de copy | Locais e hotéis | Aviso de voos | Acesso do time**.
 Cabeçalho: "Configurações" / "Valores e modelos usados pelo sistema. Mudanças valem dali em diante." Sem permissão (quando houver login): `SemPermissao`.
 
 ### 12.1 Regras de custo
@@ -1003,6 +1147,14 @@ Cabeçalho: "Configurações" / "Valores e modelos usados pelo sistema. Mudança
   Ao salvar: "Local salvo. Localização encontrada no mapa." ou faixa de atenção "Não encontramos este endereço no mapa. Confira o CEP e o número; sem isso, a distância até o evento não é calculada."
 - Remover local em uso: bloqueado com o motivo "Este local está em 3 eventos."
 
+### 12.5 Aviso de voos (`/configuracoes/voos`)
+
+- Um cartão, "Aviso de passagens a pedir": campo **"Avisar quantos dias antes do evento"** (inteiro de 7 a 365; padrão **90**, os 3 meses) + "Salvar aviso". Só a líder edita (`config.aviso_de_voos`); o time vê o valor em vigor e o motivo "Só a líder pode mudar o aviso de voos." (a aba aparece com "só leitura").
+- Abaixo do campo, o que o valor significa: "Em vigor: 90 dias antes do evento (o padrão: 3 meses)", "Na janela: entre 90 e 61 dias antes do evento", "Atrasado: com 60 dias ou menos".
+- **Atrasado acompanha o aviso:** dois terços dos dias do aviso, no máximo 60 (aviso de 90 ou mais → 60; de 45 → 30; de 30 → 20). Assim sempre existe um trecho "na janela" antes do "atrasado", qualquer que seja o valor.
+- O aviso é só na tela (Início e topo de Voos, §4 e §10.1), para a líder e para o time; não manda e-mail nem WhatsApp. Mudar o prazo vale dali em diante e fica no histórico (`registro_acao`, `CONFIGURACAO_ALTERADA`).
+- Toast: "Aviso de voos salvo: começa 120 dias antes do evento e o pedido conta como atrasado a partir de 60 dias." Erros no campo: "Use um número inteiro de dias, sem vírgula." / "Use de 7 a 365 dias."
+
 **Estados (Configurações):** carregando e erro padrão; vazio por aba ("Nenhum modelo de copy." + "Novo modelo"; "Nenhum local cadastrado." + "Novo local").
 
 ---
@@ -1016,13 +1168,13 @@ Use sempre estes rótulos. Os `switch` sobre esses valores devem ter o caso `def
 | Valor | Rótulo | Ícone |
 |---|---|---|
 | SEM_ESCALA | Sem escala | `CircleDashed` |
-| RASCUNHO | Escala em rascunho | `PencilLine` |
+| RASCUNHO | Escala em andamento (o valor no banco continua `RASCUNHO`) | `PencilLine` |
 | AGUARDANDO_APROVACAO (novo) | Aguardando aprovação | `Hourglass` |
 | DEVOLVIDA (novo, ver 14) | Devolvida | `Undo2` |
 | APROVADA | Escala aprovada | `BadgeCheck` |
 | COMUNICADA | Escala comunicada | `Send` |
 
-**Pessoa na escala** (`convocacao.status`):
+**Pessoa na escala** (`convocacao.status`): desde nov/2026 a Montar escala não mostra estes chips (quem está na escala conta como confirmado e entra como `ACEITA`). Os rótulos continuam valendo no histórico da ficha da pessoa, onde há dados antigos.
 
 | Valor | Rótulo | Tom | Ícone |
 |---|---|---|---|

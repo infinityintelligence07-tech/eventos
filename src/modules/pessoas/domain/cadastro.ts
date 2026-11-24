@@ -66,14 +66,6 @@ export function rotuloDoNivel(nivel: NivelNaFuncao): string {
   }
 }
 
-/** "Baby look M", "Camiseta", "Tamanho G"; nulo sem nenhum dos dois. */
-export function rotuloDaCamiseta(modelo: ModeloDeCamiseta | null, tamanho: TamanhoDeCamiseta | null): string | null {
-  if (modelo && tamanho) return `${rotuloDoModelo(modelo)} ${tamanho}`;
-  if (modelo) return rotuloDoModelo(modelo);
-  if (tamanho) return `Tamanho ${tamanho}`;
-  return null;
-}
-
 /** "Staff líder" ou "Pai / mãe · trainee". */
 export function rotuloDaFuncao(funcao: Pick<FuncaoDaPessoa, "nome" | "nivel">): string {
   return funcao.nivel === "TRAINEE" ? `${funcao.nome} · trainee` : funcao.nome;
@@ -82,12 +74,6 @@ export function rotuloDaFuncao(funcao: Pick<FuncaoDaPessoa, "nome" | "nivel">): 
 export function rotuloSimNao(valor: boolean | null): string {
   if (valor === null) return "—";
   return valor ? "Sim" : "Não";
-}
-
-/** "4 lugares" / "1 lugar" */
-export function rotuloDoVeiculo(veiculo: VeiculoDaPessoa | null): string | null {
-  if (!veiculo) return null;
-  return `${veiculo.lugares} ${veiculo.lugares === 1 ? "lugar" : "lugares"}`;
 }
 
 /** O que falta para o staff ser escalado e comunicado sem pendência. */

@@ -1,17 +1,15 @@
 import { Car } from "lucide-react";
+import Link from "next/link";
 
 import type { CaronasCarregadas } from "@/fluxos/logistica";
 import { FormularioDeAcao } from "@/app/(time)/_componentes/ui";
 
-import { FaixaSomenteLeitura } from "../../_componentes/ui/aviso";
-import { BarraDeFiltros, SeletorDeFiltro } from "../../_componentes/ui/barra-de-filtros";
+import { Aviso } from "../../_componentes/ui/aviso";
 import { BotaoDeEnvio } from "../../_componentes/ui/botao";
-import { BotaoLink } from "../../_componentes/ui/botao-link";
 import { Cartao } from "../../_componentes/ui/cartao";
 import { CAMPO, TITULO_DE_SECAO } from "../../_componentes/ui/classes";
 import { EstadoVazio } from "../../_componentes/ui/estados";
-import { dataCurta, distancia } from "../../_componentes/ui/formatos";
-import { CabecaDaTabela, CelulaDaTabela, ColunaDaTabela, LinhaDaTabela, Tabela } from "../../_componentes/ui/tabela";
+import { distancia } from "../../_componentes/ui/formatos";
 import { criarCaronaAcao, definirCaronaAcao, removerCaronaAcao, tirarDaCaronaAcao } from "../acoes";
 import { BotaoNovoMotorista } from "./formularios-de-carona";
 
@@ -47,8 +45,8 @@ function Seletor({
   );
 }
 
-/** Ação principal das Caronas: no cabeçalho da página (/logistica/caronas) ou no título da seção (aba do evento). */
-export function NovoMotorista({ dados }: { dados: CaronasCarregadas }) {
+/** Ação principal das Caronas, no título da seção (na Hospedagem e na aba Logística do evento). */
+function NovoMotorista({ dados }: { dados: CaronasCarregadas }) {
   if (!dados.evento) return null;
   return (
     <BotaoNovoMotorista
@@ -62,54 +60,98 @@ export function NovoMotorista({ dados }: { dados: CaronasCarregadas }) {
 
 const km = (valor: number | null) => (valor === null ? "distância desconhecida" : distancia(valor));
 
-export function SecaoDeCaronas({ dados, escrita, comSeletorDeEvento }: { dados: CaronasCarregadas; escrita: boolean; comSeletorDeEvento: boolean }) {
+/**
+ * Caronas de um evento: usada logo abaixo dos quartos na Hospedagem (/logistica/hospedagem) e na aba Logística do evento.
+ * Parte de quem está com o deslocamento "Carona" na escala; o motorista é alguém da escala com veículo no cadastro.
+ */
+export function SecaoDeCaronas({ dados, escrita }: { dados: CaronasCarregadas; escrita: boolean }) {
   const { evento } = dados;
   const motoristasComLugar = dados.caronas.map((carona) => ({
     valor: carona.id,
-    rotulo: `${carona.motoristaNome} — ${carona.livres === 1 ? "1 lugar livre" : `${carona.livres} lugares livres`}`,
+    // A opção diz quem já vai no carro: escolher o motorista é escolher com quem a pessoa vai.
+    rotulo: [
+      `${carona.motoristaNome} — ${carona.livres === 1 ? "1 lugar livre" : `${carona.livres} lugares livres`}`,
+      carona.passageiros.length > 0 ? `com ${carona.passageiros.map((passageiro) => passageiro.nome.trim().split(/\s+/)[0]).join(", ")}` : null,
+    ]
+      .filter(Boolean)
+      .join(" · "),
     desabilitada: carona.livres === 0,
   }));
 
   return (
     <section aria-labelledby="titulo-caronas" className="mb-8">
-      {comSeletorDeEvento && (
-        <BarraDeFiltros>
-          <SeletorDeFiltro
-            nome="evento"
-            rotulo="Evento"
-            todos="Próximo evento"
-            valor={evento?.id ?? null}
-            opcoes={dados.eventos.map((item) => ({ valor: item.id, rotulo: `${item.codigo ?? item.nome} · ${dataCurta(item.dataInicio)}` }))}
-          />
-        </BarraDeFiltros>
-      )}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <h2 id="titulo-caronas" className={TITULO_DE_SECAO}>
           Caronas
         </h2>
-        {escrita && !comSeletorDeEvento && <NovoMotorista dados={dados} />}
+        {escrita && <NovoMotorista dados={dados} />}
       </div>
-      {!escrita && comSeletorDeEvento && <FaixaSomenteLeitura />}
 
-      {!evento ? (
+      {!evento && (
         <Cartao espacamento="nenhum">
           <EstadoVazio icone={<Car size={32} aria-hidden />} titulo="Nenhum evento com equipe nos próximos dias." />
         </Cartao>
-      ) : dados.caronas.length === 0 && dados.semCarona.length === 0 ? (
-        <Cartao espacamento="nenhum">
-          <EstadoVazio
-            icone={<Car size={32} aria-hidden />}
-            titulo="Ninguém com carona neste evento."
-            acao={
-              <BotaoLink variante="texto" href={`/eventos/${evento.id}/escala`}>
-                Ir para a escala
-              </BotaoLink>
-            }
-          >
-            Quem vai de carona aparece aqui quando o deslocamento for marcado como Carona na escala. Para começar, escolha um motorista acima.
-          </EstadoVazio>
+      )}
+
+      {/* De onde a seção parte: quem o time marcou como Carona na escala, e quantos já têm motorista. */}
+      {evento && (
+        <Aviso
+          tom={dados.marcadasComoCarona === 0 ? "informacao" : dados.semCarona.length > 0 ? "atencao" : "sucesso"}
+          className="mb-4"
+          titulo={
+            dados.marcadasComoCarona === 0
+              ? `Ninguém marcado como Carona na escala de ${evento.codigo ?? evento.nome}`
+              : `${dados.marcadasComoCarona === 1 ? "1 pessoa marcada" : `${dados.marcadasComoCarona} pessoas marcadas`} como Carona na escala de ${evento.codigo ?? evento.nome}`
+          }
+          acao={
+            <Link href={`/eventos/${evento.id}/escala`} className="font-medium text-[var(--ds-tint-text)] hover:underline">
+              {dados.marcadasComoCarona === 0 ? "Marcar na escala" : "Abrir a escala"}
+            </Link>
+          }
+        >
+          <p>
+            {dados.marcadasComoCarona === 0
+              ? "Quem vai de carona aparece aqui quando o deslocamento for marcado como Carona na escala do evento. O motorista é alguém da escala com veículo no cadastro."
+              : dados.semCarona.length === 0
+                ? "Todo mundo que vai de carona tem motorista. Em cada carro abaixo dá para ver quem vai com quem."
+                : `${dados.marcadasComoCarona - dados.semCarona.length} com motorista e ${dados.semCarona.length} sem carona. Escolha o motorista de cada pessoa para definir quem vai com quem.`}
+          </p>
+        </Aviso>
+      )}
+
+      {evento && dados.semCarona.length > 0 && (
+        <Cartao
+          id="sem-carona"
+          titulo={`Sem carona · ${dados.semCarona.length}`}
+          explicacao={`Marcadas como Carona na escala de ${evento.codigo ?? evento.nome} que ainda não têm motorista, da mais perto do evento para a mais longe.`}
+          className="mb-4"
+        >
+          {motoristasComLugar.every((motorista) => motorista.desabilitada) && (
+            <p className="mb-3 text-[13px] text-[var(--ds-label-2)]">
+              {dados.caronas.length === 0 ? "Escolha um motorista em \"Novo motorista\" para começar a distribuir." : "Os carros estão cheios: escolha mais um motorista em \"Novo motorista\"."}
+            </p>
+          )}
+          <ul className="flex flex-col gap-2 text-[14px]">
+            {dados.semCarona.map((pessoa) => (
+              <li key={pessoa.convocacaoId} className="flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  {pessoa.nome}
+                  <span className="ml-1 text-[12px] text-[var(--ds-label-2)]">{[pessoa.funcao, `${km(pessoa.distanciaKm)} até o evento`].filter(Boolean).join(" · ")}</span>
+                </span>
+                {escrita && motoristasComLugar.length > 0 && (
+                  <FormularioDeAcao acao={definirCaronaAcao} className="inline-flex items-center gap-1" aria-label={`Escolher carona para ${pessoa.nome}`}>
+                    <input type="hidden" name="convocacaoId" value={pessoa.convocacaoId} />
+                    <Seletor id={`carona-de-${pessoa.convocacaoId}`} nome="caronaId" rotulo={`Escolher carona para ${pessoa.nome}`} vazio="Escolher carona…" opcoes={motoristasComLugar} />
+                    <BotaoDeEnvio tamanho="pequeno" variante="secundario">
+                      Definir
+                    </BotaoDeEnvio>
+                  </FormularioDeAcao>
+                )}
+              </li>
+            ))}
+          </ul>
         </Cartao>
-      ) : null}
+      )}
 
       {evento && dados.caronas.length > 0 && (
         <ul className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -175,39 +217,6 @@ export function SecaoDeCaronas({ dados, escrita, comSeletorDeEvento }: { dados: 
             </li>
           ))}
         </ul>
-      )}
-
-      {evento && dados.semCarona.length > 0 && (
-        <Tabela legenda="Pessoas com deslocamento Carona e sem motorista" larguraMinima="min-w-[640px]">
-          <CabecaDaTabela>
-            <ColunaDaTabela>Sem carona definida</ColunaDaTabela>
-            <ColunaDaTabela numero>Distância até o evento</ColunaDaTabela>
-            <ColunaDaTabela className="text-right">Escolher carona</ColunaDaTabela>
-          </CabecaDaTabela>
-          <tbody>
-            {dados.semCarona.map((pessoa) => (
-              <LinhaDaTabela key={pessoa.convocacaoId}>
-                <CelulaDaTabela cabecalhoDaLinha>{pessoa.nome}</CelulaDaTabela>
-                <CelulaDaTabela numero className="whitespace-nowrap">
-                  {pessoa.distanciaKm === null ? "—" : distancia(pessoa.distanciaKm)}
-                </CelulaDaTabela>
-                <CelulaDaTabela className="text-right">
-                  {escrita && motoristasComLugar.length > 0 ? (
-                    <FormularioDeAcao acao={definirCaronaAcao} className="inline-flex items-center gap-1" aria-label={`Escolher carona para ${pessoa.nome}`}>
-                      <input type="hidden" name="convocacaoId" value={pessoa.convocacaoId} />
-                      <Seletor id={`carona-de-${pessoa.convocacaoId}`} nome="caronaId" rotulo={`Escolher carona para ${pessoa.nome}`} vazio="Escolher carona…" opcoes={motoristasComLugar} />
-                      <BotaoDeEnvio tamanho="pequeno" variante="secundario">
-                        Definir
-                      </BotaoDeEnvio>
-                    </FormularioDeAcao>
-                  ) : (
-                    <span className="text-[13px] text-[var(--ds-label-2)]">Sem motorista com lugar</span>
-                  )}
-                </CelulaDaTabela>
-              </LinhaDaTabela>
-            ))}
-          </tbody>
-        </Tabela>
       )}
     </section>
   );

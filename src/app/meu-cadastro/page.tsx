@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { sair } from "@/app/(time)/_servidor/sessao";
 import { identidadeDaSessao } from "@/app/(time)/_servidor/usuario-atual";
 import { carregarMeuCadastro, staffDaIdentidade } from "@/fluxos/pessoas";
+import { caminhoDoFormularioDeCusto } from "@/modules/custos";
 import type { PendenciaDoCadastro } from "@/modules/pessoas";
 
 import { MolduraDeEntrada } from "../login/_componentes/moldura";
@@ -73,6 +75,9 @@ export default async function PaginaMeuCadastro() {
         }}
         opcoes={{ polos: opcoes.polos, funcoes: opcoes.funcoes.map((funcao) => ({ id: funcao.id, nome: funcao.nome })) }}
       />
+      <p className="custo-voltar">
+        <Link href={caminhoDoFormularioDeCusto()}>Solicitar o custo de um evento</Link>
+      </p>
       <form action={sair} className="cadastro-sair">
         <button type="submit">Sair</button>
       </form>

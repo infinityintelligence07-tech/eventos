@@ -2,7 +2,7 @@ import { Plane, Plus } from "lucide-react";
 import Link from "next/link";
 
 import type { LinhaDeVoo, PedidoCarregado, VoosCarregados } from "@/fluxos/logistica";
-import { aguardandoSdc, rotuloDaPreferencia, rotuloDoSentido, type TrechoDoPedido } from "@/modules/logistica";
+import { aguardandoSdc, rotuloDaPreferencia, rotuloDoSentido, textoDasPassagensAPedir, textoDosDiasQueFaltam, type TrechoDoPedido } from "@/modules/logistica";
 import { BotaoCopiar, PainelPelaUrl } from "@/app/(time)/_componentes/ui";
 
 import { Aviso, FaixaSomenteLeitura } from "../../_componentes/ui/aviso";
@@ -54,14 +54,17 @@ function LinhaDoVoo({
   parametros,
   escrita,
   mostrarEvento,
+  diasDoAtraso,
 }: {
   linha: LinhaDeVoo;
+  /** Limite do "atrasado" em vigor (acompanha o aviso configurado). */
+  diasDoAtraso: number;
   base: string;
   parametros: ParametrosDeVoos;
   escrita: boolean;
   mostrarEvento: boolean;
 }) {
-  const faltam = linha.situacao === "A_PEDIR" && linha.janela.janela !== "FORA_DA_JANELA" ? `faltam ${linha.janela.dias} dias` : null;
+  const faltam = linha.situacao === "A_PEDIR" && linha.janela.janela !== "FORA_DA_JANELA" ? textoDosDiasQueFaltam(linha.janela.dias) : null;
   const pedido = linha.pedido;
   const trechos = pedido?.trechos ?? [];
   const abrir = (mudancas: Record<string, string | null>) => enderecoCom(base, parametros, { ref: null, modo: null, novo: null, convocacao: null, registrado: null, ...mudancas });
@@ -101,7 +104,7 @@ function LinhaDoVoo({
           <ChipDoVoo situacao={linha.situacao} />
           {pedido?.retornoRegistradoPor && <SeloRegistradoPeloTime em={pedido.emitidoEm} por={pedido.retornoRegistradoPor} />}
         </span>
-        {linha.situacao === "A_PEDIR" && linha.janela.janela === "ATRASADO" && <span className="mt-1 block text-[12px] font-medium text-[var(--ds-red-deep)]">Atrasado (menos de 60 dias)</span>}
+        {linha.situacao === "A_PEDIR" && linha.janela.janela === "ATRASADO" && <span className="mt-1 block text-[12px] font-medium text-[var(--ds-red-deep)]">Atrasado ({diasDoAtraso} dias ou menos)</span>}
         {!mostrarEvento && faltam && <span className="mt-1 block text-[12px] text-[var(--ds-label-2)]">{faltam}</span>}
       </CelulaDaTabela>
       <CelulaDaTabela className="text-right">
@@ -278,6 +281,41 @@ function PainelDoPedido({ pedido, base, parametros, escrita }: { pedido: PedidoC
   );
 }
 
+/**
+ * Aviso de passagens a pedir (só na tela, para a líder e o time): cada evento que entrou na janela configurada em
+ * Configurações › Aviso de voos, com quantas passagens faltam pedir e quantos dias faltam.
+ */
+function AvisoDeCompra({ aviso, base, parametros, porEvento }: { aviso: VoosCarregados["avisoDeCompra"]; base: string; parametros: ParametrosDeVoos; porEvento: boolean }) {
+  if (aviso.eventos.length === 0) return null;
+  const total = aviso.eventos.reduce((soma, evento) => soma + evento.passagens, 0);
+  return (
+    <Aviso tom="atencao" className="mb-4" titulo={total === 1 ? "Falta pedir 1 passagem à SDC" : `Faltam pedir ${total} passagens à SDC`}>
+      <ul className="mt-1 flex flex-col gap-1">
+        {aviso.eventos.map((evento) => (
+          <li key={evento.eventoId} className="flex flex-wrap items-baseline gap-x-2">
+            <Link
+              href={enderecoCom(base, parametros, porEvento ? { evento: evento.eventoId, situacao: "A_PEDIR" } : { situacao: "A_PEDIR" })}
+              className="font-medium text-[var(--ds-tint-text)] hover:underline"
+            >
+              {evento.codigo ?? evento.nome} · {dataCurta(evento.dataInicio)}
+            </Link>
+            <span className="tabular-nums">
+              {textoDasPassagensAPedir(evento.passagens)} · {textoDosDiasQueFaltam(evento.dias)}
+              {evento.janela === "ATRASADO" && <span className="text-[var(--ds-orange-deep)]"> · atrasado</span>}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-[12px] text-[var(--ds-label-2)]">
+        O aviso começa {aviso.diasDoAviso} dias antes do evento e o pedido conta como atrasado a partir de {aviso.diasDoAtraso} dias.{" "}
+        <Link href="/configuracoes/voos" className="font-medium text-[var(--ds-tint-text)] hover:underline">
+          Configurações
+        </Link>
+      </p>
+    </Aviso>
+  );
+}
+
 const SITUACOES_VALIDAS = ["A_PEDIR", "PEDIDO", "EMITIDO", "ALTERADO", "CANCELADO"] as const;
 
 export function situacaoDoFiltro(valor: string | undefined) {
@@ -315,21 +353,7 @@ export function SecaoDeVoos({
         )}
       </div>
       {!escrita && <FaixaSomenteLeitura />}
-      {dados.aPedirNaJanela > 0 && (
-        <Aviso
-          tom="atencao"
-          className="mb-4"
-          acao={
-            <Link href={enderecoCom(base, parametros, { situacao: "A_PEDIR" })} className="font-medium text-[var(--ds-tint-text)] hover:underline">
-              Ver quem falta
-            </Link>
-          }
-        >
-          {dados.aPedirNaJanela === 1
-            ? "1 pessoa vai de avião para evento em menos de 90 dias e ainda não tem pedido."
-            : `${dados.aPedirNaJanela} pessoas vão de avião para eventos em menos de 90 dias e ainda não têm pedido.`}
-        </Aviso>
-      )}
+      <AvisoDeCompra aviso={dados.avisoDeCompra} base={base} parametros={parametros} porEvento={comSeletorDeEvento} />
       <BarraDeFiltros resultado={`${dados.linhas.length} linhas`}>
         {comSeletorDeEvento && (
           <SeletorDeFiltro
@@ -373,7 +397,15 @@ export function SecaoDeVoos({
           </CabecaDaTabela>
           <tbody>
             {dados.linhas.map((linha) => (
-              <LinhaDoVoo key={linha.chave} linha={linha} base={base} parametros={parametros} escrita={escrita} mostrarEvento={comSeletorDeEvento} />
+              <LinhaDoVoo
+                key={linha.chave}
+                linha={linha}
+                base={base}
+                parametros={parametros}
+                escrita={escrita}
+                mostrarEvento={comSeletorDeEvento}
+                diasDoAtraso={dados.avisoDeCompra.diasDoAtraso}
+              />
             ))}
           </tbody>
         </Tabela>

@@ -6,6 +6,7 @@ import type { DefinirFuncoes, SalvarCoordenadas, SalvarPerfilDoStaff, SalvarVeic
 export type RepositorioPerfil = {
   /** Nome do staff (com pessoa_evento); nulo se não for staff. */
   travarStaff(pessoaId: string): Promise<{ nome: string } | null>;
+  /** Dos ids pedidos, os que são função ativa que uma pessoa pode ter (cargo do evento, como Pai / mãe, fica de fora). */
   funcoesAtivas(funcaoIds: string[]): Promise<string[]>;
   salvarPerfil(dados: Omit<SalvarPerfilDoStaff, "pessoaId"> & { pessoaId: string; instante: Date }): Promise<void>;
   substituirFuncoes(pessoaId: string, funcoes: DefinirFuncoes["funcoes"]): Promise<void>;

@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { DIAS_DO_AVISO_MAXIMO, DIAS_DO_AVISO_MINIMO } from "./janela";
+
 // Schemas das server actions da Logística (docs/07 §6.6). Os campos chegam do FormData como texto;
 // texto vazio já chega ausente (lerFormulario).
 
@@ -174,6 +176,30 @@ export const removerQuartoSchema = z.object({ quartoId: id });
 export const porNoQuartoSchema = z.object({ quartoId: id, convocacaoId: id });
 export type PorNoQuarto = z.output<typeof porNoQuartoSchema>;
 export const tirarDoQuartoSchema = z.object({ quartoId: id, convocacaoId: id });
+/** Duas pessoas trocam de lugar: `quartoId` é o quarto atual de `convocacaoId`; `com…` são a outra pessoa e o quarto dela. */
+export const trocarDeQuartoSchema = z.object({ quartoId: id, convocacaoId: id, comQuartoId: id, comConvocacaoId: id });
+export type TrocarDeQuarto = z.output<typeof trocarDeQuartoSchema>;
+
+const UUID = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
+const DESTINO_DO_OCUPANTE = new RegExp(`^(?:quarto:(${UUID})|troca:(${UUID}):(${UUID}))$`);
+
+/** Valor do seletor "Mover para…": um quarto com vaga, ou a pessoa (e o quarto dela) com quem trocar de lugar. */
+export const destinoNoQuarto = (quartoId: string) => `quarto:${quartoId}`;
+export const destinoDaTroca = (quartoId: string, convocacaoId: string) => `troca:${quartoId}:${convocacaoId}`;
+
+/**
+ * "Mover para…" de quem já está num quarto: ir para outro quarto com vaga ou trocar de lugar com alguém de outro
+ * quarto, as duas coisas em um passo.
+ */
+export const moverDeQuartoSchema = z
+  .object({ quartoId: id, convocacaoId: id, destino: z.string().regex(DESTINO_DO_OCUPANTE, "Escolha uma opção da lista.") })
+  .transform(({ quartoId, convocacaoId, destino }): { mover: PorNoQuarto } | { trocar: TrocarDeQuarto } => {
+    const [, paraQuartoId, comQuartoId, comConvocacaoId] = DESTINO_DO_OCUPANTE.exec(destino)!;
+    return paraQuartoId
+      ? { mover: { quartoId: paraQuartoId.toLowerCase(), convocacaoId } }
+      : { trocar: { quartoId, convocacaoId, comQuartoId: comQuartoId!.toLowerCase(), comConvocacaoId: comConvocacaoId!.toLowerCase() } };
+  });
+export type MoverDeQuarto = z.output<typeof moverDeQuartoSchema>;
 /** Sem datas = volta a acompanhar o período da hospedagem. */
 export const definirPeriodoDoOcupanteSchema = z
   .object({ quartoId: id, convocacaoId: id, checkIn: data.optional(), checkOut: data.optional() })
@@ -181,6 +207,19 @@ export const definirPeriodoDoOcupanteSchema = z
   .refine((periodo) => !periodo.checkIn || !periodo.checkOut || periodo.checkOut > periodo.checkIn, periodoValido);
 export type DefinirPeriodoDoOcupante = z.output<typeof definirPeriodoDoOcupanteSchema>;
 export const aplicarRoomingSugeridoSchema = z.object({ eventoId: id });
+
+const LIMITES_DO_AVISO = `Use de ${DIAS_DO_AVISO_MINIMO} a ${DIAS_DO_AVISO_MAXIMO} dias.`;
+
+/** Configurações › Aviso de voos: quantos dias antes do evento o aviso de passagens a pedir começa. */
+export const salvarAvisoDeVoosSchema = z.object({
+  dias: z
+    .string({ error: "Informe quantos dias antes do evento o aviso começa." })
+    .trim()
+    .regex(/^\d{1,4}$/, "Use um número inteiro de dias, sem vírgula.")
+    .transform(Number)
+    .pipe(z.number().min(DIAS_DO_AVISO_MINIMO, LIMITES_DO_AVISO).max(DIAS_DO_AVISO_MAXIMO, LIMITES_DO_AVISO)),
+});
+export type SalvarAvisoDeVoos = z.output<typeof salvarAvisoDeVoosSchema>;
 
 export const criarCaronaSchema = z.object({ eventoId: id, motoristaConvocacaoId: id });
 export type CriarCarona = z.output<typeof criarCaronaSchema>;

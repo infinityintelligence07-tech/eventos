@@ -4,13 +4,13 @@ import { z } from "zod";
 import { situacaoDaEscrita } from "@/fluxos/_base";
 import { carregarPedido, carregarVoos } from "@/fluxos/logistica";
 
-import { CabecalhoDaLogistica } from "../_componentes/cabecalho-da-logistica";
+import { CabecalhoDeVoos } from "../_componentes/cabecalho-da-logistica";
 import { parametro } from "../_componentes/situacoes";
 import { type ParametrosDeVoos, SecaoDeVoos, situacaoDoFiltro } from "../_componentes/secao-de-voos";
 import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Voos (SDC)" };
+export const metadata: Metadata = { title: "Voos" };
 
 type Busca = Record<string, string | string[] | undefined>;
 
@@ -35,7 +35,7 @@ export default async function PaginaVoos({ searchParams }: { searchParams: Promi
   ]);
   return (
     <>
-      <CabecalhoDaLogistica />
+      <CabecalhoDeVoos />
       <SecaoDeVoos dados={dados} pedido={pedido} base="/logistica/voos" parametros={parametros} escrita={escrita.liberada} comSeletorDeEvento />
     </>
   );

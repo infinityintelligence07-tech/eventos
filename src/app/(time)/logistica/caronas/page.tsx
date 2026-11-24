@@ -1,25 +1,16 @@
-import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 
-import { situacaoDaEscrita } from "@/fluxos/_base";
-import { carregarCaronas } from "@/fluxos/logistica";
-
-import { CabecalhoDaLogistica } from "../_componentes/cabecalho-da-logistica";
-import { NovoMotorista, SecaoDeCaronas } from "../_componentes/secao-de-caronas";
-import { parametro } from "../_componentes/situacoes";
 import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
-export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Caronas" };
+import { parametro } from "../_componentes/situacoes";
 
+/**
+ * As caronas são montadas junto com os quartos, na tela de Hospedagem do evento. O endereço antigo continua valendo:
+ * leva para lá (mantendo o evento escolhido), direto na seção de caronas.
+ */
 export default async function PaginaCaronas({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await exigirAtor();
-  const eventoId = z.uuid().safeParse(parametro((await searchParams).evento)).data ?? null;
-  const [dados, escrita] = await Promise.all([carregarCaronas(eventoId, new Date()), situacaoDaEscrita()]);
-  return (
-    <>
-      <CabecalhoDaLogistica acoes={escrita.liberada && <NovoMotorista dados={dados} />} />
-      <SecaoDeCaronas dados={dados} escrita={escrita.liberada} comSeletorDeEvento />
-    </>
-  );
+  const eventoId = z.uuid().safeParse(parametro((await searchParams).evento)).data;
+  redirect(`/logistica/hospedagem${eventoId ? `?evento=${eventoId}` : ""}#titulo-caronas`);
 }

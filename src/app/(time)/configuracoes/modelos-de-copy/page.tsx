@@ -2,27 +2,30 @@ import { CircleCheck, CircleMinus, FilePlus2, MessageSquareText } from "lucide-r
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { Aviso, BotaoLink, Cartao, Chip, EstadoVazio, FaixaSomenteLeitura, formatar, SemPermissaoNaAcao, TITULO_DE_SECAO } from "@/app/(time)/_componentes/ui";
+import { Aviso, BotaoCopiar, BotaoLink, Cartao, Chip, EstadoVazio, FaixaSomenteLeitura, formatar, SemPermissaoNaAcao, TITULO_DE_SECAO } from "@/app/(time)/_componentes/ui";
 import { CabecaDaTabela, CelulaDaTabela, ColunaDaTabela, LinhaDaTabela, Tabela } from "@/app/(time)/_componentes/ui/tabela";
 import { permissoesDoAtor } from "@/app/(time)/_servidor/usuario-atual";
 import { listarModelos } from "@/fluxos/comunicacao";
 import { rotuloDoTipoDeModelo } from "@/modules/comunicacao";
+import { caminhoDoFormularioDeCusto } from "@/modules/custos";
 
 import { FormularioDoLink } from "./_componentes/formulario-do-link";
 import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
+import { enderecoDoSite } from "@/app/(time)/_servidor/endereco-do-site";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Modelos de copy" };
 
 export default async function PaginaModelosDeCopy() {
   await exigirAtor();
-  const [{ modelos, linkCustos, escritaLiberada }, permissoes] = await Promise.all([listarModelos(), permissoesDoAtor("config.link_custos")]);
+  const [{ modelos, linkCustos, escritaLiberada }, permissoes, site] = await Promise.all([listarModelos(), permissoesDoAtor("config.link_custos"), enderecoDoSite()]);
+  const linkDoSistema = site ? `${site}${caminhoDoFormularioDeCusto()}` : null;
 
   return (
     <>
       {!escritaLiberada && <FaixaSomenteLeitura />}
 
-      <Cartao id="link-custos" titulo="Link do formulário de custos" explicacao="Enquanto o staff não tem portal, a copy de escalação manda este link." className="mb-5">
+      <Cartao id="link-custos" titulo="Link do formulário de custos" explicacao="A copy de escalação manda este link para o staff pedir o custo." className="mb-5">
         {!linkCustos && (
           <Aviso tom="atencao" className="mb-3">
             Sem o link, todas as copys de escalação ficam bloqueadas com &quot;falta link do formulário de custos&quot;.
@@ -34,6 +37,16 @@ export default async function PaginaModelosDeCopy() {
           <div className="flex flex-col gap-1">
             <p className="text-[14px] break-all">{linkCustos ?? "Sem link cadastrado."}</p>
             <SemPermissaoNaAcao permissao="config.link_custos" />
+          </div>
+        )}
+        {linkDoSistema && linkCustos !== linkDoSistema && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-[13px] text-[var(--ds-label-2)]">
+            <p className="min-w-0 break-all">
+              O formulário de custo do sistema fica em <span className="text-[var(--ds-label)]">{linkDoSistema}</span>. Para a copy mandar o staff para ele, copie e salve no campo acima.
+            </p>
+            <BotaoCopiar texto={linkDoSistema} mensagem="Link copiado. Cole no campo e salve." tamanho="pequeno">
+              Copiar link
+            </BotaoCopiar>
           </div>
         )}
       </Cartao>

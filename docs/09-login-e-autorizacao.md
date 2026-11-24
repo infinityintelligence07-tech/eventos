@@ -201,7 +201,7 @@ type Permissao =
   | "comunicacao.enviar" | "disponibilidade.gerir" | "disponibilidade.registrar_resposta" | "pessoas.editar"
   | "logistica.gerir" | "logistica.registrar_retorno_sdc" | "custos.registrar" | "custos.auditar"
   | "custos.reabrir_auditoria" | "config.locais" | "config.modelos_copy" | "config.link_custos"
-  | "config.regras_vagas" | "config.regras_custo";
+  | "config.aviso_de_voos" | "config.regras_vagas" | "config.regras_custo";
 pode(ator: Pick<Ator, "perfis">, permissao: Permissao): boolean   // switch exaustivo por perfil
 class AcessoNegadoError extends Error {}                            // traduzida por mensagemDoErro
 ```
@@ -214,7 +214,7 @@ A leitura de todas as telas vale para os dois perfis. Não há permissão só de
 |---|:-:|:-:|---|
 | `evento.editar` | ✓ | ✓ | escala fora de `AGUARDANDO_APROVACAO` (já existe) |
 | `escala.montar` | ✓ | ✓ | — |
-| `escala.registrar_resposta` | ✓ | ✓ | grava `registrado_por` (já existe) |
+| `escala.registrar_resposta` | ✓ | ✓ | grava `registrado_por` (já existe). Sem action desde nov/2026: a escala não pede mais situação (quem entra já entra confirmado) |
 | `escala.aprovar` (aprovar e devolver) | — | ✓ | **SoD-1:** o aprovador não está entre os montadores do ciclo |
 | `escala.reabrir` | — | ✓ | — |
 | `comunicacao.enviar` | ✓ | ✓ | — |
@@ -229,24 +229,26 @@ A leitura de todas as telas vale para os dois perfis. Não há permissão só de
 | `config.locais` | ✓ | ✓ | — |
 | `config.modelos_copy` | ✓ | ✓ | — |
 | `config.link_custos` | — | ✓ | muda todas as copys de escalação |
+| `config.aviso_de_voos` | — | ✓ | muda quando o aviso de passagens a pedir aparece para todo o time |
 | `config.regras_vagas` | — | ✓ | — |
 | `config.regras_custo` | — | ✓ | dinheiro |
 
-### 4.3 Todas as server actions (13 arquivos, `rg -l "use server" src/app`)
+### 4.3 Todas as server actions (15 arquivos, `rg -l "use server" src/app`)
 
 | Arquivo | Action → permissão |
 |---|---|
 | `eventos/[eventoId]/acoes.ts` | `salvarDadosDoEvento` → `evento.editar` |
-| `eventos/[eventoId]/escala/acoes.ts` | `confirmarVagas`, `alterarVagas`, `definirVagaDigitada`, `adicionarVagaManual`, `removerVagaManual`, `porNaVaga`, `tirarDaVaga`, `atualizarConvocacao`, `enviarParaAprovacao` → `escala.montar`; `registrarRespostaDoStaff` → `escala.registrar_resposta`; `aprovarEscala`, `devolverEscala` → `escala.aprovar`; `reabrirEscala` → `escala.reabrir` |
+| `eventos/[eventoId]/escala/acoes.ts` | `confirmarVagas`, `alterarVagas`, `definirVagaDigitada`, `adicionarVagaManual`, `removerVagaManual`, `porNaVaga`, `tirarDaVaga`, `atualizarConvocacao`, `enviarParaAprovacao` → `escala.montar`; `aprovarEscala`, `devolverEscala` → `escala.aprovar`; `reabrirEscala` → `escala.reabrir` |
 | `escalas/aprovacao/acoes.ts` | `aprovarEscala`, `devolverEscala` → `escala.aprovar` |
 | `eventos/[eventoId]/comunicacao/acoes.ts` | `marcarCopyComoEnviada` → `comunicacao.enviar` |
 | `disponibilidade/nova/acoes.ts` | `abrirEnqueteAcao` → `disponibilidade.gerir` |
 | `disponibilidade/[enqueteId]/acoes.ts` | `encerrarEnqueteAcao`, `reabrirEnqueteAcao` → `disponibilidade.gerir`; `registrarRespostaAcao` → `disponibilidade.registrar_resposta` |
 | `pessoas/[pessoaId]/acoes.ts` | `salvarPerfilAcao`, `definirFuncoesAcao`, `salvarVeiculoAcao`, `salvarCoordenadasAcao` → `pessoas.editar` |
-| `logistica/acoes.ts` | `registrarPedidoDeVooAcao`, `alterarPedidoAcao`, `cancelarPedidoAcao`, `criarHospedagemAcao`, `alterarHospedagemAcao`, `registrarPedidoDeHospedagemAcao`, `adicionarQuartoAcao`, `removerQuartoAcao`, `porNoQuartoAcao`, `tirarDoQuartoAcao`, `definirPeriodoDoOcupanteAcao`, `aplicarRoomingSugeridoAcao`, `criarCaronaAcao`, `removerCaronaAcao`, `definirCaronaAcao`, `tirarDaCaronaAcao` → `logistica.gerir`; `registrarRetornoDeVooAcao`, `registrarRetornoDeHospedagemAcao` → `logistica.registrar_retorno_sdc` |
+| `logistica/acoes.ts` | `registrarPedidoDeVooAcao`, `alterarPedidoAcao`, `cancelarPedidoAcao`, `criarHospedagemAcao`, `alterarHospedagemAcao`, `registrarPedidoDeHospedagemAcao`, `adicionarQuartoAcao`, `removerQuartoAcao`, `porNoQuartoAcao`, `moverDeQuartoAcao`, `tirarDoQuartoAcao`, `definirPeriodoDoOcupanteAcao`, `aplicarRoomingSugeridoAcao`, `criarCaronaAcao`, `removerCaronaAcao`, `definirCaronaAcao`, `tirarDaCaronaAcao` → `logistica.gerir`; `registrarRetornoDeVooAcao`, `registrarRetornoDeHospedagemAcao` → `logistica.registrar_retorno_sdc` |
 | `custos/acoes.ts` | `registrarSolicitacaoAcao`, `corrigirSolicitacaoAcao`, `calcularPreviaAcao` (não grava) → `custos.registrar`; `aprovarSolicitacaoAcao`, `reprovarSolicitacaoAcao` → `custos.auditar`; `reabrirAuditoriaAcao` → `custos.reabrir_auditoria` |
 | `configuracoes/locais/acoes.ts` | `salvarLocalAcao`, `arquivarLocalAcao` → `config.locais` |
 | `configuracoes/modelos-de-copy/acoes.ts` | `salvarModeloAcao`, `definirModeloAtivoAcao`, `previaDoModeloAcao` (não grava) → `config.modelos_copy`; `salvarLinkDeCustosAcao` → `config.link_custos` |
+| `configuracoes/voos/acoes.ts` | `salvarAvisoDeVoosAcao` → `config.aviso_de_voos` |
 | `configuracoes/vagas/acoes.ts` | `salvarRegraDeVagas`, `recalcularVagasDoTipo` → `config.regras_vagas` |
 | `configuracoes/regras-de-custo/acoes.ts` | `criarVigenciaDeRegraAcao`, `desativarRegraAcao` → `config.regras_custo` |
 
@@ -353,6 +355,11 @@ O worker (sincronização de turmas, pg-boss) continua no papel atual nesta roda
   no Supavisor porque a conexão ao Postgres é feita com o próprio papel. O worker continua no modo sessão (5432).
 - **Chaves do Supabase:** o Eventos usa só a URL e a chave pública (anon/publishable) para o Auth. **Sem `service_role`**
   (quem cria usuário é o GH).
+- **Storage (comprovantes de custo, doc 08 §11.4):** o servidor fala com o bucket privado `eventos-comprovantes` pelo protocolo
+  S3, com uma **chave de acesso S3** (`COMPROVANTES_S3_CHAVE_ID` e `COMPROVANTES_S3_CHAVE_SEGREDO`). Essa chave só alcança o
+  Storage: não lê nem grava no banco, então o privilégio mínimo dos papéis acima continua valendo. Fica só no ambiente do
+  serviço web, nunca no navegador nem em log. O navegador recebe apenas um endereço pré-assinado de 5 minutos, depois de a
+  rota conferir quem está pedindo.
 
 ### 6.3 O que é migration e o que é manual
 

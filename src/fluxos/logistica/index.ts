@@ -25,6 +25,8 @@ export {
   registrarPedidoDeHospedagem,
   removerQuarto,
   tirarDoQuarto,
+  trocarDeQuarto,
 } from "./hospedagem";
 export { type CaronasCarregadas, carregarCaronas, criarCarona, definirCarona, removerCarona, tirarDaCarona } from "./caronas";
+export { type AvisoDeVoos, carregarAvisoDeVoos, salvarAvisoDeVoos } from "./aviso";
 export { resumoParaInicio } from "./resumo";

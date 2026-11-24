@@ -10,6 +10,7 @@ import {
   type EntradaDeDeslocamento,
   type EntradaDeItem,
   type EventoParaRegistro,
+  itensFixosDasRegras,
   type NivelDeExcecao,
   type PessoaParaRegistro,
   precoDoLitro,
@@ -78,17 +79,7 @@ export async function prepararSolicitacao(
     sugestoes: {
       precoLitroCentavos: precoDoLitro(aplicaveis),
       consumoKmL: pessoa?.consumoKmL ?? null,
-      itens: aplicaveis
-        .filter((regra) => (regra.categoria === "REMUNERACAO" || regra.categoria === "ALIMENTACAO") && regra.valorCentavos !== null)
-        .sort((a, b) => a.categoria.localeCompare(b.categoria) * -1)
-        .map((regra) => ({
-          categoria: regra.categoria as CategoriaDoItem,
-          regraCustoId: regra.id,
-          descricao: regra.nome,
-          unidade: regra.unidade,
-          quantidade: 1,
-          valorCentavos: regra.valorCentavos!,
-        })),
+      itens: itensFixosDasRegras(aplicaveis),
     },
   };
 }

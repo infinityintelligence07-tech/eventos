@@ -26,7 +26,8 @@ export function criarRepositorioPerfil(executor: Executor): RepositorioPerfil {
       const linhas = await executor
         .select({ id: funcao.id })
         .from(funcao)
-        .where(and(inArray(funcao.id, funcaoIds), eq(funcao.ativo, true)));
+        // Cargo do evento (Pai / mãe) não é habilitação: não pode ser gravado como função da pessoa.
+        .where(and(inArray(funcao.id, funcaoIds), eq(funcao.ativo, true), eq(funcao.cargoDoEvento, false)));
       return linhas.map((linha) => linha.id);
     },
 

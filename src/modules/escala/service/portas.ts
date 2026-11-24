@@ -30,7 +30,17 @@ export type LinhaTravada = {
   ativas: number;
 };
 
-export type ConvocacaoTravada = { id: string; escalaId: string; eventoId: string; pessoaId: string; nome: string; status: StatusConvocacao; principal: boolean };
+export type ConvocacaoTravada = {
+  id: string;
+  escalaId: string;
+  eventoId: string;
+  pessoaId: string;
+  nome: string;
+  status: StatusConvocacao;
+  principal: boolean;
+  /** Já soube que está na escala: recebeu alguma copy ou tem resposta registrada. */
+  avisada: boolean;
+};
 
 /**
  * A principal da pessoa no evento mudou de convocação. Quem guarda dados por convocação fora da escala (quarto,
@@ -79,7 +89,7 @@ export type RepositorioMontagem = {
   conflitosDeAgenda(eventoId: string, pessoaId: string): Promise<string[]>;
   /** `principal`: falso quando a pessoa já tem outra função ativa neste evento. */
   inserirConvocacao(entrada: { escalaId: string; pessoaId: string; usuarioId: string; sugestaoScore: number | null; principal: boolean; instante: Date }): Promise<string>;
-  /** CANCELADA/RECUSADA → SUGERIDA na mesma linha (limpa convite e resposta). false = o status mudou. */
+  /** CANCELADA/RECUSADA → ACEITA na mesma linha (limpa convite e resposta). false = o status mudou. */
   reativarConvocacao(
     convocacaoId: string,
     entrada: { de: StatusConvocacao; usuarioId: string; sugestaoScore: number | null; principal: boolean; instante: Date },
@@ -89,19 +99,21 @@ export type RepositorioMontagem = {
   outraAtivaMaisAntiga(eventoId: string, pessoaId: string, excetoConvocacaoId: string): Promise<string | null>;
   /** A convocação principal ativa da pessoa no evento. */
   principalDaPessoa(eventoId: string, pessoaId: string): Promise<string | null>;
-  /** `para` vira a principal e recebe deslocamento, carona, distância e tempo de `de`, que deixa de ser. */
+  /** `para` vira a principal e recebe deslocamento, carona, hotel, distância e tempo de `de`, que deixa de ser. */
   passarPrincipal(de: string, para: string, instante: Date): Promise<void>;
   apagarConvocacao(convocacaoId: string, de: StatusConvocacao): Promise<boolean>;
   mudarConvocacao(
     convocacaoId: string,
     entrada: { de: StatusConvocacao; para: StatusConvocacao; instante: Date; resposta?: { motivoRecusa: string | null; registradoPor: string } },
   ): Promise<boolean>;
-  /** Grava só os campos informados (deslocamento, montagem, observação). */
+  /** Grava só os campos informados (deslocamento, montagem, hotel). */
   atualizarConvocacao(
     convocacaoId: string,
-    campos: { deslocamento?: Deslocamento | null; montagem?: boolean; observacao?: string | null },
+    campos: { deslocamento?: Deslocamento | null; montagem?: boolean; precisaHotel?: boolean },
     instante: Date,
   ): Promise<void>;
+  /** A convocação já ocupa um quarto na Hospedagem (só leitura: o quarto é da logística). */
+  temQuarto(convocacaoId: string): Promise<boolean>;
   /** Compare-and-set do status. `aprovadoPor` grava aprovado_por/em; `limparAprovacao` zera os dois. */
   mudarStatusDaEscala(
     eventoId: string,

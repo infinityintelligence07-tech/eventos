@@ -376,8 +376,12 @@ stateDiagram-v2
 
 - `EMITIDO` exige, no serviço: voo com `localizador`, `companhia`, `numero_voo`, `partida_em` e `chegada_em` em cada
   trecho; hospedagem com `numero_reserva`. O banco garante `emitido_em` (ver §5.3).
-- Janela de compra **D-90**: função pura `janelaDeCompra(dataDoEvento, hoje)` → `FORA_DA_JANELA | NA_JANELA | ATRASADO`
-  (atrasado = menos de 60 dias, a confirmar). Alimenta Logística › Voos e o Início.
+- Janela de compra **D-90 por padrão, configurável** (24/11/2026): função pura
+  `janelaDeCompra(dataDoEvento, hoje, diasDoAviso = 90)` → `FORA_DA_JANELA | NA_JANELA | ATRASADO`. Os dias do aviso vêm
+  de `eventos.configuracao` (chave `dias_aviso_voos`, inteiro de 7 a 365; vazio ou inválido = 90) e são lidos pelo
+  **fluxo** (`src/fluxos/logistica/aviso.ts`), que os passa ao domínio por parâmetro. O "atrasado" acompanha o aviso:
+  `diasDoAtraso(diasDoAviso) = min(60, ⌊2/3 · diasDoAviso⌋)` (90 ou mais → 60; 45 → 30), para sempre sobrar um trecho
+  "na janela". `eventosComPassagensAPedir` agrupa por evento o aviso da tela. Alimenta Voos e o Início.
 - Cancelar não apaga: o pedido continua na lista da SDC e na conciliação futura da fatura.
 
 ---
@@ -580,12 +584,12 @@ Server actions (Zod):
 | `adicionarVagaManual` / `removerVagaManual` | `{ eventoId, funcaoId, quantidade }` / `{ escalaId }` (origem `MANUAL`, já confirmada) |
 | `porNaVaga` | `{ escalaId, pessoaId, sugestaoScore?: number }` |
 | `tirarDaVaga` | `{ convocacaoId }` |
-| `atualizarConvocacao` | `{ convocacaoId, campo: deslocamento \| montagem \| observacao, deslocamento?: enum do CHECK (inclui MOTO e A_PE desde a 0007), montagem?: "sim", observacao?: string ≤ 500 }` — um campo por envio; os outros não mudam |
+| `atualizarConvocacao` | `{ convocacaoId, campo: deslocamento \| montagem \| hotel, deslocamento?: enum do CHECK (carro próprio, carona, carro da IAM, Uber, ônibus e voo; Moto, A pé e Não se aplica saíram na 0013), montagem?: "sim", hotel?: "sim" }` — um campo por envio; os outros não mudam. `hotel` grava `convocacao.precisa_hotel` (quem a Hospedagem aloca). A observação saiu da tela na 0013 (a coluna fica) |
 | `enviarParaAprovacao` | `{ eventoId, statusEsperado: 'RASCUNHO' \| 'DEVOLVIDA' }` |
 | `aprovarEscala` | `{ eventoId }` (esperado `AGUARDANDO_APROVACAO`) |
 | `devolverEscala` | `{ eventoId, comentario?: string ≤ 1000 }` |
 | `reabrirEscala` | `{ eventoId, motivo?: string ≤ 1000 }` |
-| `registrarRespostaDoStaff` | `{ convocacaoId, resposta: 'ACEITA' \| 'RECUSADA', motivoRecusa?: string ≤ 500 }` |
+| `registrarRespostaDoStaff` | `{ convocacaoId, resposta: 'ACEITA' \| 'RECUSADA', motivoRecusa?: string ≤ 500 }` — sem tela nem server action desde a 0013 (quem entra na escala já entra `ACEITA`); o fluxo ficou no código |
 
 **Sugestão de pessoas** (`escala/domain/sugestao.ts`, pura). Entrada por candidato: disponibilidade para o evento
 (`PODE`, `SEM_RESPOSTA`, `NAO_PODE`), nível na função (`HABILITADO`, `TRAINEE`, sem a função), distância em km até o
@@ -613,8 +617,9 @@ pedido, pessoas sem resposta na enquete. "Sem PIX" fica fora (dado em `sensivel`
 | Server action (Zod) | `marcarCopyComoEnviada` ← `{ convocacaoId: uuid, modeloId: uuid, dadosHash: string(64) }` |
 
 - "Copiar" é só no navegador (`navigator.clipboard`), sem gravar. Não existe "marcar todas".
-- `{{link_custos}}`: o staff ainda não tem portal. Enquanto isso o valor vem de configuração (link do formulário de hoje)
-  ou a copy de escalação fica sempre bloqueada (decisão em §11).
+- `{{link_custos}}`: o valor vem de configuração (decisão em §11); vazio, a copy de escalação fica bloqueada. Desde 24/11/2026 o
+  sistema tem o formulário próprio (`/solicitar-custo`, doc 08 §11.4): a líder copia o endereço em Configurações › Modelos de copy
+  e salva no campo. Nenhuma migration muda o valor configurado.
 - Alerta "falta dado" no Início e na lista: contagem de convocações ativas com situação `FALTA_DADO`.
 
 ### 6.4 Disponibilidade — `/disponibilidade`, `/disponibilidade/nova`, `/disponibilidade/[enqueteId]`
@@ -658,12 +663,12 @@ Endereço, CPF e PIX ficam no `sensivel` (GH) e não aparecem nesta rodada.
 
 | | |
 |---|---|
-| Rotas | `logistica/voos` (pedidos entre eventos + "a pedir" na janela D-90; painel do pedido `?ref=SDC-…`), `logistica/hospedagem` (rooming por evento), `logistica/caronas` (onda 2), `logistica/creditos` ("em breve"), `eventos/[eventoId]/logistica` (o mesmo, filtrado) |
+| Rotas | `logistica/voos` (pedidos entre eventos + aviso de passagens a pedir na janela configurada, padrão D-90; painel do pedido `?ref=SDC-…`), `logistica/hospedagem` (rooming e, logo abaixo, as caronas do mesmo evento), `logistica/caronas` (redireciona para a hospedagem, na seção de caronas), `logistica/creditos` ("em breve"), `eventos/[eventoId]/logistica` (o mesmo, filtrado), `configuracoes/voos` (dias do aviso). No menu são dois itens, Voos (`voos`) e Hospedagem (`hospedagem` com quartos e caronas, `creditos`); a escala do evento tem o atalho "Montar quartos e caronas" |
 | Lê | convocações ativas com deslocamento, pedidos e trechos, hospedagens, quartos e ocupantes, locais `HOTEL`/`APARTAMENTO`, caronas |
 | Escreve | `pedido_sdc`, `trecho_voo`, `hospedagem`, `quarto`, `quarto_ocupante`, `carona`, `convocacao.carona_id`, `registro_acao` |
 | Módulo | `logistica` (novo) |
-| Fluxos | `carregarVoos(filtros, agora)`, `carregarPedido(referencia)`, `registrarPedidoDeVoo`, `alterarPedido`, `cancelarPedido`, `registrarRetornoDaSdc`, `carregarHospedagem(eventoId)`, `criarHospedagem`, `alterarHospedagem`, `registrarPedidoDeHospedagem`, `adicionarQuarto`, `removerQuarto`, `porNoQuarto`, `tirarDoQuarto`; onda 2: `sugerirRooming`, `criarCarona`, `definirCarona` |
-| Domínio | `pedido.ts` (§4.5), `janela.ts` (D-90), `rooming.ts` (sugestão por sexo, pura), `schemas.ts` |
+| Fluxos | `carregarVoos(filtros, agora)`, `carregarPedido(referencia)`, `registrarPedidoDeVoo`, `alterarPedido`, `cancelarPedido`, `registrarRetornoDaSdc`, `carregarHospedagem(eventoId)`, `criarHospedagem`, `alterarHospedagem`, `registrarPedidoDeHospedagem`, `adicionarQuarto`, `removerQuarto`, `porNoQuarto`, `trocarDeQuarto` (duas pessoas trocam de lugar em um passo), `tirarDoQuarto`, `carregarAvisoDeVoos`, `salvarAvisoDeVoos` (grava em `configuracao` pelo repositório da Comunicação, dono da tabela); onda 2: `sugerirRooming`, `criarCarona`, `definirCarona` |
+| Domínio | `pedido.ts` (§4.5), `janela.ts` (janela do aviso, padrão D-90, e atrasado), `rooming.ts` (sugestão por sexo e `podeTrocar`, puras), `schemas.ts` |
 | Repository | `pedidos-repository.ts`, `hospedagem-repository.ts`, `caronas-repository.ts` |
 
 Server actions (Zod):
@@ -704,6 +709,20 @@ navegador); `corrigirSolicitacao` ← o mesmo + `solicitacaoId` (só `REPROVADO`
   `COMBUSTIVEL` por UF. Consumo vem de `pessoa_veiculo`, editável.
 - Remuneração e alimentação vêm pré-preenchidas da `regra_custo` do tipo do evento.
 - `UNIQUE (evento_id, pessoa_id)`: uma solicitação por pessoa por evento; "Registrar" vira "Abrir" quando já existe.
+- **Formulário do próprio staff** (`src/app/solicitar-custo`, fora do `(time)`; doc 08 §11.4): `carregarCustosDoStaff(pessoaId)`,
+  `carregarFormularioDoStaff(eventoId, pessoaId)`, `solicitarCusto` e `corrigirMeuCusto` (em `src/fluxos/custos/staff.ts`). Usa o mesmo
+  serviço de registro, com `propria: true` no contexto: grava sem `registrado_por`, o `registro_acao` leva `propria: true` e vale o
+  prazo de `domain/prazo.ts` (do primeiro dia do evento até 5 dias depois do último, em São Paulo). As despesas do staff viram
+  `custo_item` "OUTRO"; a pessoa não escolhe categoria. Remuneração e alimentação fixas entram sozinhas, por
+  `itensFixosDasRegras` (`domain/regras.ts`), a mesma função que sugere os itens no registro do time.
+- **Comprovantes** (migration 0014, doc 08 §11.4): tabela `eventos.comprovante_custo` (anexo da solicitação; antes de ela existir,
+  da pessoa no evento) e arquivo no armazenamento. `src/core/integrations/armazenamento`: uma interface (`guardar`,
+  `linkTemporario`, `ler`, `apagar`) e três implementações — S3 do Storage do Supabase com AWS Signature V4 em `node:crypto`
+  (`sigv4.ts`, sem dependência nova), disco em `.banco-local/comprovantes` (só `EVENTOS_MODO=local`) e memória (testes). Sem as
+  variáveis `COMPROVANTES_S3_*` (`src/core/config/comprovantes.ts`) o anexo fica desligado. Envio por route handler, um arquivo
+  por pedido (`/solicitar-custo/[eventoId]/comprovantes`): server action tem limite de 1 MB e o corpo que passa pelo middleware
+  é cortado em 10 MB. Fluxos em `src/fluxos/custos/comprovantes.ts`; histórico com a entidade `COMPROVANTE_CUSTO`.
+- **Mensagem de custo aprovado:** `domain/mensagens.ts` (`mensagemDeCustoAprovado`), copiada pelo time no painel da solicitação aprovada.
 
 ### 6.8 Configurações — `/configuracoes/regras-de-custo`, `/vagas`, `/modelos-de-copy`, `/locais`
 
@@ -721,7 +740,7 @@ Cada sub-tela é do módulo dono do dado (e da frente dona desse módulo). O `la
 | | |
 |---|---|
 | Rota | `inicio/page.tsx`; `src/app/page.tsx` passa a redirecionar para `/inicio` |
-| Lê | escalas a montar (30 dias), aguardando aprovação, devolvidas, Confronto sem fila, eventos sem código, convocações sem resposta há mais de 2 dias, copys bloqueadas e desatualizadas, voos na janela D-90 sem pedido, custos para auditar (com críticos) |
+| Lê | escalas a montar (30 dias), aguardando aprovação, devolvidas, eventos sem código ("Confronto sem fila" saiu do Início em 24/11/2026), copys bloqueadas e desatualizadas, voos na janela D-90 sem pedido, custos para auditar (com críticos) |
 | Escreve | nada |
 | Fluxo | `carregarInicio(agora)` combina os `resumoParaInicio(agora)` de cada fluxo (contrato em §7.1) |
 
@@ -783,10 +802,10 @@ type ItemDoInicio = { chave: string; titulo: string; quantidade: number; href: s
 
 | Fluxo | Itens |
 |---|---|
-| `escalas` (B) | escalas a montar (30 dias), aguardando aprovação, devolvidas, sem resposta há mais de 2 dias |
-| `eventos` (B) | Confronto sem fila, eventos sem código (reaproveita `pendenciasDosEventos`) |
+| `escalas` (B) | escalas a montar (30 dias), aguardando aprovação, devolvidas ("sem resposta há mais de 2 dias" saiu na 0013: quem está na escala já conta como confirmado) |
+| `eventos` (B) | eventos sem código (reaproveita `pendenciasDosEventos`). "Confronto sem fila" saiu do Início em 24/11/2026; a falta da fila aparece só na escala do evento |
 | `comunicacao` (C) | copys com falta de dado, copys desatualizadas |
-| `logistica` (D) | voos a pedir na janela D-90, pedidos alterados sem novo retorno da SDC |
+| `logistica` (D) | voos a pedir na janela do aviso (padrão D-90, configurável): por evento, passagens a pedir e dias que faltam; pedidos alterados sem novo retorno da SDC |
 | `custos` (D) | solicitações para auditar (destaque para as críticas) |
 | `disponibilidade` (A) | enquetes que fecham em até 3 dias |
 
@@ -913,9 +932,10 @@ transferência é API do navegador).
 3. Evento (Confronto): informar a fila → vagas de pai/mãe aparecem; digitar o número de Staff; confirmar todas as funções.
 4. Montar escala: sugestões ordenadas por disponibilidade; pôr pessoas; tentar passar do número de vagas (recusa).
 5. Enviar para aprovação → Aprovação: devolver com comentário → corrigir → reenviar → aprovar.
-6. Comunicação: uma pessoa sem sexo aparece "Falta dado"; corrigir em Pessoas; copiar e marcar como enviada; a pessoa
-   vira "Aguardando resposta"; ao enviar a última, a escala fica "Comunicada".
-7. Escala: registrar "Confirmou" e "Não pode"; reabrir para trocar quem não pode; aprovar de novo; comunicar o substituto.
+6. Comunicação: uma pessoa sem sexo aparece "Falta dado"; corrigir em Pessoas; copiar e marcar como enviada; ao enviar
+   a última, a escala fica "Comunicada". (Desde a 0013 quem está na escala já conta como confirmado: não há mais
+   "Aguardando resposta".)
+7. Escala: reabrir para trocar quem avisou que não pode (lixeira na linha da pessoa); aprovar de novo; comunicar o substituto.
 8. Logística: registrar pedido de voo (ida e volta) → registrar retorno da SDC → copy de hospedagem fica "Desatualizada".
    Montar quartos por sexo e alocar.
 9. Custos: registrar solicitação em nome do staff (alerta de consumo aparece); reprovar com motivo; corrigir; aprovar.
@@ -969,6 +989,10 @@ Onde a doc 08 diverge, vale o que está aqui.
 | Escala comunicada | Passa a `COMUNICADA` sozinha quando todas as copys de escalação forem marcadas como enviadas. |
 | Aprovação sem login | Registra data/hora e o usuário de teste. |
 | Motivo em custos | Obrigatório para reprovar e para aprovar com alerta crítico; opcional no resto. |
+| Item 7, janela de voo (24/11/2026) | O D-90 virou configurável em Configurações › Aviso de voos (7 a 365 dias, padrão 90). O "atrasado" deixou de ser 60 fixo: é dois terços do aviso, no máximo 60 (§4.5). O aviso é só na tela, para a líder e o time. |
+| Formulário de custo do staff (24/11/2026) | `/solicitar-custo` substitui o Google Forms: aberto do primeiro dia do evento até 5 dias depois do último (inclusive, fuso de São Paulo); fora do prazo, só o time registra. A pessoa informa só deslocamento e despesas; remuneração e alimentação são fixas e entram sozinhas pela regra (quantidade 1, como a tela do time sugere). Tipo de combustível e data do evento ficam de fora. Correção pelo staff só da reprovada, até 5 dias depois da reprovação. Detalhe na doc 08 §11.4. |
+| Comprovante do custo (24/11/2026) | Anexo no formulário do staff: até 3 arquivos de 8 MB (JPEG, PNG, WebP ou PDF, conferidos pelos bytes), obrigatório quando há deslocamento ou despesa. Storage do Supabase, bucket privado `eventos-comprovantes`, pelo protocolo S3 com chave de acesso S3 (nunca a `service_role`); leitura por rota autenticada que redireciona para URL pré-assinada de 5 minutos. Sem as variáveis, o anexo fica desligado e o formulário funciona sem o campo. |
+| Custo aprovado (24/11/2026) | Mensagem pronta para copiar e mandar no WhatsApp (primeiro nome, evento, protocolo, valor). O sistema não envia. **Construção futura:** envio automático pelo WhatsApp. |
 | Pessoa nova | Sem botão "Nova pessoa" (cadastro é do GH); no local, usar as 60 pessoas semeadas. |
 | WhatsApp | Só copiar e marcar como enviada; botão do WhatsApp inativo com "em breve". |
 | Permissões por papel | Fora desta rodada (sem login). |

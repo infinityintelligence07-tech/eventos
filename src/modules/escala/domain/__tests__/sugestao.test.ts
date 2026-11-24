@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { distanciaKm } from "../distancia";
-import { type Candidato, ordenarSugestoes, pontuacaoDaSugestao } from "../sugestao";
+import { type Candidato, nivelParaSugestao, ordenarSugestoes, pontuacaoDaSugestao } from "../sugestao";
 
 const candidato = (nome: string, dados: Partial<Candidato> = {}): Candidato => ({
   pessoaId: nome,
@@ -80,5 +80,21 @@ describe("distância em linha reta", () => {
     expect(km).toBeGreaterThan(12);
     expect(km).toBeLessThan(15);
     expect(distanciaKm(null, { lat: 0, lng: 0 })).toBeNull();
+  });
+});
+
+describe("nível da pessoa para a vaga", () => {
+  it("função comum: vale a habilitação do cadastro; sem ela, a pessoa fica como não habilitada", () => {
+    expect(nivelParaSugestao("HABILITADO", false)).toBe("HABILITADO");
+    expect(nivelParaSugestao("TRAINEE", false)).toBe("TRAINEE");
+    expect(nivelParaSugestao(null, false)).toBe("SEM_FUNCAO");
+  });
+
+  it("cargo do evento (Pai / mãe): qualquer staff serve, ninguém fica atrás por não ter a função", () => {
+    expect(nivelParaSugestao(null, true)).toBe("HABILITADO");
+    expect(nivelParaSugestao("TRAINEE", true)).toBe("HABILITADO");
+    const semFuncao = candidato("perto", { nivel: nivelParaSugestao(null, true), distanciaKm: 5 });
+    const comFuncao = candidato("longe", { nivel: nivelParaSugestao("HABILITADO", true), distanciaKm: 400 });
+    expect(nomes(ordenarSugestoes([comFuncao, semFuncao]).sugeridos)).toEqual(["perto", "longe"]);
   });
 });

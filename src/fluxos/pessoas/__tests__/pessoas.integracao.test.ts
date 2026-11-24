@@ -169,4 +169,34 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos de Pessoas no banco", () => {
     );
     expect(await teste.banco!.sql(`select 1 from eventos.pessoa_veiculo where pessoa_id = $1`, [semStaff])).toEqual([]);
   });
+
+  it("Pai / mãe é cargo do evento, não função da pessoa: fora da lista, do filtro e da edição; Trainee de líder é função", async () => {
+    const paiMae = await um(`select id, cargo_do_evento from eventos.funcao where codigo = 'PAI_MAE'`);
+    expect(paiMae.cargo_do_evento).toBe(true);
+
+    const { opcoes } = await listarPessoas(lerFiltrosDaLista({}), agora);
+    const codigos = opcoes.funcoes.map((funcao) => funcao.codigo);
+    expect(codigos).not.toContain("PAI_MAE");
+    expect(opcoes.funcoes.find((funcao) => funcao.codigo === "TRAINEE_LIDER")).toMatchObject({ nome: "Trainee de líder" });
+    expect((await carregarPessoa(ana, agora))!.funcoesDisponiveis.map((funcao) => funcao.codigo)).not.toContain("PAI_MAE");
+
+    // Não dá para gravar como função da pessoa, e nada muda.
+    const antes = (await carregarPessoa(bruno, agora))!.funcoes;
+    await expect(definirFuncoes({ pessoaId: bruno, funcoes: [{ funcaoId: paiMae.id as string, nivel: "HABILITADO" }] }, ator(), agora)).rejects.toEqual(
+      new RegraDeNegocioError("Alguma função escolhida não existe mais. Recarregue a página."),
+    );
+    expect((await carregarPessoa(bruno, agora))!.funcoes).toEqual(antes);
+
+    // Mesmo que uma linha antiga exista no banco, a ficha e a lista não mostram.
+    await teste.banco!.sql(`insert into eventos.pessoa_funcao (pessoa_id, funcao_id) values ($1, $2)`, [bruno, paiMae.id]);
+    expect((await carregarPessoa(bruno, agora))!.funcoes.map((funcao) => funcao.codigo)).not.toContain("PAI_MAE");
+    const naLista = (await listarPessoas(lerFiltrosDaLista({}), agora)).pessoas.find((item) => item.pessoaId === bruno)!;
+    expect(naLista.funcoes.map((funcao) => funcao.codigo)).not.toContain("PAI_MAE");
+    await teste.banco!.sql(`delete from eventos.pessoa_funcao where pessoa_id = $1 and funcao_id = $2`, [bruno, paiMae.id]);
+
+    // Trainee de líder entra como qualquer outra função.
+    const traineeDeLider = opcoes.funcoes.find((funcao) => funcao.codigo === "TRAINEE_LIDER")!;
+    await definirFuncoes({ pessoaId: bruno, funcoes: [...antes.map(({ funcaoId, nivel }) => ({ funcaoId, nivel })), { funcaoId: traineeDeLider.id, nivel: "HABILITADO" }] }, ator(), agora);
+    expect((await carregarPessoa(bruno, agora))!.funcoes.map((funcao) => funcao.codigo)).toContain("TRAINEE_LIDER");
+  });
 });

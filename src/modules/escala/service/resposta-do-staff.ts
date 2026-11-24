@@ -7,6 +7,8 @@ import type { AoTrocarPrincipal, RepositorioMontagem } from "./portas";
 
 // "Registrar resposta" em nome do staff (docs/07 §3.3 e §4.2): grava registrado_por e o registro_acao
 // com em_nome_de_pessoa_id. Só com a escala aprovada ou comunicada.
+// Sem tela desde a migration 0013: a escala não pede mais situação (quem entra já entra ACEITA). O caso de uso fica
+// porque RECUSADA continua existindo nos dados e religar a tela não exige mexer aqui.
 
 export async function registrarRespostaDoStaff(
   repo: RepositorioMontagem,

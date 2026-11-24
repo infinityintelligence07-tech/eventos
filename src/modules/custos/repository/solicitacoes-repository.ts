@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, ilike, inArray, isNull, notInArray, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, ne, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import type { Executor } from "@/core/db/database";
@@ -21,13 +21,17 @@ import {
 import type { CategoriaDoItem, StatusAuditoria, StatusFinanceiro } from "../domain/auditoria";
 import type { NivelDeExcecao } from "../domain/calculo";
 import type { CategoriaDaRegra, RegraDeCusto, UnidadeDaRegra } from "../domain/regras";
+import type { EntradaDeItem } from "../domain/schemas";
+import type { TipoDeComprovante } from "../domain/comprovantes";
 import type { RepositorioSolicitacoes } from "../service/solicitacoes";
+import { comprovantesDaSolicitacao, contarComprovantes, travarPessoaNoEvento, vincularComprovantes } from "./comprovantes-repository";
 
 const NA_ESCALA = ["SUGERIDA", "CONVIDADA", "ACEITA"];
 const registrador = alias(usuario, "registrador");
 
 const nomeDaPessoa = sql<string>`coalesce(${pessoa.nomeSocial}, ${pessoa.nomeCompleto})`;
 const dataDoEvento = sql<string>`to_char(${evento.inicio} at time zone 'America/Sao_Paulo', 'YYYY-MM-DD')`;
+const dataFimDoEvento = sql<string>`to_char(${evento.fim} at time zone 'America/Sao_Paulo', 'YYYY-MM-DD')`;
 const nomeDoUsuario = (coluna: unknown) => sql<string | null>`case when ${coluna} is null then null else coalesce(${usuario.nomeUsuario}, ${usuario.email}, 'time') end`;
 const mesmaVersao = (iso: string) => sql`date_trunc('milliseconds', ${solicitacaoCusto.atualizadoEm}) = ${iso}::timestamptz`;
 
@@ -76,6 +80,9 @@ export type ItemGravado = {
 
 export type HistoricoDaSolicitacao = { acao: string; statusPara: string | null; comentario: string | null; criadoEm: Date; usuarioNome: string | null };
 
+/** O que as telas mostram de um comprovante. A chave do arquivo no armazenamento não sai do servidor. */
+export type ComprovanteDaTela = { id: string; nome: string; tipo: TipoDeComprovante; tamanhoBytes: number; criadoEm: Date };
+
 export type DetalheDaSolicitacao = SolicitacaoDaFila & {
   funcao: string | null;
   parecer: string | null;
@@ -84,6 +91,7 @@ export type DetalheDaSolicitacao = SolicitacaoDaFila & {
   registradoPorNome: string | null;
   deslocamentos: DeslocamentoGravado[];
   itens: ItemGravado[];
+  comprovantes: ComprovanteDaTela[];
   historico: HistoricoDaSolicitacao[];
 };
 
@@ -92,6 +100,20 @@ export type FiltroDaFila = { eventoId?: string; auditoria?: StatusAuditoria; niv
 export type NumerosDaFila = { paraAuditar: number; criticas: number; aprovadasNoMesCentavos: number; reprovadasNoMes: number };
 
 export type EventoParaRegistro = { id: string; codigo: string | null; nome: string; data: string };
+
+/** Evento em que a pessoa está na escala (formulário do staff). Datas em AAAA-MM-DD de São Paulo. */
+export type EventoDaPessoa = { id: string; codigo: string | null; nome: string; dataInicio: string; dataFim: string };
+
+/** Solicitação da pessoa, para ela mesma ver a situação. */
+export type SolicitacaoDaPessoa = {
+  protocolo: string;
+  evento: { id: string; codigo: string | null; nome: string };
+  auditoria: StatusAuditoria;
+  financeiro: StatusFinanceiro;
+  pagoEm: string | null;
+  totalCentavos: number;
+  criadoEm: Date;
+};
 
 export type PessoaParaRegistro = {
   pessoaId: string;
@@ -173,6 +195,11 @@ export function criarRepositorioSolicitacoes(executor: Executor): RepositorioSol
   detalhe(protocolo: string): Promise<DetalheDaSolicitacao | null>;
   eventosParaRegistro(desde: string): Promise<EventoParaRegistro[]>;
   pessoasParaRegistro(eventoId: string): Promise<PessoaParaRegistro[]>;
+  /** Eventos não cancelados em que a pessoa está na escala, que começaram até `inicioAte` e terminaram (ou começaram) de `fimDesde` em diante. */
+  eventosDaPessoa(pessoaId: string, periodo: { inicioAte: string; fimDesde: string }): Promise<EventoDaPessoa[]>;
+  /** As solicitações mais recentes da pessoa (sem travar: serve à leitura). */
+  solicitacoesDaPessoa(pessoaId: string, filtro?: { eventoId?: string; limite?: number }): Promise<SolicitacaoDaPessoa[]>;
+  consumoDaPessoa(pessoaId: string): Promise<number | null>;
 } {
   function consultaDaFila() {
     return executor
@@ -289,6 +316,7 @@ export function criarRepositorioSolicitacoes(executor: Executor): RepositorioSol
           valorCentavos: item.valorCentavos,
           comprovanteUrl: item.comprovanteUrl,
         })),
+        comprovantes: (await comprovantesDaSolicitacao(executor, base.id)).map(({ id, nome, tipo, tamanhoBytes, criadoEm }) => ({ id, nome, tipo, tamanhoBytes, criadoEm })),
         historico,
       };
     },
@@ -339,9 +367,64 @@ export function criarRepositorioSolicitacoes(executor: Executor): RepositorioSol
         .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
     },
 
+    async eventosDaPessoa(pessoaId, { inicioAte, fimDesde }) {
+      const diaDoInicio = sql`(${evento.inicio} at time zone 'America/Sao_Paulo')::date`;
+      const diaDoFim = sql`(${evento.fim} at time zone 'America/Sao_Paulo')::date`;
+      return executor
+        .selectDistinct({ id: evento.id, codigo: evento.codigo, nome: evento.nome, dataInicio: dataDoEvento, dataFim: dataFimDoEvento })
+        .from(convocacao)
+        .innerJoin(escala, eq(escala.id, convocacao.escalaId))
+        .innerJoin(evento, eq(evento.id, escala.eventoId))
+        .where(
+          and(
+            eq(convocacao.pessoaId, pessoaId),
+            inArray(convocacao.status, NA_ESCALA),
+            isNull(escala.deletedAt),
+            isNull(evento.deletedAt),
+            ne(evento.status, "CANCELADO"),
+            lte(diaDoInicio, sql`${inicioAte}::date`),
+            gte(sql`greatest(${diaDoInicio}, ${diaDoFim})`, sql`${fimDesde}::date`),
+          ),
+        )
+        .orderBy(asc(dataDoEvento), asc(evento.nome));
+    },
+
+    async solicitacoesDaPessoa(pessoaId, { eventoId, limite = 20 } = {}) {
+      const linhas = await executor
+        .select({
+          protocolo: solicitacaoCusto.protocolo,
+          evento: { id: evento.id, codigo: evento.codigo, nome: evento.nome },
+          auditoria: solicitacaoCusto.statusAuditoria,
+          financeiro: solicitacaoCusto.statusFinanceiro,
+          pagoEm: solicitacaoCusto.pagoEm,
+          totalCentavos: solicitacaoCusto.totalCentavos,
+          criadoEm: solicitacaoCusto.criadoEm,
+        })
+        .from(solicitacaoCusto)
+        .innerJoin(evento, eq(evento.id, solicitacaoCusto.eventoId))
+        .where(and(eq(solicitacaoCusto.pessoaId, pessoaId), eventoId ? eq(solicitacaoCusto.eventoId, eventoId) : undefined))
+        .orderBy(desc(solicitacaoCusto.criadoEm))
+        .limit(limite);
+      return linhas.map((linha) => ({ ...linha, auditoria: linha.auditoria as StatusAuditoria, financeiro: linha.financeiro as StatusFinanceiro }));
+    },
+
+    async consumoDaPessoa(pessoaId) {
+      const [linha] = await executor.select({ consumoKmL: pessoaVeiculo.consumoKmL }).from(pessoaVeiculo).where(eq(pessoaVeiculo.pessoaId, pessoaId));
+      return linha?.consumoKmL == null ? null : Number(linha.consumoKmL);
+    },
+
     async eventoDoCusto(eventoId) {
       const [linha] = await executor
-        .select({ id: evento.id, codigo: evento.codigo, tipoEventoId: evento.tipoEventoId, uf: local.uf, data: dataDoEvento })
+        .select({
+          id: evento.id,
+          codigo: evento.codigo,
+          nome: evento.nome,
+          tipoEventoId: evento.tipoEventoId,
+          uf: local.uf,
+          data: dataDoEvento,
+          dataFim: dataFimDoEvento,
+          cancelado: sql<boolean>`${evento.status} = 'CANCELADO'`,
+        })
         .from(evento)
         .leftJoin(local, eq(local.id, evento.localId))
         .where(and(eq(evento.id, eventoId), isNull(evento.deletedAt)));
@@ -361,18 +444,30 @@ export function criarRepositorioSolicitacoes(executor: Executor): RepositorioSol
 
     async solicitacaoDaPessoa(eventoId, pessoaId) {
       const [linha] = await executor
-        .select({ protocolo: solicitacaoCusto.protocolo })
+        .select({ id: solicitacaoCusto.id, protocolo: solicitacaoCusto.protocolo })
         .from(solicitacaoCusto)
         .where(and(eq(solicitacaoCusto.eventoId, eventoId), eq(solicitacaoCusto.pessoaId, pessoaId)))
         .for("update");
-      return linha?.protocolo ?? null;
+      return linha ?? null;
     },
+
+    async situacaoDaSolicitacaoDaPessoa(eventoId, pessoaId) {
+      const [linha] = await executor
+        .select({ id: solicitacaoCusto.id, auditoria: solicitacaoCusto.statusAuditoria, auditadoEm: solicitacaoCusto.auditadoEm })
+        .from(solicitacaoCusto)
+        .where(and(eq(solicitacaoCusto.eventoId, eventoId), eq(solicitacaoCusto.pessoaId, pessoaId)));
+      return linha ? { ...linha, auditoria: linha.auditoria as StatusAuditoria } : null;
+    },
+
+    travarPessoaNoEvento: (eventoId, pessoaId) => travarPessoaNoEvento(executor, eventoId, pessoaId),
+    contarComprovantes: (eventoId, pessoaId) => contarComprovantes(executor, eventoId, pessoaId),
+    vincularComprovantes: (eventoId, pessoaId, solicitacaoId) => vincularComprovantes(executor, eventoId, pessoaId, solicitacaoId),
 
     async regras() {
       return (await executor.select().from(regraCusto)).map(lerRegra);
     },
 
-    async inserirSolicitacao({ eventoId, pessoaId, convocacaoId, totalCentavos, nivel, usuarioId, instante }) {
+    async inserirSolicitacao({ eventoId, pessoaId, convocacaoId, totalCentavos, nivel, registradoPor, instante }) {
       const [linha] = await executor
         .insert(solicitacaoCusto)
         .values({
@@ -382,7 +477,7 @@ export function criarRepositorioSolicitacoes(executor: Executor): RepositorioSol
           convocacaoId,
           totalCentavos,
           nivelExcecao: nivel,
-          registradoPor: usuarioId,
+          registradoPor,
           criadoEm: instante,
           atualizadoEm: instante,
         })
@@ -428,6 +523,20 @@ export function criarRepositorioSolicitacoes(executor: Executor): RepositorioSol
       }
     },
 
+    async itensDaSolicitacao(solicitacaoId) {
+      const itens = await executor.select().from(custoItem).where(eq(custoItem.solicitacaoId, solicitacaoId)).orderBy(asc(custoItem.criadoEm), asc(custoItem.id));
+      return itens.map(
+        (item): EntradaDeItem => ({
+          // categoria tem CHECK no banco com esses valores.
+          categoria: item.categoria as CategoriaDoItem,
+          ...(item.regraCustoId ? { regraCustoId: item.regraCustoId } : {}),
+          descricao: item.descricao,
+          quantidade: Number(item.quantidade),
+          valorCentavos: item.valorCentavos,
+        }),
+      );
+    },
+
     async travarSolicitacao(solicitacaoId) {
       const [linha] = await executor
         .select({
@@ -439,6 +548,7 @@ export function criarRepositorioSolicitacoes(executor: Executor): RepositorioSol
           financeiro: solicitacaoCusto.statusFinanceiro,
           nivel: solicitacaoCusto.nivelExcecao,
           registradoPor: solicitacaoCusto.registradoPor,
+          auditadoEm: solicitacaoCusto.auditadoEm,
         })
         .from(solicitacaoCusto)
         .where(eq(solicitacaoCusto.id, solicitacaoId))

@@ -47,11 +47,16 @@ export type PessoaDaEquipe = {
 };
 
 const ativaNaEscala = and(isNull(escala.deletedAt), inArray(convocacao.status, CONVOCACAO_ATIVA), convocacaoPrincipal);
+/** Quem vai hospedar: o time marca "precisa de hotel" na escala do evento (convocacao.precisa_hotel). */
+const marcadaParaHotel = and(ativaNaEscala, eq(convocacao.precisaHotel, true));
 
 export function criarRepositorioHospedagem(executor: Executor): RepositorioHospedagem & {
   locaisDeHospedagem(): Promise<LocalDeHospedagem[]>;
   hospedagensDoEvento(eventoId: string): Promise<HospedagemDoEvento[]>;
+  /** Quem está na escala do evento marcada para hotel, com o quarto em que já está (se houver). */
   equipeDoEvento(eventoId: string): Promise<PessoaDaEquipe[]>;
+  /** Quantas pessoas ativas na escala do evento não estão marcadas para hotel (o lembrete "falta marcar alguém?"). */
+  naEscalaSemHotel(eventoId: string): Promise<number>;
 } {
   async function quartosTravados(condicao: ReturnType<typeof eq>): Promise<QuartoTravado[]> {
     // Inner join: o FOR UPDATE trava o quarto e a hospedagem dele.
@@ -213,9 +218,18 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
         .leftJoin(pessoaEvento, eq(pessoaEvento.pessoaId, convocacao.pessoaId))
         .leftJoin(funcao, eq(funcao.id, escala.funcaoId))
         .leftJoin(quartoOcupante, eq(quartoOcupante.convocacaoId, convocacao.id))
-        .where(and(eq(escala.eventoId, eventoId), ativaNaEscala))
+        .where(and(eq(escala.eventoId, eventoId), marcadaParaHotel))
         .orderBy(asc(nomeDaPessoa));
       return linhas.map((linha) => ({ ...linha, sexo: linha.sexo as Sexo | null }));
+    },
+
+    async naEscalaSemHotel(eventoId) {
+      const linhas = await executor
+        .select({ convocacaoId: convocacao.id })
+        .from(convocacao)
+        .innerJoin(escala, eq(escala.id, convocacao.escalaId))
+        .where(and(eq(escala.eventoId, eventoId), ativaNaEscala, eq(convocacao.precisaHotel, false)));
+      return linhas.length;
     },
 
     async eventoExiste(eventoId) {
@@ -295,7 +309,15 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
     async travarConvocacao(convocacaoId) {
       if (!(await travarLinha(executor, convocacao, convocacaoId))) return null;
       const [linha] = await executor
-        .select({ convocacaoId: convocacao.id, eventoId: escala.eventoId, status: convocacao.status, principal: convocacao.principal, escalaApagada: escala.deletedAt, sexo: pessoaEvento.sexo })
+        .select({
+          convocacaoId: convocacao.id,
+          eventoId: escala.eventoId,
+          status: convocacao.status,
+          principal: convocacao.principal,
+          precisaHotel: convocacao.precisaHotel,
+          escalaApagada: escala.deletedAt,
+          sexo: pessoaEvento.sexo,
+        })
         .from(convocacao)
         .innerJoin(escala, eq(escala.id, convocacao.escalaId))
         .leftJoin(pessoaEvento, eq(pessoaEvento.pessoaId, convocacao.pessoaId))
@@ -306,6 +328,7 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
         convocacaoId: linha.convocacaoId,
         eventoId: linha.eventoId,
         ativa: linha.escalaApagada === null && CONVOCACAO_ATIVA.includes(linha.status) && linha.principal,
+        precisaHotel: linha.precisaHotel,
         sexo: linha.sexo as Sexo | null,
         quartoId: ocupante?.quartoId ?? null,
       };
@@ -319,7 +342,7 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
         .innerJoin(pessoa, eq(pessoa.id, convocacao.pessoaId))
         .leftJoin(pessoaEvento, eq(pessoaEvento.pessoaId, convocacao.pessoaId))
         .leftJoin(quartoOcupante, eq(quartoOcupante.convocacaoId, convocacao.id))
-        .where(and(eq(escala.eventoId, eventoId), ativaNaEscala, isNull(quartoOcupante.quartoId)))
+        .where(and(eq(escala.eventoId, eventoId), marcadaParaHotel, isNull(quartoOcupante.quartoId)))
         .orderBy(asc(nomeDaPessoa));
       return linhas.map((linha) => ({ convocacaoId: linha.convocacaoId, sexo: linha.sexo as Sexo | null }));
     },

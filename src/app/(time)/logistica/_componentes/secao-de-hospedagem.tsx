@@ -1,7 +1,8 @@
-import { BedDouble, Hotel, Sparkles } from "lucide-react";
+import { Hotel, Sparkles } from "lucide-react";
+import Link from "next/link";
 
 import type { HospedagemDoEventoCarregada } from "@/fluxos/logistica";
-import { diasEntre, rotuloDaCapacidade, rotuloDoSexoDoQuarto, somarDias, textoDoPeriodo } from "@/modules/logistica";
+import { destinoDaTroca, destinoNoQuarto, diasEntre, rotuloDaCapacidade, rotuloDoSexoDoQuarto, somarDias, textoDoPeriodo } from "@/modules/logistica";
 import { BotaoCopiar, FormularioDeAcao } from "@/app/(time)/_componentes/ui";
 
 import { Aviso, FaixaSomenteLeitura } from "../../_componentes/ui/aviso";
@@ -18,6 +19,7 @@ import {
   aplicarRoomingSugeridoAcao,
   criarHospedagemAcao,
   definirPeriodoDoOcupanteAcao,
+  moverDeQuartoAcao,
   porNoQuartoAcao,
   registrarPedidoDeHospedagemAcao,
   removerQuartoAcao,
@@ -27,26 +29,31 @@ import { BotaoDefinirHospedagem, BotaoPeriodoDoOcupante, FormularioNovoQuarto } 
 import { ChipDoVoo } from "./situacoes";
 
 type OpcaoDeQuarto = { id: string; rotulo: string; cheio: boolean };
+/** Quem já está num quarto e pode trocar de lugar com outra pessoa. */
+type OpcaoDeTroca = { convocacaoId: string; quartoId: string; rotulo: string };
 
 const diarias = (noites: number) => (noites === 1 ? "1 diária" : `${noites} diárias`);
+const primeiroNome = (nome: string) => nome.trim().split(/\s+/)[0] ?? nome;
+const pessoas = (quantidade: number) => (quantidade === 1 ? "1 pessoa" : `${quantidade} pessoas`);
 
-/** Seletor "Mover para…" / "Colocar no quarto…" (alternativa a arrastar, WCAG 2.5.7). */
-function MoverPara({ convocacaoId, nome, quartos, atual, rotulo }: { convocacaoId: string; nome: string; quartos: OpcaoDeQuarto[]; atual: string | null; rotulo: string }) {
-  const destinos = quartos.filter((quarto) => quarto.id !== atual);
-  if (destinos.length === 0) return null;
-  const id = `mover-${convocacaoId}`;
-  const descricao = atual ? `Mover ${nome} para outro quarto` : `Colocar ${nome} num quarto`;
+const CLASSE_DO_SELETOR = `${CAMPO} h-8 w-auto max-w-[220px] pl-2 pr-7 text-[13px]`;
+
+/** "Colocar no quarto…" de quem está sem quarto (alternativa a arrastar, WCAG 2.5.7). */
+function ColocarNoQuarto({ convocacaoId, nome, quartos }: { convocacaoId: string; nome: string; quartos: OpcaoDeQuarto[] }) {
+  if (quartos.length === 0) return null;
+  const id = `colocar-${convocacaoId}`;
+  const descricao = `Colocar ${nome} num quarto`;
   return (
     <FormularioDeAcao acao={porNoQuartoAcao} className="flex items-center gap-1" aria-label={descricao}>
       <input type="hidden" name="convocacaoId" value={convocacaoId} />
       <label htmlFor={id} className="sr-only">
         {descricao}
       </label>
-      <select id={id} name="quartoId" required defaultValue="" className={`${CAMPO} h-8 w-auto max-w-[200px] pl-2 pr-7 text-[13px]`}>
+      <select id={id} name="quartoId" required defaultValue="" className={CLASSE_DO_SELETOR}>
         <option value="" disabled>
-          {rotulo}…
+          Colocar no quarto…
         </option>
-        {destinos.map((quarto) => (
+        {quartos.map((quarto) => (
           <option key={quarto.id} value={quarto.id} disabled={quarto.cheio}>
             {quarto.rotulo}
             {quarto.cheio ? " (cheio)" : ""}
@@ -54,7 +61,53 @@ function MoverPara({ convocacaoId, nome, quartos, atual, rotulo }: { convocacaoI
         ))}
       </select>
       <BotaoDeEnvio tamanho="pequeno" variante="secundario">
-        {atual ? "Mover" : "Colocar"}
+        Colocar
+      </BotaoDeEnvio>
+    </FormularioDeAcao>
+  );
+}
+
+/**
+ * "Mover para…" de quem já está num quarto, em um passo: outro quarto com vaga ou trocar de lugar com alguém de outro
+ * quarto (a troca funciona mesmo com os dois quartos cheios).
+ */
+function MoverDeQuarto({ convocacaoId, nome, quartoAtual, quartos, trocas }: { convocacaoId: string; nome: string; quartoAtual: string; quartos: OpcaoDeQuarto[]; trocas: OpcaoDeTroca[] }) {
+  const destinos = quartos.filter((quarto) => quarto.id !== quartoAtual);
+  const comQuem = trocas.filter((troca) => troca.quartoId !== quartoAtual);
+  if (destinos.length === 0) return null;
+  const id = `mover-${convocacaoId}`;
+  const descricao = `Mover ${nome} para outro quarto ou trocar de lugar com alguém`;
+  return (
+    <FormularioDeAcao acao={moverDeQuartoAcao} className="flex items-center gap-1" aria-label={descricao}>
+      <input type="hidden" name="quartoId" value={quartoAtual} />
+      <input type="hidden" name="convocacaoId" value={convocacaoId} />
+      <label htmlFor={id} className="sr-only">
+        {descricao}
+      </label>
+      <select id={id} name="destino" required defaultValue="" className={CLASSE_DO_SELETOR}>
+        <option value="" disabled>
+          Mover para…
+        </option>
+        <optgroup label="Outro quarto">
+          {destinos.map((quarto) => (
+            <option key={quarto.id} value={destinoNoQuarto(quarto.id)} disabled={quarto.cheio}>
+              {quarto.rotulo}
+              {quarto.cheio ? " (cheio)" : ""}
+            </option>
+          ))}
+        </optgroup>
+        {comQuem.length > 0 && (
+          <optgroup label="Trocar de lugar com">
+            {comQuem.map((troca) => (
+              <option key={troca.convocacaoId} value={destinoDaTroca(troca.quartoId, troca.convocacaoId)}>
+                {troca.rotulo}
+              </option>
+            ))}
+          </optgroup>
+        )}
+      </select>
+      <BotaoDeEnvio tamanho="pequeno" variante="secundario">
+        Mover
       </BotaoDeEnvio>
     </FormularioDeAcao>
   );
@@ -91,13 +144,32 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
 
   const locais = dados.locais.map((local) => ({ valor: local.id, rotulo: `${local.nome} · ${local.cidade} (${local.uf})${local.tipo === "APARTAMENTO" ? " · apartamento" : ""}` }));
   const periodoSugerido = { checkIn: somarDias(evento.dataInicio, -1), checkOut: somarDias(evento.dataFim, 1) };
+  const variosHoteis = dados.hospedagens.length > 1;
+  // A opção do quarto diz quem já está nele: escolher o quarto é escolher com quem a pessoa divide.
   const quartos: OpcaoDeQuarto[] = dados.hospedagens.flatMap((hospedagem) =>
     hospedagem.quartos.map((quarto) => ({
       id: quarto.id,
-      rotulo: `${quarto.nome}${dados.hospedagens.length > 1 ? ` · ${hospedagem.local.nome}` : ""} · ${quantidadeDe(quarto.ocupantes.length, quarto.capacidade)} · ${rotuloDoSexoDoQuarto(quarto.sexo)}`,
+      rotulo: [
+        `${quarto.nome}${variosHoteis ? ` · ${hospedagem.local.nome}` : ""}`,
+        quantidadeDe(quarto.ocupantes.length, quarto.capacidade),
+        rotuloDoSexoDoQuarto(quarto.sexo),
+        quarto.ocupantes.length > 0 ? `com ${quarto.ocupantes.map((ocupante) => primeiroNome(ocupante.nome)).join(", ")}` : "vazio",
+      ].join(" · "),
       cheio: quarto.ocupantes.length >= quarto.capacidade,
     })),
   );
+  const trocas: OpcaoDeTroca[] = dados.hospedagens.flatMap((hospedagem) =>
+    hospedagem.quartos.flatMap((quarto) =>
+      quarto.ocupantes.map((ocupante) => ({
+        convocacaoId: ocupante.convocacaoId,
+        quartoId: quarto.id,
+        rotulo: `${ocupante.nome} (${quarto.nome}${variosHoteis ? ` · ${hospedagem.local.nome}` : ""})`,
+      })),
+    ),
+  );
+  const totalDeQuartos = quartos.length;
+  const comQuarto = dados.equipe.length - dados.semQuarto.length;
+  const escalaHref = `/eventos/${evento.id}/escala`;
 
   return (
     <section aria-labelledby="titulo-hospedagem" className="mb-8">
@@ -111,6 +183,74 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
       </div>
       {!escrita && comSeletorDeEvento && <FaixaSomenteLeitura />}
       {seletor}
+
+      {/* De onde a tela parte: quem o time marcou para hotel na escala, e quantos já têm quarto. */}
+      <Aviso
+        tom={dados.equipe.length === 0 ? "informacao" : dados.semQuarto.length > 0 ? "atencao" : "sucesso"}
+        className="mb-4"
+        titulo={
+          dados.equipe.length === 0
+            ? `Ninguém marcado para hotel na escala de ${evento.codigo ?? evento.nome}`
+            : `${dados.equipe.length === 1 ? "1 pessoa marcada" : `${dados.equipe.length} pessoas marcadas`} para hotel na escala de ${evento.codigo ?? evento.nome}`
+        }
+        acao={
+          <Link href={escalaHref} className="font-medium text-[var(--ds-tint-text)] hover:underline">
+            {dados.equipe.length === 0 ? "Marcar na escala" : "Abrir a escala"}
+          </Link>
+        }
+      >
+        <p>
+          {dados.equipe.length === 0
+            ? "Só entra em quarto quem está marcado com Hotel na escala do evento. Marque lá quem vai hospedar e volte para montar os quartos."
+            : dados.semQuarto.length === 0
+              ? "Todo mundo tem quarto. Em cada quarto abaixo dá para ver quem divide com quem."
+              : `${comQuarto} com quarto e ${dados.semQuarto.length} sem quarto. Coloque cada pessoa num quarto para definir quem divide com quem.`}
+        </p>
+        {dados.naEscalaSemHotel > 0 && (
+          <p className="mt-1 text-[13px] text-[var(--ds-label-2)]">
+            {dados.naEscalaSemHotel === 1 ? "1 pessoa da escala não está marcada" : `${dados.naEscalaSemHotel} pessoas da escala não estão marcadas`} para hotel. Se falta alguém aqui, marque Hotel na escala.
+          </p>
+        )}
+      </Aviso>
+
+      {dados.semQuarto.length > 0 && (
+        <Cartao
+          id="sem-quarto"
+          titulo={`Sem quarto · ${dados.semQuarto.length}`}
+          explicacao={`Marcadas para hotel na escala de ${evento.codigo ?? evento.nome} (${periodo(evento.dataInicio, evento.dataFim)}) que ainda não têm quarto.`}
+          className="mb-4"
+          acoes={
+            escrita &&
+            dados.sugestaoAloca > 0 && (
+              <FormularioDeAcao acao={aplicarRoomingSugeridoAcao} aria-label="Sugerir rooming por sexo">
+                <input type="hidden" name="eventoId" value={evento.id} />
+                <BotaoDeEnvio tamanho="pequeno" variante="secundario" icone={<Sparkles size={16} aria-hidden />}>
+                  Distribuir por sexo ({dados.sugestaoAloca})
+                </BotaoDeEnvio>
+              </FormularioDeAcao>
+            )
+          }
+        >
+          {totalDeQuartos === 0 && (
+            <p className="mb-3 text-[13px] text-[var(--ds-label-2)]">
+              {dados.hospedagens.length === 0 ? "Defina o hotel e crie os quartos logo abaixo para começar a distribuir." : "Crie os quartos logo abaixo para começar a distribuir."}
+            </p>
+          )}
+          <ul className="flex flex-col gap-2 text-[14px]">
+            {dados.semQuarto.map((pessoa) => (
+              <li key={pessoa.convocacaoId} className="flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  {pessoa.nome}
+                  <span className="ml-1 text-[12px] text-[var(--ds-label-2)]">
+                    {[pessoa.funcao, pessoa.sexo === "F" ? "feminino" : pessoa.sexo === "M" ? "masculino" : "sem sexo no cadastro"].filter(Boolean).join(" · ")}
+                  </span>
+                </span>
+                {escrita && <ColocarNoQuarto convocacaoId={pessoa.convocacaoId} nome={pessoa.nome} quartos={quartos} />}
+              </li>
+            ))}
+          </ul>
+        </Cartao>
+      )}
 
       {dados.hospedagens.length === 0 && (
         <Cartao espacamento="nenhum" className="mb-4">
@@ -213,7 +353,13 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
                 <Cartao
                   id={`quarto-${quarto.id}`}
                   titulo={`${quarto.nome} · ${rotuloDaCapacidade(quarto.capacidade)} · ${quantidadeDe(quarto.ocupantes.length, quarto.capacidade)}`}
-                  explicacao={[rotuloDoSexoDoQuarto(quarto.sexo), quarto.valorDiariaCentavos !== null ? `diária ${dinheiro(quarto.valorDiariaCentavos)}` : null].filter(Boolean).join(" · ")}
+                  explicacao={[
+                    rotuloDoSexoDoQuarto(quarto.sexo),
+                    quarto.valorDiariaCentavos !== null ? `diária ${dinheiro(quarto.valorDiariaCentavos)}` : null,
+                    quarto.ocupantes.length > 1 ? `${pessoas(quarto.ocupantes.length)} dividem o quarto` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
                   acoes={
                     escrita &&
                     quarto.ocupantes.length === 0 && (
@@ -232,7 +378,7 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
                     </Aviso>
                   )}
                   {quarto.ocupantes.length === 0 ? (
-                    <p className="text-[13px] text-[var(--ds-label-2)]">Quarto vazio.</p>
+                    <p className="text-[13px] text-[var(--ds-label-2)]">Quarto vazio. Coloque alguém pela lista &quot;Sem quarto&quot;, no topo.</p>
                   ) : (
                     <ul className="flex flex-col gap-2 text-[14px]">
                       {quarto.ocupantes.map((ocupante) => (
@@ -256,7 +402,7 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
                                 hospedagem={{ checkIn: hospedagem.checkIn, checkOut: hospedagem.checkOut }}
                                 proprio={ocupante.checkIn && ocupante.checkOut ? { checkIn: ocupante.checkIn, checkOut: ocupante.checkOut } : null}
                               />
-                              <MoverPara convocacaoId={ocupante.convocacaoId} nome={ocupante.nome} quartos={quartos} atual={quarto.id} rotulo="Mover para" />
+                              <MoverDeQuarto convocacaoId={ocupante.convocacaoId} nome={ocupante.nome} quartoAtual={quarto.id} quartos={quartos} trocas={trocas} />
                               <FormularioDeAcao acao={tirarDoQuartoAcao} aria-label={`Tirar ${ocupante.nome} do quarto`}>
                                 <input type="hidden" name="quartoId" value={quarto.id} />
                                 <input type="hidden" name="convocacaoId" value={ocupante.convocacaoId} />
@@ -281,45 +427,6 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
           </ul>
         </div>
       ))}
-
-      {dados.hospedagens.length > 0 && (
-        <Cartao
-          id="sem-quarto"
-          titulo={`Sem quarto · ${dados.semQuarto.length}`}
-          explicacao={`Pessoas escaladas em ${evento.codigo ?? evento.nome} (${periodo(evento.dataInicio, evento.dataFim)}) que ainda não têm quarto.`}
-          acoes={
-            escrita &&
-            dados.sugestaoAloca > 0 && (
-              <FormularioDeAcao acao={aplicarRoomingSugeridoAcao} aria-label="Sugerir rooming por sexo">
-                <input type="hidden" name="eventoId" value={evento.id} />
-                <BotaoDeEnvio tamanho="pequeno" variante="secundario" icone={<Sparkles size={16} aria-hidden />}>
-                  Distribuir por sexo ({dados.sugestaoAloca})
-                </BotaoDeEnvio>
-              </FormularioDeAcao>
-            )
-          }
-        >
-          {dados.semQuarto.length === 0 ? (
-            <p className="flex items-center gap-2 text-[13px] text-[var(--ds-label-2)]">
-              <BedDouble size={16} aria-hidden /> Todo mundo tem quarto.
-            </p>
-          ) : (
-            <ul className="flex flex-col gap-2 text-[14px]">
-              {dados.semQuarto.map((pessoa) => (
-                <li key={pessoa.convocacaoId} className="flex flex-wrap items-center justify-between gap-2">
-                  <span>
-                    {pessoa.nome}
-                    <span className="ml-1 text-[12px] text-[var(--ds-label-2)]">
-                      {[pessoa.funcao, pessoa.sexo === "F" ? "feminino" : pessoa.sexo === "M" ? "masculino" : "sem sexo no cadastro"].filter(Boolean).join(" · ")}
-                    </span>
-                  </span>
-                  {escrita && <MoverPara convocacaoId={pessoa.convocacaoId} nome={pessoa.nome} quartos={quartos} atual={null} rotulo="Colocar no quarto" />}
-                </li>
-              ))}
-            </ul>
-          )}
-        </Cartao>
-      )}
     </section>
   );
 }

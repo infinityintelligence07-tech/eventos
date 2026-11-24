@@ -31,6 +31,15 @@ export function criarRepositorioConvite(executor: Executor): RepositorioConvite 
       return alteradas.length === 1;
     },
 
+    async marcarAvisada(convocacaoId, instante) {
+      const alteradas = await executor
+        .update(convocacao)
+        .set({ convidadaEm: instante, atualizadoEm: instante })
+        .where(and(eq(convocacao.id, convocacaoId), eq(convocacao.status, "ACEITA"), isNull(convocacao.convidadaEm)))
+        .returning({ id: convocacao.id });
+      return alteradas.length === 1;
+    },
+
     async travarComunicacaoDoEvento(eventoId) {
       const [travado] = await executor
         .select({ statusEscala: evento.statusEscala })

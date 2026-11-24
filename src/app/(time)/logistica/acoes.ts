@@ -23,6 +23,7 @@ import {
   removerQuarto,
   tirarDaCarona,
   tirarDoQuarto,
+  trocarDeQuarto,
 } from "@/fluxos/logistica";
 import {
   adicionarQuartoSchema,
@@ -34,6 +35,7 @@ import {
   criarHospedagemSchema,
   definirCaronaSchema,
   definirPeriodoDoOcupanteSchema,
+  moverDeQuartoSchema,
   porNoQuartoSchema,
   registrarPedidoDeHospedagemSchema,
   registrarPedidoDeVooSchema,
@@ -148,6 +150,20 @@ export async function porNoQuartoAcao(_estado: ResultadoAcao, form: FormData): P
     const resultado = await porNoQuarto(dados, ator, new Date());
     revalidarLogistica(resultado.eventoId);
     return resultado.mudou ? `Pessoa colocada no ${resultado.nomeDoQuarto}. A copy de hospedagem ficou desatualizada.` : `A pessoa já estava no ${resultado.nomeDoQuarto}.`;
+  });
+}
+
+/** "Mover para…" de quem já está num quarto: outro quarto com vaga, ou trocar de lugar com alguém de outro quarto. */
+export async function moverDeQuartoAcao(_estado: ResultadoAcao, form: FormData): Promise<ResultadoAcao> {
+  return executarAcao(form, moverDeQuartoSchema, "logistica.gerir", async (dados, ator) => {
+    if ("trocar" in dados) {
+      const troca = await trocarDeQuarto(dados.trocar, ator, new Date());
+      revalidarLogistica(troca.eventoId);
+      return `Troca feita: as duas pessoas mudaram de lugar entre o ${troca.nomeDoOutroQuarto} e o ${troca.nomeDoQuarto}. A copy de hospedagem ficou desatualizada.`;
+    }
+    const resultado = await porNoQuarto(dados.mover, ator, new Date());
+    revalidarLogistica(resultado.eventoId);
+    return resultado.mudou ? `Pessoa movida para o ${resultado.nomeDoQuarto}. A copy de hospedagem ficou desatualizada.` : `A pessoa já estava no ${resultado.nomeDoQuarto}.`;
   });
 }
 

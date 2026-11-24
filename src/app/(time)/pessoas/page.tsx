@@ -18,7 +18,7 @@ import {
 } from "@/app/(time)/_componentes/ui";
 import { CabecaDaTabela, CelulaDaTabela, ColunaDaTabela, LinhaDaTabela, RodapeDaTabela, Tabela } from "@/app/(time)/_componentes/ui/tabela";
 import { listarPessoas } from "@/fluxos/pessoas";
-import { lerFiltrosDaLista, limiteDaLista, PAGINA_DA_LISTA, rotuloDaCamiseta, rotuloDaFuncao, rotuloDoVeiculo, rotuloSimNao } from "@/modules/pessoas";
+import { lerFiltrosDaLista, limiteDaLista, PAGINA_DA_LISTA, rotuloDaFuncao, rotuloSimNao } from "@/modules/pessoas";
 
 import { ChipDoCadastro } from "./_componentes/chip-do-cadastro";
 import { enderecoDoSite } from "@/app/(time)/_servidor/endereco-do-site";
@@ -132,7 +132,6 @@ export default async function PaginaPessoas({ searchParams }: { searchParams: Pr
                 <ColunaDaTabela>Funções</ColunaDaTabela>
                 <ColunaDaTabela>Polo</ColunaDaTabela>
                 <ColunaDaTabela>Carro</ColunaDaTabela>
-                <ColunaDaTabela>Camiseta</ColunaDaTabela>
                 <ColunaDaTabela>Fez Confronto</ColunaDaTabela>
                 <ColunaDaTabela>Último evento</ColunaDaTabela>
                 <ColunaDaTabela>Cadastro</ColunaDaTabela>
@@ -162,10 +161,7 @@ export default async function PaginaPessoas({ searchParams }: { searchParams: Pr
                       </span>
                     </CelulaDaTabela>
                     <CelulaDaTabela className="whitespace-nowrap">{pessoa.poloNome ?? "—"}</CelulaDaTabela>
-                    <CelulaDaTabela className="whitespace-nowrap">{rotuloDoVeiculo(pessoa.veiculo) ?? "—"}</CelulaDaTabela>
-                    <CelulaDaTabela className="whitespace-nowrap">
-                      {rotuloDaCamiseta(pessoa.perfil.camisetaModelo, pessoa.perfil.camisetaTamanho) ?? "—"}
-                    </CelulaDaTabela>
+                    <CelulaDaTabela>{rotuloSimNao(pessoa.veiculo !== null)}</CelulaDaTabela>
                     <CelulaDaTabela>{rotuloSimNao(pessoa.perfil.fezConfronto)}</CelulaDaTabela>
                     <CelulaDaTabela className="whitespace-nowrap">
                       {pessoa.ultimoEvento ? `${formatar.dataCurta(pessoa.ultimoEvento.dataInicio)} · ${pessoa.ultimoEvento.codigo ?? pessoa.ultimoEvento.nome}` : "—"}

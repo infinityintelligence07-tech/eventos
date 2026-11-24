@@ -18,6 +18,8 @@ export type CaronasCarregadas = {
   eventos: EventoDaLogistica[];
   evento: EventoDaLogistica | null;
   caronas: (CaronaDoEvento & { livres: number })[];
+  /** Quantas pessoas (fora os motoristas) estão com o deslocamento "Carona" na escala do evento, com ou sem motorista. */
+  marcadasComoCarona: number;
   /** Deslocamento "Carona" e sem motorista. */
   semCarona: PessoaDaCarona[];
   /** Escalados com veículo que ainda não são motoristas nem passageiros. */
@@ -32,7 +34,7 @@ export async function carregarCaronas(eventoId: string | null, agora: Date): Pro
   const repo = criarRepositorioCaronas(db);
   const eventos = await pedidos.eventosDaLogistica({ desde: dataEmSaoPaulo(agora) });
   const evento = eventoId ? (eventos.find((item) => item.id === eventoId) ?? (await pedidos.eventoPorId(eventoId))) : (eventos[0] ?? null);
-  if (!evento) return { eventos, evento: null, caronas: [], semCarona: [], candidatosAMotorista: [], candidatosAPassageiro: [] };
+  if (!evento) return { eventos, evento: null, caronas: [], marcadasComoCarona: 0, semCarona: [], candidatosAMotorista: [], candidatosAPassageiro: [] };
 
   const [caronas, equipe] = await Promise.all([repo.caronasDoEvento(evento.id), repo.equipeDoEvento(evento.id)]);
   const motoristas = new Set(caronas.map((carona) => carona.motoristaPessoaId));
@@ -42,6 +44,7 @@ export async function carregarCaronas(eventoId: string | null, agora: Date): Pro
     eventos,
     evento,
     caronas: caronas.map((carona) => ({ ...carona, livres: lugaresLivres(carona.lugares ?? 0, carona.passageiros.length) })),
+    marcadasComoCarona: equipe.filter((pessoa) => pessoa.deslocamento === "CARONA" && !motoristas.has(pessoa.pessoaId)).length,
     semCarona: livres.filter((pessoa) => pessoa.deslocamento === "CARONA").sort(porDistancia),
     candidatosAMotorista: livres.filter((pessoa) => pessoa.lugaresDoVeiculo !== null && pessoa.deslocamento !== "VOO"),
     candidatosAPassageiro: livres.filter((pessoa) => pessoa.deslocamento !== "VOO").sort(porDistancia),

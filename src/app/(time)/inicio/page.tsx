@@ -24,13 +24,12 @@ const EXPLICACAO: Record<string, string> = {
   "escalas-aguardando-aprovacao": "Escalas enviadas para a líder aprovar.",
   "escalas-devolvidas": "A líder devolveu para ajustar.",
   "escalas-a-montar": "Eventos nos próximos 30 dias com a escala ainda não aprovada.",
-  "escalas-sem-resposta": "Convidadas há mais de 2 dias sem confirmar.",
   "comunicacao-desatualizadas": "Os dados mudaram depois do envio. Copie e envie de novo.",
-  "confronto-sem-fila": "Sem o número de pessoas na fila, as vagas de pai e mãe não são calculadas.",
   "eventos-sem-codigo": "Eventos sem polo cadastrado ou com código repetido no IAM Control.",
   "custos-para-auditar": "Solicitações de custo esperando aprovação do time.",
   "custos-criticos": "Solicitações com alerta crítico de consumo ou distância.",
-  "voos-a-pedir": "Eventos em menos de 90 dias com pessoas que vão de avião e ainda sem pedido à SDC.",
+  // O fluxo manda a explicação com os dias configurados em Configurações › Aviso de voos; esta é a de reserva.
+  "voos-a-pedir": "Eventos na janela do aviso com pessoas que vão de avião e ainda sem pedido à SDC.",
   "pedidos-alterados": "Pedidos mudados pelo time depois da emissão, esperando novo retorno da SDC.",
   "disponibilidade.enquetes-fechando": "Enquetes de disponibilidade perto de fechar.",
 };
@@ -121,7 +120,7 @@ export default async function PaginaInicio() {
               <CartaoDePendencia
                 key={cartao.item.chave}
                 titulo={cartao.item.titulo}
-                explicacao={EXPLICACAO[cartao.item.chave] ?? ""}
+                explicacao={cartao.item.explicacao ?? EXPLICACAO[cartao.item.chave] ?? ""}
                 quantidade={cartao.item.quantidade}
                 href={cartao.item.href}
                 textoSemPendencia="Nada pendente."

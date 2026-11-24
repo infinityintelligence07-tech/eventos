@@ -17,11 +17,14 @@ export type RepositorioConvite = {
   travarConvocacao(convocacaoId: string): Promise<StatusConvocacao | null>;
   /** Compare-and-set SUGERIDA → CONVIDADA com convidada_em. false = o status já não era SUGERIDA. */
   marcarConvidada(convocacaoId: string, instante: Date): Promise<boolean>;
+  /** Grava convidada_em de quem já está confirmada (ACEITA) e ainda não tinha sido avisada. false = já tinha a data. */
+  marcarAvisada(convocacaoId: string, instante: Date): Promise<boolean>;
   travarComunicacaoDoEvento(eventoId: string): Promise<{ statusEscala: StatusEscala; equipe: EquipeDaComunicacao } | null>;
   /** Compare-and-set APROVADA → COMUNICADA e registro_acao. false = a escala já não estava APROVADA. */
   marcarComunicada(eventoId: string, registro: { usuarioId: string; instante: Date; equipe: EquipeDaComunicacao }): Promise<boolean>;
 };
 
+/** "CONVIDADA" = esta foi a primeira copy de escalação da pessoa (ela acaba de ser avisada). */
 export async function registrarConvite(
   repo: RepositorioConvite,
   { convocacaoId, instante }: { convocacaoId: string; instante: Date },
@@ -31,7 +34,11 @@ export async function registrarConvite(
 
   const transicao = transicaoDoConvite(status);
   if ("erro" in transicao) throw new ConvocacaoInativaError(status);
-  if ("semMudanca" in transicao) return "SEM_MUDANCA";
+  if ("semMudanca" in transicao) {
+    // Quem entra na escala já entra confirmada: o status não muda, mas a primeira copy de escalação marca quando a
+    // pessoa foi avisada (é o que decide se, ao sair da escala, a convocação some ou fica como removida).
+    return status === "ACEITA" && (await repo.marcarAvisada(convocacaoId, instante)) ? "CONVIDADA" : "SEM_MUDANCA";
+  }
 
   if (!(await repo.marcarConvidada(convocacaoId, instante))) throw new EscalaMudouError("a convocação mudou antes do convite");
   return "CONVIDADA";
