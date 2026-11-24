@@ -376,8 +376,12 @@ stateDiagram-v2
 
 - `EMITIDO` exige, no serviço: voo com `localizador`, `companhia`, `numero_voo`, `partida_em` e `chegada_em` em cada
   trecho; hospedagem com `numero_reserva`. O banco garante `emitido_em` (ver §5.3).
-- Janela de compra **D-90**: função pura `janelaDeCompra(dataDoEvento, hoje)` → `FORA_DA_JANELA | NA_JANELA | ATRASADO`
-  (atrasado = menos de 60 dias, a confirmar). Alimenta Logística › Voos e o Início.
+- Janela de compra **D-90 por padrão, configurável** (24/11/2026): função pura
+  `janelaDeCompra(dataDoEvento, hoje, diasDoAviso = 90)` → `FORA_DA_JANELA | NA_JANELA | ATRASADO`. Os dias do aviso vêm
+  de `eventos.configuracao` (chave `dias_aviso_voos`, inteiro de 7 a 365; vazio ou inválido = 90) e são lidos pelo
+  **fluxo** (`src/fluxos/logistica/aviso.ts`), que os passa ao domínio por parâmetro. O "atrasado" acompanha o aviso:
+  `diasDoAtraso(diasDoAviso) = min(60, ⌊2/3 · diasDoAviso⌋)` (90 ou mais → 60; 45 → 30), para sempre sobrar um trecho
+  "na janela". `eventosComPassagensAPedir` agrupa por evento o aviso da tela. Alimenta Voos e o Início.
 - Cancelar não apaga: o pedido continua na lista da SDC e na conciliação futura da fatura.
 
 ---
@@ -659,12 +663,12 @@ Endereço, CPF e PIX ficam no `sensivel` (GH) e não aparecem nesta rodada.
 
 | | |
 |---|---|
-| Rotas | `logistica/voos` (pedidos entre eventos + "a pedir" na janela D-90; painel do pedido `?ref=SDC-…`), `logistica/hospedagem` (rooming por evento), `logistica/caronas` (onda 2), `logistica/creditos` ("em breve"), `eventos/[eventoId]/logistica` (o mesmo, filtrado) |
+| Rotas | `logistica/voos` (pedidos entre eventos + aviso de passagens a pedir na janela configurada, padrão D-90; painel do pedido `?ref=SDC-…`), `logistica/hospedagem` (rooming por evento), `logistica/caronas` (onda 2), `logistica/creditos` ("em breve"), `eventos/[eventoId]/logistica` (o mesmo, filtrado), `configuracoes/voos` (dias do aviso). No menu são dois itens, Voos (`voos`, `caronas`) e Hospedagem (`hospedagem`, `creditos`) |
 | Lê | convocações ativas com deslocamento, pedidos e trechos, hospedagens, quartos e ocupantes, locais `HOTEL`/`APARTAMENTO`, caronas |
 | Escreve | `pedido_sdc`, `trecho_voo`, `hospedagem`, `quarto`, `quarto_ocupante`, `carona`, `convocacao.carona_id`, `registro_acao` |
 | Módulo | `logistica` (novo) |
-| Fluxos | `carregarVoos(filtros, agora)`, `carregarPedido(referencia)`, `registrarPedidoDeVoo`, `alterarPedido`, `cancelarPedido`, `registrarRetornoDaSdc`, `carregarHospedagem(eventoId)`, `criarHospedagem`, `alterarHospedagem`, `registrarPedidoDeHospedagem`, `adicionarQuarto`, `removerQuarto`, `porNoQuarto`, `tirarDoQuarto`; onda 2: `sugerirRooming`, `criarCarona`, `definirCarona` |
-| Domínio | `pedido.ts` (§4.5), `janela.ts` (D-90), `rooming.ts` (sugestão por sexo, pura), `schemas.ts` |
+| Fluxos | `carregarVoos(filtros, agora)`, `carregarPedido(referencia)`, `registrarPedidoDeVoo`, `alterarPedido`, `cancelarPedido`, `registrarRetornoDaSdc`, `carregarHospedagem(eventoId)`, `criarHospedagem`, `alterarHospedagem`, `registrarPedidoDeHospedagem`, `adicionarQuarto`, `removerQuarto`, `porNoQuarto`, `trocarDeQuarto` (duas pessoas trocam de lugar em um passo), `tirarDoQuarto`, `carregarAvisoDeVoos`, `salvarAvisoDeVoos` (grava em `configuracao` pelo repositório da Comunicação, dono da tabela); onda 2: `sugerirRooming`, `criarCarona`, `definirCarona` |
+| Domínio | `pedido.ts` (§4.5), `janela.ts` (janela do aviso, padrão D-90, e atrasado), `rooming.ts` (sugestão por sexo e `podeTrocar`, puras), `schemas.ts` |
 | Repository | `pedidos-repository.ts`, `hospedagem-repository.ts`, `caronas-repository.ts` |
 
 Server actions (Zod):
@@ -793,7 +797,7 @@ type ItemDoInicio = { chave: string; titulo: string; quantidade: number; href: s
 | `escalas` (B) | escalas a montar (30 dias), aguardando aprovação, devolvidas ("sem resposta há mais de 2 dias" saiu na 0013: quem está na escala já conta como confirmado) |
 | `eventos` (B) | Confronto sem fila, eventos sem código (reaproveita `pendenciasDosEventos`) |
 | `comunicacao` (C) | copys com falta de dado, copys desatualizadas |
-| `logistica` (D) | voos a pedir na janela D-90, pedidos alterados sem novo retorno da SDC |
+| `logistica` (D) | voos a pedir na janela do aviso (padrão D-90, configurável): por evento, passagens a pedir e dias que faltam; pedidos alterados sem novo retorno da SDC |
 | `custos` (D) | solicitações para auditar (destaque para as críticas) |
 | `disponibilidade` (A) | enquetes que fecham em até 3 dias |
 
@@ -977,6 +981,7 @@ Onde a doc 08 diverge, vale o que está aqui.
 | Escala comunicada | Passa a `COMUNICADA` sozinha quando todas as copys de escalação forem marcadas como enviadas. |
 | Aprovação sem login | Registra data/hora e o usuário de teste. |
 | Motivo em custos | Obrigatório para reprovar e para aprovar com alerta crítico; opcional no resto. |
+| Item 7, janela de voo (24/11/2026) | O D-90 virou configurável em Configurações › Aviso de voos (7 a 365 dias, padrão 90). O "atrasado" deixou de ser 60 fixo: é dois terços do aviso, no máximo 60 (§4.5). O aviso é só na tela, para a líder e o time. |
 | Formulário de custo do staff (24/11/2026) | `/solicitar-custo` substitui o Google Forms: aberto do primeiro dia do evento até 5 dias depois do último (inclusive, fuso de São Paulo); fora do prazo, só o time registra. Só deslocamento e despesas (sem remuneração nem alimentação, que continuam entrando pelo registro do time). Tipo de combustível e data do evento ficam de fora; comprovante em arquivo pendente (sem armazenamento). Correção pelo staff só da reprovada, até 5 dias depois da reprovação. Detalhe na doc 08 §11.4. |
 | Custo aprovado (24/11/2026) | Mensagem pronta para copiar e mandar no WhatsApp (primeiro nome, evento, protocolo, valor). O sistema não envia. **Construção futura:** envio automático pelo WhatsApp. |
 | Pessoa nova | Sem botão "Nova pessoa" (cadastro é do GH); no local, usar as 60 pessoas semeadas. |

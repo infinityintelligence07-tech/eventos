@@ -20,7 +20,7 @@ Especificação das 8 abas que faltam no app do time de eventos, no mesmo visual
 7. Comunicação
 8. Disponibilidade
 9. Pessoas
-10. Voos e Hospedagem
+10. Voos e Hospedagem (dois itens no menu: Voos e Hospedagem)
 11. Custos
 12. Configurações
 13. Tabela de situações (rótulo, tom e ícone)
@@ -101,9 +101,10 @@ O logo passa a levar para `/inicio` quando a tela Início existir.
 | Comunicação | `/comunicacao` | — |
 | Disponibilidade | `/disponibilidade` | `/disponibilidade/nova`, `/disponibilidade/[enqueteId]` |
 | Pessoas | `/pessoas` | `/pessoas/[pessoaId]` |
-| Voos e Hospedagem | `/logistica/voos` | `/logistica/hospedagem`, `/logistica/caronas`, `/logistica/creditos` |
+| Voos | `/logistica/voos` | `/logistica/caronas` |
+| Hospedagem | `/logistica/hospedagem` | `/logistica/creditos` |
 | Custos | `/custos` | `/custos/nova`; detalhe em painel lateral com `?protocolo=STF-…` |
-| Configurações | `/configuracoes/regras-de-custo` | `/configuracoes/vagas`, `/configuracoes/modelos-de-copy`, `/configuracoes/locais` |
+| Configurações | `/configuracoes/regras-de-custo` | `/configuracoes/vagas`, `/configuracoes/modelos-de-copy`, `/configuracoes/locais`, `/configuracoes/voos` |
 | (sem item no menu) | `/eventos/[eventoId]` | `/eventos/[eventoId]/escala`, `/comunicacao`, `/logistica`, `/custos` |
 
 **Regra de ouro:** o trabalho de um evento acontece sempre em `/eventos/[eventoId]/…`. As abas do menu (Escalas,
@@ -440,7 +441,7 @@ Acrescentar `scroll-padding-bottom` no `main` com a altura da barra, para o foco
 | Confronto sem fila | (texto atual do Calendário) | código · data | Evento · Resumo, foco no campo "Pessoas na fila" |
 | Pendências da sincronização | "Eventos sem polo cadastrado ou com código repetido no IAM Control." | código ou nome da turma · motivo | Evento · Resumo |
 | Custos para auditar | "Solicitações de custo esperando aprovação do time." | protocolo · nome · chip "Crítico"/"Alerta" | Custos, com o painel aberto |
-| Voos para pedir (D-90) | "Eventos em menos de 90 dias com pessoas que vão de avião e ainda sem pedido à SDC." | código · nº de pessoas | Logística · Voos (aparece quando a fase 3 de dados existir) |
+| Voos a pedir à SDC | "Eventos em 90 dias ou menos com pessoas que vão de avião e ainda sem pedido à SDC." (os dias são os de Configurações › Aviso de voos, §12.5) | por evento na janela: código · "4 passagens a pedir" · "faltam 75 dias" (ou "atrasado · faltam 48 dias"); o contador é o total de passagens | Voos, filtrado pelo evento e por "A pedir". Aparece para a líder e para o time; é o aviso de voos, só na tela |
 
    Cartão com contador 0 continua visível, com a pílula verde "0" e o texto "Nada pendente." — mostra que está tudo em dia.
    Ordem dentro de cada cartão: o mais urgente primeiro (data do evento mais próxima; críticos antes de alertas).
@@ -854,21 +855,28 @@ A camiseta (modelo e tamanho) não aparece na lista: fica só na ficha da pessoa
 
 ## 10. Voos e Hospedagem
 
-**Objetivo:** organizar como cada pessoa chega e onde dorme: pedidos de voo à SDC (D-90), rooming list, caronas e créditos de hotel.
+**Objetivo:** organizar como cada pessoa chega e onde dorme: pedidos de voo à SDC (aviso configurável, padrão D-90), rooming list, caronas e créditos de hotel.
 A SDC ainda não tem portal: o time registra o pedido, envia pelo canal de sempre e **registra o voo emitido** quando a SDC responder.
 
 > Dados: só `carona` e `convocacao.deslocamento` existem hoje. Voos, hotéis, quartos e créditos são da fase 3 do modelo
 > (`voo_pedido`, `hotel`, `hospedagem_reserva`, `quarto`, `quarto_ocupante`, `credito_hotel`). Comece por **Caronas**.
 
-**Rotas:** `/logistica/voos` (padrão), `/logistica/hospedagem`, `/logistica/caronas`, `/logistica/creditos`. No evento:
-`/eventos/[id]/logistica` mostra as mesmas seções filtradas pelo evento, uma abaixo da outra.
+**Dois itens no menu (24/11/2026):** o item único "Voos e Hospedagem" virou **Voos** e **Hospedagem**. As rotas continuam em `/logistica`:
 
-**Cabeçalho comum:** "Voos e Hospedagem" / "Voos, hospedagem e caronas do staff." + abas **Voos (SDC) | Hospedagem | Caronas | Créditos de hotel** + seletor de evento (padrão "Próximos 90 dias").
+| Item do menu | Abre | Abas internas | Acende em |
+|---|---|---|---|
+| **Voos** ("Passagens pela SDC e caronas do staff.") | `/logistica/voos` | **Voos (SDC) \| Caronas** | `/logistica/voos`, `/logistica/caronas` e a aba Logística do evento |
+| **Hospedagem** ("Hotéis, quartos e quem divide com quem.") | `/logistica/hospedagem` | **Hotéis e quartos \| Créditos de hotel** | `/logistica/hospedagem`, `/logistica/creditos` |
+
+Caronas fica com Voos porque as duas tratam de como a pessoa chega ao evento; Créditos de hotel fica com Hospedagem.
+`/logistica` continua redirecionando para `/logistica/voos`. No evento, `/eventos/[id]/logistica` mostra as três seções
+(Voos, Hospedagem, Caronas) filtradas pelo evento, uma abaixo da outra, e acende **Voos** no menu (é a seção que abre a página).
+Títulos da aba do navegador: "Voos", "Caronas · Voos", "Hospedagem", "Créditos de hotel · Hospedagem". Seletor de evento em cada tela.
 
 ### 10.1 Voos (pedidos à SDC)
 
 **Layout:**
-1. Faixa de atenção (se houver): "7 pessoas vão de avião para eventos em menos de 90 dias e ainda não têm pedido." + "Ver quem falta".
+1. **Aviso de passagens a pedir** (faixa de atenção, só na tela, para a líder e para o time; aparece quando algum evento já entrou na janela configurada em Configurações › Aviso de voos, §12.5): título "Faltam pedir 7 passagens à SDC" e uma linha por evento, o mais próximo primeiro: "CONF_AM_60 · 12/02 — 4 passagens a pedir · faltam 75 dias" (com "· atrasado" quando passou do limite). O evento é link para a lista filtrada por ele e por "A pedir". Rodapé: "O aviso começa 90 dias antes do evento e o pedido conta como atrasado a partir de 60 dias." + link "Configurações". Na aba Logística do evento a faixa mostra só aquele evento.
 2. Atalhos: "A pedir (7) | Pedido à SDC (5) | Emitidos | Cancelados | Todos". Ação primária: **"Novo pedido"**. Pedidos da SDC atualizam ao vivo.
 3. Tabela:
 
@@ -893,12 +901,20 @@ Toast: "Voo de [Staff 07] registrado. A copy dela foi atualizada." (o voo libera
 
 ### 10.2 Hospedagem (rooming list)
 
-**Layout por evento** (seletor de evento obrigatório nesta aba):
-1. Cartão "Hotel": nome, endereço, check-in/check-out, reserva. Ação "Editar hotel". Sem hotel: estado vazio "Nenhum hotel definido para este evento." + "Definir hotel".
-2. **Sem quarto** (cartão): pessoas marcadas com "Hotel" na escala do evento (seção 6.2) que ainda não têm quarto; cada uma com o seletor "Colocar no quarto…". Só quem está marcado entra em quarto e na distribuição por sexo. Ninguém marcado: "Ninguém marcado para hotel. Marque na escala do evento quem vai hospedar." Quem já está num quarto continua aparecendo no quarto.
-3. **Quartos** (grade de cartões `md:grid-cols-2 xl:grid-cols-3`): "Quarto 1 · duplo · 2 de 2"; lista de ocupantes com "Mover para…" e "Tirar do quarto". Aviso de atenção no cartão quando misturar sexos: "Quarto com pessoas de sexos diferentes." "+ Novo quarto" no fim.
-4. Ação no cabeçalho da seção: secundário "Copiar rooming list" (texto pronto para o hotel: quarto, nomes, check-in/out).
+A tela parte de quem o time marcou com "Hotel" na escala do evento (seção 6.2) e serve para dizer **quem fica com quem**.
 
+**Layout por evento** (seletor de evento obrigatório nesta aba), de cima para baixo:
+1. **Faixa da escala** (sempre): "8 pessoas marcadas para hotel na escala de CONF_AM_60" + "5 com quarto e 3 sem quarto. Coloque cada pessoa num quarto para definir quem divide com quem." Tom de atenção enquanto houver gente sem quarto, sucesso quando todo mundo tem ("Todo mundo tem quarto. Em cada quarto abaixo dá para ver quem divide com quem.") e informação quando ninguém foi marcado ("Só entra em quarto quem está marcado com Hotel na escala do evento…"). Link **"Abrir a escala"** ("Marcar na escala" quando ninguém foi marcado). Se há gente ativa na escala sem a marca: "4 pessoas da escala não estão marcadas para hotel. Se falta alguém aqui, marque Hotel na escala."
+2. **Sem quarto · N** (cartão, logo abaixo da faixa, antes dos hotéis; só aparece quando há alguém sem quarto, mesmo antes de existir hotel): cada pessoa com função e sexo e o seletor "Colocar no quarto…". A opção do quarto diz quem já está nele: "Quarto 2 · 1 de 2 · Feminino · com Bia" (ou "· vazio"). Ação "Distribuir por sexo (N)". Sem quarto criado: "Defina o hotel e crie os quartos logo abaixo para começar a distribuir."
+3. Cartão "Hotel": nome, endereço, check-in/check-out, reserva. Ação "Editar hotel". Sem hotel: estado vazio "Nenhum hotel definido para este evento." + "Definir hotel".
+4. **Quartos** (grade de cartões `md:grid-cols-2 xl:grid-cols-3`): "Quarto 1 · duplo · 2 de 2" e, na linha de baixo, "Feminino · 2 pessoas dividem o quarto"; lista de ocupantes com "Período", **"Mover para…"** e "Tirar". Aviso de atenção no cartão quando misturar sexos: "Quarto com pessoas de sexos diferentes." "+ Novo quarto" no fim.
+5. Ação no cartão do hotel: secundário "Copiar rooming list" (texto pronto para o hotel: quarto, nomes, check-in/out).
+
+**"Mover para…" em um passo** (seletor de quem já está num quarto), com dois grupos:
+- **Outro quarto:** os quartos com vaga (os cheios aparecem desabilitados, "(cheio)").
+- **Trocar de lugar com:** cada pessoa dos outros quartos, "Dani Lima (Quarto 2)". As duas trocam de quarto de uma vez, mesmo com os dois quartos cheios, sem passar por "Sem quarto". Vale a regra de sempre (sexo do quarto, escala ativa, marcada para hotel); recusada, nada muda. Toast: "Troca feita: as duas pessoas mudaram de lugar entre o Quarto 1 e o Quarto 2. A copy de hospedagem ficou desatualizada."
+
+Só quem está marcado entra em quarto e na distribuição por sexo. Quem já está num quarto continua aparecendo no quarto.
 Arrastar entre quartos é opcional; o seletor "Mover para…" é obrigatório (WCAG 2.5.7). Mudança de quarto deixa a copy de hospedagem desatualizada.
 
 ### 10.3 Caronas
@@ -1069,7 +1085,7 @@ mostra o endereço do formulário do sistema para copiar e salvar em `link_custo
 
 **Objetivo:** editar o que muda as contas do sistema sem mexer no código: regras de custo, regras de vagas, modelos de copy, locais e hotéis.
 
-**Rotas e abas:** **Regras de custo | Vagas por tipo de evento | Modelos de copy | Locais e hotéis**.
+**Rotas e abas:** **Regras de custo | Vagas por tipo de evento | Modelos de copy | Locais e hotéis | Aviso de voos | Acesso do time**.
 Cabeçalho: "Configurações" / "Valores e modelos usados pelo sistema. Mudanças valem dali em diante." Sem permissão (quando houver login): `SemPermissao`.
 
 ### 12.1 Regras de custo
@@ -1104,6 +1120,14 @@ Cabeçalho: "Configurações" / "Valores e modelos usados pelo sistema. Mudança
 - Primário "Novo local" → painel: Nome, Tipo, CEP (preenche o endereço), Logradouro, Número, Complemento, Bairro, Cidade, UF, Capacidade.
   Ao salvar: "Local salvo. Localização encontrada no mapa." ou faixa de atenção "Não encontramos este endereço no mapa. Confira o CEP e o número; sem isso, a distância até o evento não é calculada."
 - Remover local em uso: bloqueado com o motivo "Este local está em 3 eventos."
+
+### 12.5 Aviso de voos (`/configuracoes/voos`)
+
+- Um cartão, "Aviso de passagens a pedir": campo **"Avisar quantos dias antes do evento"** (inteiro de 7 a 365; padrão **90**, os 3 meses) + "Salvar aviso". Só a líder edita (`config.aviso_de_voos`); o time vê o valor em vigor e o motivo "Só a líder pode mudar o aviso de voos." (a aba aparece com "só leitura").
+- Abaixo do campo, o que o valor significa: "Em vigor: 90 dias antes do evento (o padrão: 3 meses)", "Na janela: entre 90 e 61 dias antes do evento", "Atrasado: com 60 dias ou menos".
+- **Atrasado acompanha o aviso:** dois terços dos dias do aviso, no máximo 60 (aviso de 90 ou mais → 60; de 45 → 30; de 30 → 20). Assim sempre existe um trecho "na janela" antes do "atrasado", qualquer que seja o valor.
+- O aviso é só na tela (Início e topo de Voos, §4 e §10.1), para a líder e para o time; não manda e-mail nem WhatsApp. Mudar o prazo vale dali em diante e fica no histórico (`registro_acao`, `CONFIGURACAO_ALTERADA`).
+- Toast: "Aviso de voos salvo: começa 120 dias antes do evento e o pedido conta como atrasado a partir de 60 dias." Erros no campo: "Use um número inteiro de dias, sem vírgula." / "Use de 7 a 365 dias."
 
 **Estados (Configurações):** carregando e erro padrão; vazio por aba ("Nenhum modelo de copy." + "Novo modelo"; "Nenhum local cadastrado." + "Novo local").
 
