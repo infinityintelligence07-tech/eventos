@@ -30,7 +30,7 @@ const maiuscula = (texto: string) => texto.charAt(0).toLocaleUpperCase("pt-BR") 
 function Previa({ previa }: { previa: PreviaNaTela }) {
   const rotulo = (variavel: string) => previa.faltando.find((falta) => falta.variavel === variavel)?.rotulo ?? variavel;
   return (
-    <div className="whitespace-pre-wrap rounded-[var(--ds-radius-md)] bg-[var(--ds-surface-1)] p-4 text-[14px] leading-[1.5]">
+    <div className="sem-caixa-alta whitespace-pre-wrap rounded-[var(--ds-radius-md)] bg-[var(--ds-surface-1)] p-4 text-[14px] leading-[1.5]">
       {previa.partes.map((parte, indice) =>
         parte.tipo === "texto" ? (
           <span key={indice}>{parte.texto}</span>

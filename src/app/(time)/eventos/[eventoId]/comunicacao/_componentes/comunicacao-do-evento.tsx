@@ -270,7 +270,7 @@ export function ComunicacaoDoEvento({
         <div
           ref={textoRef}
           aria-label={`Copy de ${selecionada.nome}`}
-          className="whitespace-pre-wrap rounded-[var(--ds-radius-md)] bg-[var(--ds-surface-1)] p-4 text-[14px] leading-[1.5]"
+          className="sem-caixa-alta whitespace-pre-wrap rounded-[var(--ds-radius-md)] bg-[var(--ds-surface-1)] p-4 text-[14px] leading-[1.5]"
         >
           {selecionada.partes.map((parte, indice) =>
             parte.tipo === "texto" ? (
