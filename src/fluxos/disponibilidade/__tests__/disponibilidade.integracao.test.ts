@@ -128,6 +128,9 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da Disponibilidade no banco", () => 
     ]);
 
     const carregada = (await carregarEnquete(enqueteId, {}, agora))!;
+    // Pai / mãe é cargo do evento, não função da pessoa: não entra no filtro por função.
+    expect(carregada.opcoes.funcoes.map((funcao) => funcao.codigo)).not.toContain("PAI_MAE");
+    expect(carregada.opcoes.funcoes.map((funcao) => funcao.codigo)).toContain("STAFF");
     expect(carregada.responderam).toBe(1);
     expect(carregada.totalDeStaff).toBe(2);
     expect(carregada.linhas.map((linha) => [linha.pessoa.nome, linha.pessoa.poloCodigo, linha.respostas[confronto], linha.registradoPeloTimeEm !== null])).toEqual([

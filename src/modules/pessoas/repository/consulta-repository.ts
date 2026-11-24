@@ -91,7 +91,8 @@ export function criarConsultaPessoas(executor: Executor): ConsultaPessoas {
     const linhas = await executor
       .select({ pessoaId: pessoaFuncao.pessoaId, funcaoId: funcao.id, codigo: funcao.codigo, nome: funcao.nome, nivel: pessoaFuncao.nivel })
       .from(pessoaFuncao)
-      .innerJoin(funcao, eq(funcao.id, pessoaFuncao.funcaoId))
+      // Cargo do evento (Pai / mãe) não é habilitação da pessoa: fica só na escala.
+      .innerJoin(funcao, and(eq(funcao.id, pessoaFuncao.funcaoId), eq(funcao.cargoDoEvento, false)))
       .where(pessoaIds ? inArray(pessoaFuncao.pessoaId, pessoaIds) : undefined)
       .orderBy(asc(funcao.nome));
     const porPessoa = new Map<string, FuncaoDaPessoa[]>();
@@ -213,7 +214,12 @@ export function criarConsultaPessoas(executor: Executor): ConsultaPessoas {
     async opcoes() {
       const [polos, funcoes] = await Promise.all([
         executor.select({ codigo: polo.codigo, nome: polo.nome }).from(polo).where(and(eq(polo.ativo, true), isNull(polo.deletedAt))).orderBy(asc(polo.nome)),
-        executor.select({ id: funcao.id, codigo: funcao.codigo, nome: funcao.nome }).from(funcao).where(eq(funcao.ativo, true)).orderBy(asc(funcao.nome)),
+        // Funções que uma pessoa pode ter (filtro da lista e edição da ficha): sem os cargos do evento.
+        executor
+          .select({ id: funcao.id, codigo: funcao.codigo, nome: funcao.nome })
+          .from(funcao)
+          .where(and(eq(funcao.ativo, true), eq(funcao.cargoDoEvento, false)))
+          .orderBy(asc(funcao.nome)),
       ]);
       return { polos, funcoes };
     },
