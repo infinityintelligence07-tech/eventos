@@ -2,12 +2,13 @@ import { exigeMotivo, mensagemDaTransicaoInvalida, type AcaoDeAuditoria, type Ca
 import { calcularSolicitacao, type DeslocamentoCalculado, type NivelDeExcecao, type SolicitacaoCalculada } from "../domain/calculo";
 import { CustosMudouError, ErroDosCustos, SolicitacaoJaExisteError } from "../domain/erros";
 import { DIAS_DE_PRAZO_DO_FORMULARIO, type PeriodoDoEvento, podeCorrigirNoPrazo, prazoDoFormulario, situacaoDoPrazo } from "../domain/prazo";
-import { type ItemFixo, itensFixosDasRegras, type RegraDeCusto, regrasAplicaveis, regrasDoCalculo } from "../domain/regras";
+import { type ItemFixo, itensFixosDasRegras, precoDoLitroDoStaff, type RegraDeCusto, regrasAplicaveis, regrasDoCalculo } from "../domain/regras";
 import type {
   AprovarSolicitacao,
   CorrigirMeuCusto,
   CorrigirSolicitacao,
   EntradaDeDeslocamento,
+  EntradaDeDeslocamentoDoStaff,
   EntradaDeDespesa,
   EntradaDeItem,
   ReabrirAuditoria,
@@ -290,6 +291,20 @@ export async function itensFixosDoEvento(repo: Pick<RepositorioSolicitacoes, "re
 }
 
 /**
+ * Deslocamentos do formulário do staff com o preço do litro posto pelo servidor: a pessoa não escolhe. Vale a regra
+ * de combustível do evento (tipo, UF e data) ou, sem regra, o padrão.
+ */
+export async function deslocamentosDoStaff(
+  repo: Pick<RepositorioSolicitacoes, "regras">,
+  evento: EventoDoCusto,
+  deslocamentos: EntradaDeDeslocamentoDoStaff[],
+): Promise<EntradaDeDeslocamento[]> {
+  if (deslocamentos.length === 0) return [];
+  const precoLitroCentavos = precoDoLitroDoStaff(regrasAplicaveis(await repo.regras(), { tipoEventoId: evento.tipoEventoId, uf: evento.uf, data: evento.data }));
+  return deslocamentos.map((deslocamento) => ({ ...deslocamento, precoLitroCentavos }));
+}
+
+/**
  * A própria pessoa envia a solicitação do evento em que está na escala, dentro do prazo. É o mesmo registro do
  * time (validação, cálculo e protocolo), sem `registrado_por`. Ela informa só deslocamento e despesas; a remuneração
  * e a alimentação fixas do evento entram como no registro do time. Sem deslocamento nem despesa, a solicitação leva
@@ -302,7 +317,7 @@ export async function solicitarCusto(repo: RepositorioSolicitacoes, entrada: Sol
   if (!temGasto && fixos.length === 0) throw new ErroDosCustos(MENSAGEM_SEM_LINHA_DO_STAFF);
   return registrarSolicitacao(
     repo,
-    { eventoId: entrada.eventoId, pessoaId: contexto.pessoaId, deslocamentos: entrada.deslocamentos, itens: [...fixos, ...itensDasDespesas(entrada.despesas)] },
+    { eventoId: entrada.eventoId, pessoaId: contexto.pessoaId, deslocamentos: await deslocamentosDoStaff(repo, evento, entrada.deslocamentos), itens: [...fixos, ...itensDasDespesas(entrada.despesas)] },
     { ...contexto, propria: true, comprovanteObrigatorio: Boolean(contexto.comprovanteObrigatorio) && temGasto },
   );
 }
@@ -329,7 +344,7 @@ export async function corrigirMeuCusto(repo: RepositorioSolicitacoes, entrada: C
   return aplicarCorrecao(
     repo,
     solicitacao,
-    { deslocamentos: entrada.deslocamentos, itens: [...doTime, ...itensDasDespesas(entrada.despesas)] },
+    { deslocamentos: await deslocamentosDoStaff(repo, evento, entrada.deslocamentos), itens: [...doTime, ...itensDasDespesas(entrada.despesas)] },
     entrada.atualizadoEm,
     { ...contexto, propria: true },
   );

@@ -9,7 +9,7 @@ import { type ComprovanteDoFormulario, Comprovantes, type LimitesDoAnexo } from 
 // Formulário de custo do próprio staff (docs/08 §11.4), pensado para o celular. O resumo vem do servidor (o mesmo
 // cálculo do envio); o total gravado é sempre recalculado lá.
 
-export type DeslocamentoDoFormulario = { origem: string; destino: string; idaVolta: boolean; km: string; consumoKmL: string; precoLitroCentavos: string; pedagioCentavos: string };
+export type DeslocamentoDoFormulario = { origem: string; destino: string; idaVolta: boolean; km: string; consumoKmL: string; pedagioCentavos: string };
 export type DespesaDoFormulario = { descricao: string; valorCentavos: string };
 /** Valor que a pessoa vê e não edita: fixo do evento (pela regra de custo) ou lançado pelo time. */
 export type FixoDoFormulario = { descricao: string; totalCentavos: number; origem: "REGRA" | "TIME"; observacao: string | null };
@@ -40,6 +40,7 @@ export function FormularioDeCusto({
   deslocamentosIniciais,
   despesasIniciais,
   deslocamentoNovo,
+  precoDoLitro,
   fixos,
   anexo,
   cancelarHref,
@@ -51,8 +52,10 @@ export function FormularioDeCusto({
   correcao: { atualizadoEm: string } | null;
   deslocamentosIniciais: DeslocamentoDoFormulario[];
   despesasIniciais: DespesaDoFormulario[];
-  /** Linha em branco, já com o consumo do cadastro e o preço do litro da regra. */
+  /** Linha em branco, já com o consumo do cadastro. */
   deslocamentoNovo: DeslocamentoDoFormulario;
+  /** Preço do litro que o servidor usa, já formatado ("R$ 6,50"): a pessoa vê, não escolhe. */
+  precoDoLitro: string;
   /** Remuneração e alimentação fixas do evento e itens do time: entram sozinhos na solicitação e no total mostrado. */
   fixos: FixoDoFormulario[];
   /** Nulo = anexo desligado neste ambiente: o formulário funciona sem o campo. */
@@ -79,12 +82,11 @@ export function FormularioDeCusto({
         setPrevia(
           await calcularPrevia({
             eventoId,
-            deslocamentos: deslocamentos.map(({ origem, destino, km, consumoKmL, precoLitroCentavos, pedagioCentavos, idaVolta }) => ({
+            deslocamentos: deslocamentos.map(({ origem, destino, km, consumoKmL, pedagioCentavos, idaVolta }) => ({
               origem,
               destino,
               km,
               consumoKmL,
-              precoLitroCentavos,
               pedagioCentavos: pedagioCentavos || undefined,
               idaVolta: idaVolta ? "on" : undefined,
             })),
@@ -150,17 +152,11 @@ export function FormularioDeCusto({
               </label>
             </div>
             <div className="cadastro-duas-colunas">
-              <label className="login-campo">
-                <span>Preço do litro (R$)</span>
-                <input
-                  name={nome("precoLitroCentavos")}
-                  inputMode="decimal"
-                  placeholder="ex.: 6,19"
-                  value={linha.precoLitroCentavos}
-                  onChange={(evento) => mudarDeslocamento(linha.chave, { precoLitroCentavos: evento.target.value })}
-                />
-                <Erro erros={erros} campo={caminho("precoLitroCentavos")} />
-              </label>
+              <p className="login-campo">
+                <span>Preço do litro</span>
+                <span className="custo-valor-fixo">{precoDoLitro}</span>
+                <small>Valor padrão; você não precisa informar.</small>
+              </p>
               <label className="login-campo">
                 <span>Pedágio de um sentido (R$)</span>
                 <input

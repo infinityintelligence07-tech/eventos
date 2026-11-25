@@ -1076,8 +1076,7 @@ login e que o usuário seja staff, sem perfil do Eventos. Visual do login (`Mold
 
 **Campos (o que o sistema não sabe):**
 1. "Você foi com o seu carro?" Sim / Não.
-2. **Deslocamento de carro** (repetível, até 10): de onde saiu, para onde foi, km de um sentido, consumo (vem do Meu cadastro),
-   preço do litro (vem da regra da UF, se houver), pedágio de um sentido, "Ida e volta". Combustível, depreciação e total são
+2. **Deslocamento de carro** (repetível, até 10): de onde saiu, para onde foi, km de um sentido, consumo (vem do Meu cadastro), pedágio de um sentido, "Ida e volta". Combustível, depreciação e total são
    calculados pelo servidor e mostrados ao vivo.
 3. **Outras despesas do deslocamento** (repetível, até 10): o que foi + valor (estacionamento, ônibus, aplicativo). Entram como itens "Outro".
 4. **Comprovantes** (só com o anexo ligado): botão "Anexar comprovante" (foto ou PDF; no celular abre câmera, galeria ou arquivos).
@@ -1103,7 +1102,7 @@ Se o evento também não tiver valor fixo, não há o que enviar ("Informe pelo 
 | Qual seu nome | Não existe: é a pessoa da sessão. |
 | Qual evento | Lista dos eventos da pessoa com o prazo aberto (ou o link direto). |
 | Consumo médio do veículo | Campo do deslocamento, já preenchido com o consumo do Meu cadastro. |
-| Valor do litro e tipo do combustível | Preço do litro: campo do deslocamento. **Tipo do combustível: fora** (não entra no cálculo e o modelo não tem onde guardar). |
+| Valor do litro e tipo do combustível | Preço do litro: **a pessoa não informa** (desde 25/11/2026). O servidor usa a regra de combustível da UF, se a líder cadastrou uma; senão, o padrão de R$ 6,50. O formulário mostra o valor só como informação. **Tipo do combustível: fora** (não entra no cálculo e o modelo não tem onde guardar). |
 | Data do último dia ou da Masterclass | Fora: o sistema já sabe as datas do evento. |
 | Valor do custo do seu deslocamento | Não se digita: o sistema calcula (combustível, pedágio e depreciação pelas regras) e soma as despesas. |
 | Descrição do lançamento | A descrição de cada despesa; combustível e pedágio saem do deslocamento. |

@@ -23,7 +23,6 @@ describe("campos do formulário de custo do staff", () => {
         ["deslocamentos[0].destino", "Porto Alegre"],
         ["deslocamentos[0].km", "20,5"],
         ["deslocamentos[0].consumoKmL", "11"],
-        ["deslocamentos[0].precoLitroCentavos", "6,19"],
         ["deslocamentos[0].pedagioCentavos", ""],
         ["deslocamentos[0].idaVolta", "on"],
         ["despesas[0].descricao", "Estacionamento"],
@@ -35,7 +34,7 @@ describe("campos do formulário de custo do staff", () => {
       ok: true,
       dados: {
         eventoId,
-        deslocamentos: [{ origem: "Canoas", destino: "Porto Alegre", idaVolta: true, km: 20.5, consumoKmL: 11, precoLitroCentavos: 619, pedagioCentavos: 0 }],
+        deslocamentos: [{ origem: "Canoas", destino: "Porto Alegre", idaVolta: true, km: 20.5, consumoKmL: 11, pedagioCentavos: 0 }],
         despesas: [{ descricao: "Estacionamento", valorCentavos: 2500 }],
       },
     });
@@ -52,7 +51,6 @@ describe("campos do formulário de custo do staff", () => {
         ["deslocamentos[0].destino", "Porto Alegre"],
         ["deslocamentos[0].km", "20"],
         ["deslocamentos[0].consumoKmL", "11"],
-        ["deslocamentos[0].precoLitroCentavos", "6"],
       ]),
       solicitarCustoSchema,
     );
@@ -66,7 +64,6 @@ describe("campos do formulário de custo do staff", () => {
         ["deslocamentos[0].origem", "Canoas"],
         ["deslocamentos[0].km", "vinte"],
         ["deslocamentos[0].consumoKmL", "0"],
-        ["deslocamentos[0].precoLitroCentavos", "6,19"],
         ["despesas[0].descricao", "Estacionamento"],
       ]),
       solicitarCustoSchema,

@@ -35,7 +35,7 @@ function Pagina({ titulo, children }: { titulo: string; children: ReactNode }) {
 }
 
 function deslocamentoNovo(sugestoes: SugestoesDoStaff): DeslocamentoDoFormulario {
-  return { origem: "", destino: "", idaVolta: true, km: "", consumoKmL: decimal(sugestoes.consumoKmL), precoLitroCentavos: campoDeDinheiro(sugestoes.precoLitroCentavos), pedagioCentavos: "" };
+  return { origem: "", destino: "", idaVolta: true, km: "", consumoKmL: decimal(sugestoes.consumoKmL), pedagioCentavos: "" };
 }
 
 const enderecoDosComprovantes = (eventoId: string) => `${caminhoDoFormularioDeCusto(eventoId)}/comprovantes`;
@@ -177,6 +177,7 @@ export default async function PaginaSolicitarCustoDoEvento({
             deslocamentosIniciais={[deslocamentoNovo(carregado.sugestoes)]}
             despesasIniciais={[]}
             deslocamentoNovo={deslocamentoNovo(carregado.sugestoes)}
+            precoDoLitro={dinheiro(carregado.sugestoes.precoLitroCentavos)}
             fixos={carregado.fixos}
             anexo={carregado.anexo ? anexoDoFormulario(carregado.evento.id, carregado.anexo.comprovantes) : null}
           />
@@ -204,12 +205,12 @@ export default async function PaginaSolicitarCustoDoEvento({
                 idaVolta: linha.idaVolta,
                 km: decimal(linha.km),
                 consumoKmL: decimal(linha.consumoKmL),
-                precoLitroCentavos: campoDeDinheiro(linha.precoLitroCentavos),
                 // O banco guarda o pedágio já somado; o campo pede o de um sentido.
                 pedagioCentavos: linha.pedagioCentavos === 0 ? "" : campoDeDinheiro(linha.idaVolta ? linha.pedagioCentavos / 2 : linha.pedagioCentavos),
               }))}
               despesasIniciais={solicitacao.despesas.map((despesa) => ({ descricao: despesa.descricao, valorCentavos: campoDeDinheiro(despesa.valorCentavos) }))}
               deslocamentoNovo={deslocamentoNovo(sugestoes)}
+              precoDoLitro={dinheiro(sugestoes.precoLitroCentavos)}
               fixos={solicitacao.itensFixos}
               anexo={anexoLigado ? anexoDoFormulario(evento.id, solicitacao.comprovantes) : null}
               cancelarHref={aqui}

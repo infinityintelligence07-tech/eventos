@@ -84,7 +84,9 @@ describe.skipIf(!TEST_DATABASE_URL)("formulário de custo do staff no banco", ()
     return { id, escalaId: escala };
   }
 
-  const deslocamento = { origem: "Canoas", destino: "Manaus", idaVolta: true, km: 60, consumoKmL: 12, precoLitroCentavos: 600, pedagioCentavos: 1000 };
+  const deslocamento = { origem: "Canoas", destino: "Manaus", idaVolta: true, km: 60, consumoKmL: 12, pedagioCentavos: 1000 };
+  // O time informa o preço do litro; o staff não: no envio dele o servidor usa o padrão de R$ 6,50 (não há regra de combustível aqui).
+  const deslocamentoDoTime = { ...deslocamento, precoLitroCentavos: 600 };
   const estacionamento = { descricao: "Estacionamento", valorCentavos: 2500 };
   const envio = (mudanca: Record<string, unknown> = {}) => ({ eventoId, deslocamentos: [deslocamento], despesas: [estacionamento], ...mudanca });
   const solicitacaoNoBanco = (id: string) => um(`select status_auditoria, registrado_por, total_centavos from eventos.solicitacao_custo where id = $1`, [id]);
@@ -120,8 +122,8 @@ describe.skipIf(!TEST_DATABASE_URL)("formulário de custo do staff no banco", ()
       { id: eventoId, codigo: "ASM_AM_902", nome: "ASM_AM_902", dataInicio: "2026-12-15", dataFim: "2026-12-17", fechaEm: "2026-12-22", solicitacao: null },
     ]);
 
-    // 120 km ÷ 12 × 6,00 = 60,00; pedágio 10,00 × 2; faixa de 100 a 249 km = 80,00; estacionamento 25,00.
-    const doStaff = 6000 + 2000 + 8000 + 2500;
+    // 120 km ÷ 12 × 6,50 (preço padrão do litro; a pessoa não informa) = 65,00; pedágio 10,00 × 2; faixa de 100 a 249 km = 80,00; estacionamento 25,00.
+    const doStaff = 6500 + 2000 + 8000 + 2500;
     // Remuneração (600,00) e alimentação (270,00) do ASM são fixas pela regra: entram sozinhas, sem a pessoa pedir.
     const esperado = doStaff + 60000 + 27000;
     expect(aberto).toMatchObject({
@@ -191,7 +193,7 @@ describe.skipIf(!TEST_DATABASE_URL)("formulário de custo do staff no banco", ()
     expect(await um(`select count(*)::int as n from eventos.solicitacao_custo where pessoa_id = any($1)`, [[cedo.pessoaId, atrasada.pessoaId]])).toEqual({ n: 0 });
 
     // Fora do prazo, o registro em nome da pessoa pelo time continua funcionando.
-    const peloTime = await registrarSolicitacao({ eventoId, pessoaId: atrasada.pessoaId, deslocamentos: [deslocamento], itens: [] }, doTime(), DEPOIS_DO_PRAZO);
+    const peloTime = await registrarSolicitacao({ eventoId, pessoaId: atrasada.pessoaId, deslocamentos: [deslocamentoDoTime], itens: [] }, doTime(), DEPOIS_DO_PRAZO);
     expect(await solicitacaoNoBanco(peloTime.id)).toMatchObject({ status_auditoria: "PENDENTE", registrado_por: timeId });
   });
 
@@ -283,10 +285,10 @@ describe.skipIf(!TEST_DATABASE_URL)("formulário de custo do staff no banco", ()
     const segunda = solicitarCusto(envio({ despesas: [] }), bia.ator, DURANTE_O_PRAZO);
     await expect(segunda).rejects.toBeInstanceOf(RegraDeNegocioError);
     await expect(segunda).rejects.toThrow(`Já existe a solicitação ${primeira.protocolo} em seu nome para este evento.`);
-    await expect(registrarSolicitacao({ eventoId, pessoaId: bia.pessoaId, deslocamentos: [deslocamento], itens: [] }, doTime(), DURANTE_O_PRAZO)).rejects.toThrow(primeira.protocolo);
+    await expect(registrarSolicitacao({ eventoId, pessoaId: bia.pessoaId, deslocamentos: [deslocamentoDoTime], itens: [] }, doTime(), DURANTE_O_PRAZO)).rejects.toThrow(primeira.protocolo);
 
     const caio = await staff("Caio Pelo Time");
-    const peloTime = await registrarSolicitacao({ eventoId, pessoaId: caio.pessoaId, deslocamentos: [deslocamento], itens: [] }, doTime(), DURANTE_O_PRAZO);
+    const peloTime = await registrarSolicitacao({ eventoId, pessoaId: caio.pessoaId, deslocamentos: [deslocamentoDoTime], itens: [] }, doTime(), DURANTE_O_PRAZO);
     await expect(solicitarCusto(envio(), caio.ator, DURANTE_O_PRAZO)).rejects.toThrow(peloTime.protocolo);
     expect(await carregarFormularioDoStaff(eventoId, caio.pessoaId, DURANTE_O_PRAZO)).toMatchObject({ situacao: "ENVIADA", solicitacao: { protocolo: peloTime.protocolo, registradaPeloTime: true } });
 
@@ -336,7 +338,7 @@ describe.skipIf(!TEST_DATABASE_URL)("formulário de custo do staff no banco", ()
       {
         eventoId,
         pessoaId: edu.pessoaId,
-        deslocamentos: [deslocamento],
+        deslocamentos: [deslocamentoDoTime],
         itens: [
           { categoria: "REMUNERACAO", descricao: "Remuneração", quantidade: 1, valorCentavos: 60000 },
           { categoria: "OUTRO", descricao: "Estacionamento", quantidade: 2, valorCentavos: 2500 },
@@ -361,7 +363,7 @@ describe.skipIf(!TEST_DATABASE_URL)("formulário de custo do staff no banco", ()
       { categoria: "REMUNERACAO", valor_centavos: 60000 },
     ]);
     // A última versão é da própria pessoa: sai o selo; quem registrou antes continua sem poder auditar (SoD-2).
-    expect(await solicitacaoNoBanco(id)).toEqual({ status_auditoria: "PENDENTE", registrado_por: null, total_centavos: 6000 + 2000 + 8000 + 60000 + 2500 });
+    expect(await solicitacaoNoBanco(id)).toEqual({ status_auditoria: "PENDENTE", registrado_por: null, total_centavos: 6500 + 2000 + 8000 + 60000 + 2500 });
     await expect(aprovarSolicitacao({ solicitacaoId: id, atualizadoEm: await versao() }, doTime(), DURANTE_O_PRAZO)).rejects.toThrow(/Quem registrou ou corrigiu/);
     // E ninguém audita o próprio custo (SoD-3), mesmo tendo enviado pelo formulário.
     await expect(aprovarSolicitacao({ solicitacaoId: id, atualizadoEm: await versao() }, { ...edu.ator, email: null }, DURANTE_O_PRAZO)).rejects.toThrow(/próprio custo/);
