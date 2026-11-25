@@ -42,6 +42,7 @@ export function BotaoNovoMotorista({
             nome="motoristaConvocacaoId"
             rotulo="Motorista"
             obrigatorio
+            busca
             opcoes={candidatos}
             ajuda="Só aparecem pessoas escaladas neste evento com veículo no cadastro."
             erros={erros("motoristaConvocacaoId")}

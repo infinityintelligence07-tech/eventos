@@ -88,8 +88,9 @@ export function PainelDeResposta({
           nome="pessoaId"
           rotulo="Pessoa"
           obrigatorio
-          value={pessoaId}
-          onChange={(evento) => trocarPessoa(evento.target.value)}
+          busca
+          valor={pessoaId}
+          aoMudar={trocarPessoa}
           vazio="Escolha a pessoa"
           opcoes={pessoas.map((item) => ({ valor: item.pessoaId, rotulo: item.funcoes ? `${item.nome} — ${item.funcoes}` : item.nome }))}
           erros={errosDaPessoa}

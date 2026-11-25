@@ -189,7 +189,7 @@ export function FormularioDeVeiculo({
     <Cartao id="veiculo" titulo="Veículo">
       <form onSubmit={aoEnviar} aria-labelledby="veiculo-titulo" className="flex flex-col gap-3">
         <input type="hidden" name="pessoaId" value={pessoaId} />
-        <CampoDeSelecao nome="temCarro" rotulo="Tem carro" value={temCarro} onChange={(evento) => setTemCarro(evento.target.value)} opcoes={SIM_NAO} erros={campos?.temCarro} />
+        <CampoDeSelecao nome="temCarro" rotulo="Tem carro" valor={temCarro} aoMudar={setTemCarro} opcoes={SIM_NAO} erros={campos?.temCarro} />
         {temCarro === "SIM" && (
           <>
             <CampoDeTexto
@@ -248,17 +248,17 @@ export function FormularioDePerfil({
           rotulo="Sexo"
           vazio="Não informado"
           opcoes={opcoes.sexos}
-          defaultValue={perfil.sexo ?? ""}
+          valorInicial={perfil.sexo ?? ""}
           ajuda="Usado nos quartos de hotel e nas copys."
           erros={campos?.sexo}
         />
         <div className="grid grid-cols-2 gap-3">
-          <CampoDeSelecao nome="camisetaModelo" rotulo="Modelo" vazio="—" opcoes={opcoes.modelos} defaultValue={perfil.camisetaModelo ?? ""} erros={campos?.camisetaModelo} />
-          <CampoDeSelecao nome="camisetaTamanho" rotulo="Tamanho" vazio="—" opcoes={opcoes.tamanhos} defaultValue={perfil.camisetaTamanho ?? ""} erros={campos?.camisetaTamanho} />
+          <CampoDeSelecao nome="camisetaModelo" rotulo="Modelo" vazio="—" opcoes={opcoes.modelos} valorInicial={perfil.camisetaModelo ?? ""} erros={campos?.camisetaModelo} />
+          <CampoDeSelecao nome="camisetaTamanho" rotulo="Tamanho" vazio="—" opcoes={opcoes.tamanhos} valorInicial={perfil.camisetaTamanho ?? ""} erros={campos?.camisetaTamanho} />
         </div>
-        <CampoDeSelecao nome="possuiCamiseta" rotulo="Já tem a camiseta do staff" vazio="—" opcoes={SIM_NAO} defaultValue={simNao(perfil.possuiCamiseta)} />
-        <CampoDeSelecao nome="fezConfronto" rotulo="Fez o Confronto" vazio="—" opcoes={SIM_NAO} defaultValue={simNao(perfil.fezConfronto)} />
-        <CampoDeSelecao nome="temCnpj" rotulo="Tem CNPJ" vazio="—" opcoes={SIM_NAO} defaultValue={simNao(perfil.temCnpj)} />
+        <CampoDeSelecao nome="possuiCamiseta" rotulo="Já tem a camiseta do staff" vazio="—" opcoes={SIM_NAO} valorInicial={simNao(perfil.possuiCamiseta)} />
+        <CampoDeSelecao nome="fezConfronto" rotulo="Fez o Confronto" vazio="—" opcoes={SIM_NAO} valorInicial={simNao(perfil.fezConfronto)} />
+        <CampoDeSelecao nome="temCnpj" rotulo="Tem CNPJ" vazio="—" opcoes={SIM_NAO} valorInicial={simNao(perfil.temCnpj)} />
         <Salvar somenteLeitura={somenteLeitura} pendente={pendente}>
           Salvar camiseta e experiência
         </Salvar>

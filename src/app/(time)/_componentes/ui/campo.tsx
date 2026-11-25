@@ -1,7 +1,9 @@
 import { CircleAlert } from "lucide-react";
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
+import type { InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from "react";
 
 import { CAMPO, idDoCampo } from "./classes";
+import { type PropsDoSeletor, Seletor } from "./seletor";
+import type { OpcaoDoSeletor } from "./seletor-logica";
 
 // doc 08 §3.6. Rótulo sempre visível; erro com aria-invalid, borda vermelha e aria-describedby.
 // Os erros vêm de ResultadoAcao.campos (chave = caminho do Zod, ver caminhoDoCampo).
@@ -90,8 +92,14 @@ export function CampoDeTexto({
   );
 }
 
-export type OpcaoDoCampo = { valor: string; rotulo: string };
+export type OpcaoDoCampo = OpcaoDoSeletor;
 
+type PropsDoSeletorNoCampo = Pick<PropsDoSeletor, "valor" | "valorInicial" | "aoMudar" | "busca" | "desabilitado" | "marcador" | "enviarAoEscolher">;
+
+/**
+ * Lista de escolha do sistema (o `Seletor`) com rótulo, ajuda e erro. `vazio` é a opção sem valor ("—", "Todos").
+ * `obrigatorio` aqui só marca o rótulo e o `aria-required`, como nos outros campos: quem recusa o vazio é o servidor.
+ */
 export function CampoDeSelecao({
   nome,
   rotulo,
@@ -103,27 +111,21 @@ export function CampoDeSelecao({
   opcoes,
   vazio,
   ...selecao
-}: BaseDoCampo & Omit<SelectHTMLAttributes<HTMLSelectElement>, SemAtributosDoCampo> & { opcoes: OpcaoDoCampo[]; vazio?: string }) {
+}: BaseDoCampo & PropsDoSeletorNoCampo & { opcoes: OpcaoDoCampo[]; vazio?: string }) {
   return (
-    <Campo
-      nome={nome}
-      rotulo={rotulo}
-      id={id}
-      ajuda={ajuda}
-      erros={erros}
-      obrigatorio={obrigatorio}
-      className={className}
-      classeDoControle={`${CAMPO} pl-3 pr-8`}
-    >
+    <Campo nome={nome} rotulo={rotulo} id={id} ajuda={ajuda} erros={erros} obrigatorio={obrigatorio} className={className}>
       {(controle) => (
-        <select {...selecao} {...controle}>
-          {vazio !== undefined && <option value="">{vazio}</option>}
-          {opcoes.map((opcao) => (
-            <option key={opcao.valor} value={opcao.valor}>
-              {opcao.rotulo}
-            </option>
-          ))}
-        </select>
+        <Seletor
+          {...selecao}
+          id={controle.id}
+          nome={controle.name}
+          opcoes={opcoes}
+          vazio={vazio}
+          rotulo={typeof rotulo === "string" ? rotulo : undefined}
+          aria-invalid={controle["aria-invalid"]}
+          aria-required={controle["aria-required"]}
+          aria-describedby={controle["aria-describedby"]}
+        />
       )}
     </Campo>
   );

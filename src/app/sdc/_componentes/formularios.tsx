@@ -57,8 +57,8 @@ function CampoDaCompanhia({ indice, trecho, companhias, erros }: { indice: numbe
         obrigatorio
         vazio="Escolha…"
         opcoes={companhias}
-        value={escolhida}
-        onChange={(evento) => setEscolhida(evento.target.value)}
+        valor={escolhida}
+        aoMudar={setEscolhida}
         erros={erros(`trechos.${indice}.companhia`)}
       />
       {escolhida === OUTRA && (

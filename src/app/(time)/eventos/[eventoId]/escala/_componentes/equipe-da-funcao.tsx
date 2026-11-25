@@ -11,6 +11,7 @@ import { Botao } from "../../../../_componentes/ui/botao";
 import { BotaoLink } from "../../../../_componentes/ui/botao-link";
 import { Confirmacao } from "../../../../_componentes/ui/dialogo";
 import { RotulosDasCelulas } from "../../../../_componentes/ui/rotulos-das-celulas";
+import { Seletor } from "../../../../_componentes/ui/seletor";
 import { distancia } from "../../../../_componentes/ui/formatos";
 import { Chip } from "../../../../_componentes/ui/situacao";
 import { atualizarConvocacao, tirarDaVaga } from "../acoes";
@@ -45,7 +46,7 @@ function naEscala(status: StatusConvocacao): boolean {
   }
 }
 
-const SELETOR = "h-8 rounded-[8px] border border-[var(--ds-separator)] bg-[var(--ds-surface)] pl-2 pr-7 text-[13px]";
+const OPCOES_DE_DESLOCAMENTO = Object.entries(ROTULO_DO_DESLOCAMENTO).map(([valor, rotulo]) => ({ valor, rotulo }));
 
 /** Caixa de seleção que salva ao marcar (montagem e hotel). Sem permissão de mudar, vira "Sim" ou "—". */
 function MarcacaoDaPessoa({
@@ -134,27 +135,17 @@ function LinhaDaPessoa({
             <input type="hidden" name="eventoId" value={eventoId} />
             <input type="hidden" name="convocacaoId" value={pessoa.id} />
             <input type="hidden" name="campo" value="deslocamento" />
-            <label>
-              <span className="sr-only">
-                Deslocamento de {pessoa.nome}
-                {emOutraFuncao}
-              </span>
-              {/* key: depois de salvar, o campo remonta com o valor do servidor (o formulário volta ao valor antigo ao concluir a action). */}
-              <select
-                key={pessoa.deslocamento ?? ""}
-                name="deslocamento"
-                defaultValue={pessoa.deslocamento ?? ""}
-                className={SELETOR}
-                onChange={(evento) => evento.currentTarget.form?.requestSubmit()}
-              >
-                <option value="">Não definido</option>
-                {Object.entries(ROTULO_DO_DESLOCAMENTO).map(([valor, texto]) => (
-                  <option key={valor} value={valor}>
-                    {texto}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {/* Salva ao escolher. Ao concluir a action o formulário é limpo e o campo passa a mostrar o valor que o servidor devolveu. */}
+            <Seletor
+              nome="deslocamento"
+              aria-label={`Deslocamento de ${pessoa.nome}${emOutraFuncao}`}
+              vazio="Não definido"
+              valorInicial={pessoa.deslocamento ?? ""}
+              opcoes={OPCOES_DE_DESLOCAMENTO}
+              enviarAoEscolher
+              tamanho="pequeno"
+              className="w-auto min-w-[140px]"
+            />
           </form>
         ) : (
           (pessoa.deslocamento && ROTULO_DO_DESLOCAMENTO[pessoa.deslocamento as Deslocamento]) || "—"
