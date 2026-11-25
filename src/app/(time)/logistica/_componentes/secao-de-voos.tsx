@@ -684,6 +684,7 @@ export function SecaoDeVoos({
             nome="evento"
             rotulo={masterclass ? "Palestra" : "Evento"}
             todos={masterclass ? "Próximas palestras" : "Próximos eventos"}
+            busca
             valor={parametros.evento ?? null}
             opcoes={[...(eventoDoFiltro && !eventosDoRecorte.some((evento) => evento.id === eventoDoFiltro.id) ? [eventoDoFiltro] : []), ...eventosDoRecorte].map((evento) => ({
               valor: evento.id,

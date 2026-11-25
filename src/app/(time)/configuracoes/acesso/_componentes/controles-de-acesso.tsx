@@ -4,9 +4,15 @@ import { useState } from "react";
 
 import { type AcaoDoFormulario, FormularioDeAcao } from "@/app/(time)/_componentes/ui";
 import { BotaoDeEnvio } from "@/app/(time)/_componentes/ui/botao";
-import { CAMPO } from "@/app/(time)/_componentes/ui/classes";
+import { Seletor } from "@/app/(time)/_componentes/ui/seletor";
 
 type Nivel = "SEM_ACESSO" | "TIME" | "LIDER";
+
+const NIVEIS: { valor: Nivel; rotulo: string }[] = [
+  { valor: "LIDER", rotulo: "Líder" },
+  { valor: "TIME", rotulo: "Time" },
+  { valor: "SEM_ACESSO", rotulo: "Retirar acesso" },
+];
 
 /** Na linha de quem já tem acesso: troca entre Time e Líder ou retira. O botão só aparece quando algo mudou. */
 export function MudarAcesso({ acao, usuarioId, nome, nivel }: { acao: AcaoDoFormulario; usuarioId: string; nome: string; nivel: Nivel }) {
@@ -14,17 +20,14 @@ export function MudarAcesso({ acao, usuarioId, nome, nivel }: { acao: AcaoDoForm
   return (
     <FormularioDeAcao acao={acao} className="flex flex-wrap items-center justify-end gap-2">
       <input type="hidden" name="usuarioId" value={usuarioId} />
-      <select
-        name="nivel"
+      <Seletor
+        nome="nivel"
         aria-label={`Acesso de ${nome}`}
-        value={escolhido}
-        onChange={(evento) => setEscolhido(evento.target.value as Nivel)}
-        className={`${CAMPO} w-auto pl-3 pr-8`}
-      >
-        <option value="LIDER">Líder</option>
-        <option value="TIME">Time</option>
-        <option value="SEM_ACESSO">Retirar acesso</option>
-      </select>
+        valor={escolhido}
+        aoMudar={(novo) => setEscolhido(NIVEIS.find((opcao) => opcao.valor === novo)?.valor ?? nivel)}
+        opcoes={NIVEIS}
+        className="w-auto min-w-[160px]"
+      />
       {escolhido !== nivel && (
         <BotaoDeEnvio tamanho="pequeno" variante={escolhido === "SEM_ACESSO" ? "perigo" : "primario"} textoCarregando="Salvando…">
           {escolhido === "SEM_ACESSO" ? "Retirar" : "Salvar"}

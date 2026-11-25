@@ -68,7 +68,7 @@ function FormularioDoLocal({ local, tipos, aoSalvar }: { local: LocalNaTela | nu
       {!resultado.ok && resultado.campos && <ResumoDeErros campos={resultado.campos} rotulos={ROTULOS} />}
       {local && <input type="hidden" name="localId" value={local.id} />}
       <CampoDeTexto nome="nome" rotulo="Nome" obrigatorio defaultValue={local?.nome ?? ""} erros={erros("nome")} />
-      <CampoDeSelecao nome="tipo" rotulo="Tipo" obrigatorio opcoes={tipos} defaultValue={local?.tipo ?? "HOTEL"} erros={erros("tipo")} />
+      <CampoDeSelecao nome="tipo" rotulo="Tipo" obrigatorio opcoes={tipos} valorInicial={local?.tipo ?? "HOTEL"} erros={erros("tipo")} />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-[160px_1fr]">
         <CampoDeTexto nome="cep" rotulo="CEP" inputMode="numeric" placeholder="00000-000" defaultValue={local?.cep ?? ""} erros={erros("cep")} />
         <CampoDeTexto nome="logradouro" rotulo="Logradouro" defaultValue={local?.logradouro ?? ""} erros={erros("logradouro")} />
@@ -154,7 +154,7 @@ function FormularioDoLocalDoIamControl({ local, tipos, aoSalvar }: { local: Loca
         rotulo="Tipo"
         obrigatorio
         opcoes={tipos}
-        defaultValue={local.tipo}
+        valorInicial={local.tipo}
         ajuda="Marque como hotel o local que também hospeda o staff: ele passa a aparecer na hospedagem."
         erros={erros("tipo")}
       />

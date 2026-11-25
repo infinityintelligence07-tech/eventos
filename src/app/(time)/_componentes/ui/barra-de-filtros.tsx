@@ -3,13 +3,13 @@
 import { Search } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useId, useMemo, useOptimistic, useState, useTransition } from "react";
+
+import { Seletor } from "./seletor";
+import type { OpcaoDoSeletor } from "./seletor-logica";
 
 // doc 08 §3.7: filtros na URL (searchParams), para o link poder ser compartilhado e o "voltar" funcionar.
 // Ordem: busca → seletores → atalhos → "Limpar filtros".
-
-const SELETOR =
-  "h-10 rounded-[10px] border border-[var(--ds-separator)] bg-[var(--ds-surface)] pl-3 pr-8 text-[14px] text-[var(--ds-label)]";
 
 function useEnderecoComFiltro() {
   const caminho = usePathname();
@@ -31,14 +31,19 @@ function useEnderecoComFiltro() {
   );
 }
 
-export type OpcaoDeFiltro = { valor: string; rotulo: string };
+export type OpcaoDeFiltro = OpcaoDoSeletor;
 
+/**
+ * Filtro de lista na URL: escolher uma opção já navega. `busca` liga o campo de busca na lista mesmo com poucas
+ * opções (evento, palestra, pessoa, local); sem a prop, a busca aparece sozinha acima de 8 opções.
+ */
 export function SeletorDeFiltro({
   nome,
   rotulo,
   todos,
   opcoes,
   valor,
+  busca,
 }: {
   nome: string;
   rotulo: string;
@@ -46,25 +51,34 @@ export function SeletorDeFiltro({
   opcoes: OpcaoDeFiltro[];
   /** Valor já validado pela página (inválido = null). Sem a prop, lê da URL. */
   valor?: string | null;
+  busca?: boolean;
 }) {
   const router = useRouter();
   const endereco = useEnderecoComFiltro();
+  const id = useId();
+  const naUrl = (valor === undefined ? endereco.atual(nome) : valor) ?? "";
+  // A escolha aparece no campo na hora; a URL (e a lista da página) chegam logo depois.
+  const [escolhido, setEscolhido] = useOptimistic(naUrl);
+  const [, navegar] = useTransition();
   return (
-    <label className="flex items-center gap-2 text-[13px] text-[var(--ds-label-2)]">
-      {rotulo}
-      <select
-        className={SELETOR}
-        value={(valor === undefined ? endereco.atual(nome) : valor) ?? ""}
-        onChange={(evento) => router.push(endereco.com({ [nome]: evento.target.value || null }))}
-      >
-        <option value="">{todos}</option>
-        {opcoes.map((opcao) => (
-          <option key={opcao.valor} value={opcao.valor}>
-            {opcao.rotulo}
-          </option>
-        ))}
-      </select>
-    </label>
+    <div className="flex items-center gap-2 text-[13px] text-[var(--ds-label-2)]">
+      <label htmlFor={id}>{rotulo}</label>
+      <Seletor
+        id={id}
+        rotulo={rotulo}
+        className="w-auto min-w-[140px] max-w-[min(360px,100%)]"
+        vazio={todos}
+        opcoes={opcoes}
+        busca={busca}
+        valor={escolhido}
+        aoMudar={(novo) =>
+          navegar(() => {
+            setEscolhido(novo);
+            router.push(endereco.com({ [nome]: novo || null }));
+          })
+        }
+      />
+    </div>
   );
 }
 

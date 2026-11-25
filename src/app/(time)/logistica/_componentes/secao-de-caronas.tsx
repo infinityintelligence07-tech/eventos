@@ -7,40 +7,22 @@ import { FormularioDeAcao } from "@/app/(time)/_componentes/ui";
 import { Aviso } from "../../_componentes/ui/aviso";
 import { BotaoDeEnvio } from "../../_componentes/ui/botao";
 import { Cartao } from "../../_componentes/ui/cartao";
-import { CAMPO, TITULO_DE_SECAO } from "../../_componentes/ui/classes";
+import { TITULO_DE_SECAO } from "../../_componentes/ui/classes";
 import { EstadoVazio } from "../../_componentes/ui/estados";
 import { distancia } from "../../_componentes/ui/formatos";
+import { Seletor } from "../../_componentes/ui/seletor";
+import type { OpcaoDoSeletor } from "../../_componentes/ui/seletor-logica";
 import { criarCaronaAcao, definirCaronaAcao, removerCaronaAcao, tirarDaCaronaAcao } from "../acoes";
 import { BotaoNovoMotorista } from "./formularios-de-carona";
 
-function Seletor({
-  id,
-  nome,
-  rotulo,
-  vazio,
-  opcoes,
-}: {
-  id: string;
-  nome: string;
-  rotulo: string;
-  vazio: string;
-  opcoes: { valor: string; rotulo: string; desabilitada?: boolean }[];
-}) {
+/** Motorista ou passageiro: lista de pessoas, sempre com busca. Sem escolha, o navegador segura o envio. */
+function SeletorDePessoa({ id, nome, rotulo, vazio, opcoes }: { id: string; nome: string; rotulo: string; vazio: string; opcoes: OpcaoDoSeletor[] }) {
   return (
     <>
       <label htmlFor={id} className="sr-only">
         {rotulo}
       </label>
-      <select id={id} name={nome} required defaultValue="" className={`${CAMPO} h-8 w-auto max-w-[260px] pl-2 pr-7 text-[13px]`}>
-        <option value="" disabled>
-          {vazio}
-        </option>
-        {opcoes.map((opcao) => (
-          <option key={opcao.valor} value={opcao.valor} disabled={opcao.desabilitada}>
-            {opcao.rotulo}
-          </option>
-        ))}
-      </select>
+      <Seletor id={id} nome={nome} rotulo={rotulo} marcador={vazio} opcoes={opcoes} busca obrigatorio tamanho="pequeno" className="w-auto min-w-[160px] max-w-[260px]" />
     </>
   );
 }
@@ -141,7 +123,7 @@ export function SecaoDeCaronas({ dados, escrita }: { dados: CaronasCarregadas; e
                 {escrita && motoristasComLugar.length > 0 && (
                   <FormularioDeAcao acao={definirCaronaAcao} className="inline-flex items-center gap-1" aria-label={`Escolher carona para ${pessoa.nome}`}>
                     <input type="hidden" name="convocacaoId" value={pessoa.convocacaoId} />
-                    <Seletor id={`carona-de-${pessoa.convocacaoId}`} nome="caronaId" rotulo={`Escolher carona para ${pessoa.nome}`} vazio="Escolher carona…" opcoes={motoristasComLugar} />
+                    <SeletorDePessoa id={`carona-de-${pessoa.convocacaoId}`} nome="caronaId" rotulo={`Escolher carona para ${pessoa.nome}`} vazio="Escolher carona…" opcoes={motoristasComLugar} />
                     <BotaoDeEnvio tamanho="pequeno" variante="secundario">
                       Definir
                     </BotaoDeEnvio>
@@ -201,7 +183,7 @@ export function SecaoDeCaronas({ dados, escrita }: { dados: CaronasCarregadas; e
                 {escrita && carona.livres > 0 && dados.candidatosAPassageiro.length > 0 && (
                   <FormularioDeAcao acao={definirCaronaAcao} className="mt-3 flex items-center gap-1" aria-label={`Adicionar passageiro na carona de ${carona.motoristaNome}`}>
                     <input type="hidden" name="caronaId" value={carona.id} />
-                    <Seletor
+                    <SeletorDePessoa
                       id={`passageiro-${carona.id}`}
                       nome="convocacaoId"
                       rotulo={`Adicionar passageiro na carona de ${carona.motoristaNome}`}

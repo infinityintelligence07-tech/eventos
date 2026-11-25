@@ -12,6 +12,7 @@ import { Cartao } from "../../_componentes/ui/cartao";
 import { CAMPO, TITULO_DE_SECAO } from "../../_componentes/ui/classes";
 import { EstadoVazio } from "../../_componentes/ui/estados";
 import { dataCurta, dinheiro, periodo, quantidadeDe } from "../../_componentes/ui/formatos";
+import { Seletor } from "../../_componentes/ui/seletor";
 import {
   adicionarQuartoAcao,
   alterarHospedagemAcao,
@@ -80,16 +81,16 @@ function AcrescentarPessoa({ eventoId, staff }: { eventoId: string; staff: { pes
       <label htmlFor="acrescentar-hospede" className="text-[13px] font-medium">
         Acrescentar pessoa
       </label>
-      <select id="acrescentar-hospede" name="pessoaId" required defaultValue="" className={`${CAMPO} h-9 w-auto max-w-[280px] pl-2 pr-7 text-[14px]`}>
-        <option value="" disabled>
-          Escolha pelo nome…
-        </option>
-        {staff.map((pessoa) => (
-          <option key={pessoa.pessoaId} value={pessoa.pessoaId}>
-            {pessoa.nome}
-          </option>
-        ))}
-      </select>
+      <Seletor
+        id="acrescentar-hospede"
+        nome="pessoaId"
+        rotulo="Acrescentar pessoa"
+        marcador="Escolha pelo nome…"
+        opcoes={staff.map((pessoa) => ({ valor: pessoa.pessoaId, rotulo: pessoa.nome }))}
+        busca
+        obrigatorio
+        className="w-auto min-w-[200px] max-w-[280px]"
+      />
       <BotaoDeEnvio tamanho="pequeno" variante="secundario">
         Acrescentar
       </BotaoDeEnvio>
@@ -110,7 +111,7 @@ function TirarDaLista({ eventoId, pessoaId, nome }: { eventoId: string; pessoaId
   );
 }
 
-const CLASSE_DO_SELETOR = `${CAMPO} h-8 w-auto max-w-[220px] pl-2 pr-7 text-[13px]`;
+const CLASSE_DO_SELETOR = "w-auto min-w-[150px] max-w-[220px]";
 
 /** "Colocar no quarto…" de quem está sem quarto (alternativa a arrastar, WCAG 2.5.7). */
 function ColocarNoQuarto({ pessoaId, nome, quartos }: { pessoaId: string; nome: string; quartos: OpcaoDeQuarto[] }) {
@@ -123,17 +124,16 @@ function ColocarNoQuarto({ pessoaId, nome, quartos }: { pessoaId: string; nome: 
       <label htmlFor={id} className="sr-only">
         {descricao}
       </label>
-      <select id={id} name="quartoId" required defaultValue="" className={CLASSE_DO_SELETOR}>
-        <option value="" disabled>
-          Colocar no quarto…
-        </option>
-        {quartos.map((quarto) => (
-          <option key={quarto.id} value={quarto.id} disabled={quarto.cheio}>
-            {quarto.rotulo}
-            {quarto.cheio ? " (cheio)" : ""}
-          </option>
-        ))}
-      </select>
+      <Seletor
+        id={id}
+        nome="quartoId"
+        rotulo={descricao}
+        marcador="Colocar no quarto…"
+        opcoes={quartos.map((quarto) => ({ valor: quarto.id, rotulo: `${quarto.rotulo}${quarto.cheio ? " (cheio)" : ""}`, desabilitada: quarto.cheio }))}
+        obrigatorio
+        tamanho="pequeno"
+        className={CLASSE_DO_SELETOR}
+      />
       <BotaoDeEnvio tamanho="pequeno" variante="secundario">
         Colocar
       </BotaoDeEnvio>
@@ -158,28 +158,21 @@ function MoverDeQuarto({ pessoaId, nome, quartoAtual, quartos, trocas }: { pesso
       <label htmlFor={id} className="sr-only">
         {descricao}
       </label>
-      <select id={id} name="destino" required defaultValue="" className={CLASSE_DO_SELETOR}>
-        <option value="" disabled>
-          Mover para…
-        </option>
-        <optgroup label="Outro quarto">
-          {destinos.map((quarto) => (
-            <option key={quarto.id} value={destinoNoQuarto(quarto.id)} disabled={quarto.cheio}>
-              {quarto.rotulo}
-              {quarto.cheio ? " (cheio)" : ""}
-            </option>
-          ))}
-        </optgroup>
-        {comQuem.length > 0 && (
-          <optgroup label="Trocar de lugar com">
-            {comQuem.map((troca) => (
-              <option key={troca.pessoaId} value={destinoDaTroca(troca.quartoId, troca.pessoaId)}>
-                {troca.rotulo}
-              </option>
-            ))}
-          </optgroup>
-        )}
-      </select>
+      {/* Os dois grupos de antes: outro quarto com vaga ou trocar de lugar com um ocupante (lista de pessoas: com busca). */}
+      <Seletor
+        id={id}
+        nome="destino"
+        rotulo={descricao}
+        marcador="Mover para…"
+        opcoes={[
+          ...destinos.map((quarto) => ({ valor: destinoNoQuarto(quarto.id), rotulo: `${quarto.rotulo}${quarto.cheio ? " (cheio)" : ""}`, desabilitada: quarto.cheio, grupo: "Outro quarto" })),
+          ...comQuem.map((troca) => ({ valor: destinoDaTroca(troca.quartoId, troca.pessoaId), rotulo: troca.rotulo, grupo: "Trocar de lugar com" })),
+        ]}
+        busca={comQuem.length > 0 ? true : undefined}
+        obrigatorio
+        tamanho="pequeno"
+        className={CLASSE_DO_SELETOR}
+      />
       <BotaoDeEnvio tamanho="pequeno" variante="secundario">
         Mover
       </BotaoDeEnvio>
@@ -199,6 +192,7 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
           nome="evento"
           rotulo={masterclass ? "Palestra" : "Evento"}
           todos={masterclass ? "Próxima palestra" : "Próximo evento"}
+          busca
           valor={evento?.id ?? null}
           opcoes={[...(evento && !dados.eventos.some((item) => item.id === evento.id) ? [evento] : []), ...dados.eventos].map((item) => ({
             valor: item.id,

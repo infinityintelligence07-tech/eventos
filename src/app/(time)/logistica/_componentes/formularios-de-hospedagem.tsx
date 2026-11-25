@@ -57,8 +57,9 @@ export function BotaoRegistrarReserva({
             rotulo="Hotel reservado pela SDC"
             obrigatorio
             vazio="Escolha o hotel"
-            value={hotel}
-            onChange={(mudanca) => setHotel(mudanca.target.value)}
+            busca
+            valor={hotel}
+            aoMudar={setHotel}
             opcoes={[...hoteis, { valor: NOVO_HOTEL, rotulo: "Cadastrar outro hotel…" }]}
             ajuda="Não está na lista? Escolha &quot;Cadastrar outro hotel…&quot; e preencha aqui mesmo."
             erros={erros("localId")}
@@ -175,7 +176,8 @@ export function BotaoDefinirHospedagem({
             rotulo="Onde"
             vazio="Hotel pela SDC (ela escolhe e reserva)"
             opcoes={locais}
-            defaultValue={hospedagem?.localId ?? ""}
+            busca
+            valorInicial={hospedagem?.localId ?? ""}
             ajuda="Deixe assim quando a SDC for reservar. Escolha um apartamento da IAM (não passa pela SDC) ou um hotel só se ele já estiver definido."
             erros={erros("localId")}
           />
@@ -273,7 +275,7 @@ export function FormularioNovoQuarto({ acao, hospedagemId, proximoNome }: { acao
           nome="capacidade"
           rotulo="Camas"
           obrigatorio
-          defaultValue="2"
+          valorInicial="2"
           opcoes={[
             { valor: "1", rotulo: "1 (single)" },
             { valor: "2", rotulo: "2 (duplo)" },

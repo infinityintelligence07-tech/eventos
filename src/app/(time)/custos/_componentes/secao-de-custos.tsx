@@ -444,7 +444,7 @@ export function SecaoDeCustos({
       <BarraDeFiltros resultado={`${dados.linhas.length} solicitações encontradas`} nomes={["evento", "alerta", "busca"]}>
         <BuscaDeFiltro rotulo="Buscar por protocolo ou nome" placeholder="Protocolo ou nome" />
         {comSeletorDeEvento && (
-          <SeletorDeFiltro nome="evento" rotulo="Evento" todos="Todos os eventos" valor={parametros.evento ?? null} opcoes={dados.eventos.map((evento) => ({ valor: evento.id, rotulo: evento.rotulo }))} />
+          <SeletorDeFiltro nome="evento" rotulo="Evento" todos="Todos os eventos" busca valor={parametros.evento ?? null} opcoes={dados.eventos.map((evento) => ({ valor: evento.id, rotulo: evento.rotulo }))} />
         )}
         <SeletorDeFiltro
           nome="alerta"

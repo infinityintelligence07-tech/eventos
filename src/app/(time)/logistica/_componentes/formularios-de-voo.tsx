@@ -102,7 +102,7 @@ function CamposDosTrechos({ inicial, erros }: { inicial: TrechosIniciais; erros:
               rotulo={sentido === "IDA" ? "Horário da ida" : "Horário da volta"}
               opcoes={PREFERENCIAS}
               vazio="Sem preferência"
-              defaultValue={valores?.preferencia ?? ""}
+              valorInicial={valores?.preferencia ?? ""}
             />
           </div>
         );
@@ -191,9 +191,9 @@ export function FormularioNovoPedido({
           <CampoDeSelecao
             nome="tipoDeViagem"
             rotulo="Viagem para"
-            value={recorte}
-            onChange={(mudanca) => {
-              setRecorte(mudanca.target.value === "MASTERCLASS" ? "MASTERCLASS" : "EVENTOS");
+            valor={recorte}
+            aoMudar={(novo) => {
+              setRecorte(novo === "MASTERCLASS" ? "MASTERCLASS" : "EVENTOS");
               setEventoId("");
               setEventoVoltaId("");
             }}
@@ -206,9 +206,10 @@ export function FormularioNovoPedido({
             rotulo={masterclass ? "Primeira palestra (a ida chega aqui)" : "Evento"}
             obrigatorio
             vazio={masterclass ? "Escolha a palestra" : "Escolha o evento"}
-            value={eventoId}
-            onChange={(mudanca) => {
-              setEventoId(mudanca.target.value);
+            busca
+            valor={eventoId}
+            aoMudar={(novo) => {
+              setEventoId(novo);
               setEventoVoltaId("");
             }}
             opcoes={doRecorte.map((item) => ({ valor: item.id, rotulo: item.rotulo }))}
@@ -223,8 +224,9 @@ export function FormularioNovoPedido({
           nome="eventoVoltaId"
           rotulo="Última palestra (a volta sai daqui)"
           vazio="A mesma palestra (ida e volta)"
-          value={eventoVoltaId}
-          onChange={(mudanca) => setEventoVoltaId(mudanca.target.value)}
+          busca
+          valor={eventoVoltaId}
+          aoMudar={setEventoVoltaId}
           opcoes={ultimasPalestras.map((item) => ({ valor: item.id, rotulo: item.rotulo }))}
           ajuda="Na turnê, a pessoa vai para a primeira palestra e volta da última. As palestras do meio não entram no pedido."
           erros={erros("eventoVoltaId")}
@@ -236,8 +238,9 @@ export function FormularioNovoPedido({
         rotulo="Passageiro"
         obrigatorio
         vazio="Escolha a pessoa"
-        value={pessoaId}
-        onChange={(mudanca) => setPessoaId(mudanca.target.value)}
+        busca
+        valor={pessoaId}
+        aoMudar={setPessoaId}
         opcoes={pessoas.map((pessoa) => ({ valor: pessoa.pessoaId, rotulo: pessoa.nome }))}
         ajuda="Qualquer pessoa ativa do cadastro de staff, esteja ou não na escala do evento."
         erros={erros("pessoaId")}
