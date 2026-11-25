@@ -82,6 +82,8 @@ export const pedidoSdc = eventosSchema.table(
     // Só se aprova compra registrada (EMITIDO) e com valor; sair de EMITIDO derruba a aprovação.
     check("pedido_sdc_aprovacao_check", sql`${table.aprovadoEm} IS NULL OR (${table.situacao} = 'EMITIDO' AND ${table.valorCentavos} IS NOT NULL)`),
     check("pedido_sdc_aprovacao_obs_check", sql`${table.observacaoAprovacao} IS NULL OR (${table.aprovadoEm} IS NOT NULL AND length(${table.observacaoAprovacao}) <= 500)`),
+    // A compra é de um autor só: alguém do time (em nome da SDC) OU a própria SDC; nunca os dois.
+    check("pedido_sdc_retorno_autor_check", sql`${table.retornoRegistradoPor} IS NULL OR ${table.retornoRegistradoPelaSdc} IS NULL`),
     check("pedido_sdc_forma_pagamento_check", sql`${table.formaPagamento} IS NULL OR length(${table.formaPagamento}) BETWEEN 1 AND 60`),
   ],
 );

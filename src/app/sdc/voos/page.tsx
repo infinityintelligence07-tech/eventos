@@ -7,7 +7,7 @@ import { EstadoVazio } from "@/app/(time)/_componentes/ui/estados";
 import { dataCurta, dinheiro, hora } from "@/app/(time)/_componentes/ui/formatos";
 import { paraCampoDeDataEHora, paraCampoDeDinheiro } from "@/app/(time)/logistica/_componentes/situacoes";
 import { carregarVoosDaSdc } from "@/fluxos/sdc";
-import { rotuloDaPreferencia, rotuloDoMes, rotuloDoTrajeto, trajetoDosTrechos, type TrechoParaASdc } from "@/modules/logistica";
+import { COMPANHIAS_DA_SDC, companhiaNoFormulario, OUTRA_COMPANHIA, rotuloDaPreferencia, rotuloDoMes, rotuloDoTrajeto, trajetoDosTrechos, type TrechoParaASdc } from "@/modules/logistica";
 
 import { FiltroDaSdc, Linha, SituacaoDoPedidoParaASdc, situacaoDoFiltroDaSdc, TituloDoEvento, TotaisDaSdc } from "../_componentes/comuns";
 import { BotaoRegistrarCompraDeVoo } from "../_componentes/formularios";
@@ -16,6 +16,9 @@ import { registrarCompraDeVooAcao } from "../acoes";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Voos" };
+
+/** Companhias da planilha do time e "Outra" (abre um campo para escrever o nome). */
+const COMPANHIAS = [...COMPANHIAS_DA_SDC.map((nome) => ({ valor: nome, rotulo: nome })), { valor: OUTRA_COMPANHIA, rotulo: "Outra" }];
 
 const sentido = (trecho: TrechoParaASdc) => (trecho.sentido === "IDA" ? "Ida" : "Volta");
 
@@ -79,11 +82,13 @@ export default async function PaginaVoosDaSdc({ searchParams }: { searchParams: 
                                 corrigindo={voo.paraASdc === "AGUARDANDO_APROVACAO"}
                                 valor={paraCampoDeDinheiro(voo.paraASdc === "AGUARDANDO_APROVACAO" ? voo.valorCentavos : null)}
                                 observacao={voo.observacaoSdc ?? ""}
+                                companhias={COMPANHIAS}
                                 trechos={voo.trechos.map((trecho) => ({
                                   sentido: trecho.sentido,
                                   rotulo: `${sentido(trecho)}: ${pedido(trecho)}`,
                                   partidaSugerida: `${trecho.dataDesejada}T08:00`,
-                                  companhia: trecho.companhia ?? "",
+                                  companhia: companhiaNoFormulario(trecho.companhia).opcao,
+                                  outraCompanhia: companhiaNoFormulario(trecho.companhia).outra,
                                   numeroVoo: trecho.numeroVoo ?? "",
                                   localizador: trecho.localizador ?? "",
                                   partidaEm: paraCampoDeDataEHora(trecho.partidaEm),

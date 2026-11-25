@@ -381,6 +381,8 @@ export function BotaoAprovarPagamento({
   pedidoId,
   referencia,
   valor,
+  valorCentavos,
+  atualizadoEm,
   tamanho = "pequeno",
 }: {
   acao: AcaoDoFormulario;
@@ -388,6 +390,9 @@ export function BotaoAprovarPagamento({
   referencia: string;
   /** Já formatado ("R$ 980,00"). */
   valor: string;
+  /** O valor e a versão do pedido que esta tela mostrou: a aprovação só vale se a compra ainda for esta. */
+  valorCentavos: number;
+  atualizadoEm: string;
   tamanho?: "normal" | "pequeno";
 }) {
   const [aberto, setAberto] = useState(false);
@@ -408,6 +413,8 @@ export function BotaoAprovarPagamento({
         acao={despachar}
       >
         <input type="hidden" name="pedidoId" value={pedidoId} />
+        <input type="hidden" name="valorCentavos" value={valorCentavos} />
+        <input type="hidden" name="atualizadoEm" value={atualizadoEm} />
         <CaixaDeMarcar name="confirmo" required rotulo="Confirmo que usamos e que este valor pode ser pago" />
         <CampoDeTextoLongo className="mt-2" nome="observacao" rotulo="Observação (opcional)" maxLength={500} erros={erros("observacao")} />
       </Confirmacao>

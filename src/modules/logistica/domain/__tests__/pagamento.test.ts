@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  aprovacaoValeParaACompra,
   type CompraDoPedido,
+  MENSAGEM_COMPRA_MUDOU,
   efeitoNaAprovacao,
   podeAprovarPagamento,
   podeDesfazerAprovacao,
@@ -72,8 +74,30 @@ describe("pagamento das compras da SDC: time solicita, SDC registra o valor, tim
   it("rótulos e o formulário de aprovação (a confirmação é obrigatória)", () => {
     expect((["SEM_COMPRA", "A_APROVAR", "APROVADO", "CANCELADO"] as const).map(rotuloDoPagamento)).toEqual(["Sem compra registrada", "A aprovar", "Aprovado para pagamento", "Cancelado"]);
     const pedidoId = "018f4e2a-0000-7000-8000-000000000001";
-    expect(aprovarPagamentoSchema.parse({ pedidoId, confirmo: "on", observacao: " usamos " })).toEqual({ pedidoId, confirmo: true, observacao: "usamos" });
-    expect(aprovarPagamentoSchema.safeParse({ pedidoId }).success).toBe(false);
-    expect(aprovarPagamentoSchema.safeParse({ pedidoId, confirmo: "false" }).success).toBe(false);
+    const visto = { valorCentavos: "98000", atualizadoEm: "2026-12-20T15:00:00.000Z" };
+    expect(aprovarPagamentoSchema.parse({ pedidoId, confirmo: "on", observacao: " usamos ", ...visto })).toEqual({
+      pedidoId,
+      confirmo: true,
+      observacao: "usamos",
+      valorCentavos: 98000,
+      atualizadoEm: "2026-12-20T15:00:00.000Z",
+    });
+    expect(aprovarPagamentoSchema.safeParse({ pedidoId, ...visto }).success).toBe(false);
+    expect(aprovarPagamentoSchema.safeParse({ pedidoId, confirmo: "false", ...visto }).success).toBe(false);
+    // Sem o valor e a versão que a tela mostrou, não há o que aprovar.
+    expect(aprovarPagamentoSchema.safeParse({ pedidoId, confirmo: "on" }).success).toBe(false);
+    expect(aprovarPagamentoSchema.safeParse({ pedidoId, confirmo: "on", ...visto, valorCentavos: "980,00" }).success).toBe(false);
+    expect(aprovarPagamentoSchema.safeParse({ pedidoId, confirmo: "on", ...visto, valorCentavos: "-1" }).success).toBe(false);
+    expect(aprovarPagamentoSchema.safeParse({ pedidoId, confirmo: "on", ...visto, atualizadoEm: "ontem" }).success).toBe(false);
+  });
+
+  it("a aprovação vale só para a compra que o aprovador viu: mesmo valor e mesma versão", () => {
+    const pedido = { valorCentavos: 98000, atualizadoEm: new Date("2026-12-20T15:00:00.123Z") };
+    expect(aprovacaoValeParaACompra(pedido, { valorCentavos: 98000, atualizadoEm: "2026-12-20T15:00:00.123Z" })).toBe(true);
+    expect(aprovacaoValeParaACompra(pedido, { valorCentavos: 98001, atualizadoEm: "2026-12-20T15:00:00.123Z" })).toBe(false);
+    expect(aprovacaoValeParaACompra(pedido, { valorCentavos: 98000, atualizadoEm: "2026-12-20T15:00:00.122Z" })).toBe(false);
+    expect(aprovacaoValeParaACompra(pedido, { valorCentavos: 98000, atualizadoEm: "não é data" })).toBe(false);
+    expect(aprovacaoValeParaACompra({ ...pedido, valorCentavos: null }, { valorCentavos: 0, atualizadoEm: "2026-12-20T15:00:00.123Z" })).toBe(false);
+    expect(MENSAGEM_COMPRA_MUDOU).toBe("A compra mudou depois que você abriu a tela. Confira de novo.");
   });
 });

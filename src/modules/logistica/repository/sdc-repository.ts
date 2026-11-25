@@ -263,12 +263,16 @@ export function criarRepositorioDaSdc(executor: Executor) {
       }));
     },
 
-    /** A referência que a SDC manda no formulário → o pedido daquele tipo. Nulo = não existe (ou é de outro tipo). */
-    async idDoPedido(referencia: string, tipo: TipoDoPedido): Promise<string | null> {
+    /**
+     * A referência que a SDC manda no formulário → o pedido daquele tipo, com o MESMO recorte de período das listas
+     * (`desde`): a SDC só grava em pedido que ela enxerga. Nulo = não existe, é de outro tipo ou está fora do recorte.
+     */
+    async idDoPedido(referencia: string, tipo: TipoDoPedido, { desde }: { desde: string }): Promise<string | null> {
       const [linha] = await executor
         .select({ id: pedidoSdc.id })
         .from(pedidoSdc)
-        .where(and(eq(pedidoSdc.referencia, referencia), eq(pedidoSdc.tipo, tipo)));
+        .innerJoin(evento, eq(evento.id, pedidoSdc.eventoId))
+        .where(and(eq(pedidoSdc.referencia, referencia), eq(pedidoSdc.tipo, tipo), eventoDesde(desde)));
       return linha?.id ?? null;
     },
   };

@@ -16,10 +16,13 @@ export async function listarAcessoDaSdc(): Promise<{ acessos: AcessoDaSdcNaTela[
   };
 }
 
+export const MENSAGEM_EMAIL_DA_IAM = "Este e-mail é de alguém da IAM. O acesso dela é em Acesso do time.";
+
 /** Inclui um e-mail (já em minúsculas, pelo schema). E-mail repetido é recusado: desativado se reativa, não se inclui de novo. */
 export async function incluirAcessoDaSdc({ email, nome }: IncluirAcessoDaSdc, ator: AtorDaEscrita, agora: Date): Promise<string> {
   return transacao(ator, async (tx) => {
     const repo = criarRepositorioAcessoSdc(tx);
+    if (await repo.emailEhDaIam(email)) throw new RegraDeNegocioError(MENSAGEM_EMAIL_DA_IAM);
     const existente = await repo.porEmail(email);
     if (existente) {
       throw new RegraDeNegocioError(existente.ativo ? "Este e-mail já está na lista da SDC." : "Este e-mail já está na lista da SDC, desativado. Use \"Reativar\" na linha dele.");
@@ -40,6 +43,8 @@ export async function definirAcessoDaSdc({ acessoSdcId, ativo }: DefinirAcessoDa
     const travado = await repo.travar(acessoSdcId);
     if (!travado) throw new RegraDeNegocioError("Este e-mail não está mais na lista. Recarregue a página.");
     if (travado.ativo !== ativo) {
+      // Quem passou a ter conta na IAM depois de entrar na lista não volta a ser SDC (a resolução já o ignora).
+      if (ativo && (await repo.emailEhDaIam(travado.email))) throw new RegraDeNegocioError(MENSAGEM_EMAIL_DA_IAM);
       await repo.definirAtivo(acessoSdcId, ativo, agora);
       await repo.registrar(acessoSdcId, { acao: ativo ? "ACESSO_SDC_REATIVADO" : "ACESSO_SDC_DESATIVADO", usuarioId: ator.usuarioId });
       return { mudou: true, nome: travado.nome };

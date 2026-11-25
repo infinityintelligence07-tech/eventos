@@ -427,6 +427,10 @@ stateDiagram-v2
 - `podeAprovarPagamento`: só `A_APROVAR` (recusas `SEM_COMPRA`, `CANCELADO`, `JA_APROVADO`). `efeitoNaAprovacao(pedido,
   "TIME" | "SDC")`: com o pagamento aprovado a SDC não mexe; quando o time mexe, a aprovação cai e o serviço grava
   `APROVACAO_DESFEITA` além do registro da própria mudança. `aprovarPagamento` grava `PAGAMENTO_APROVADO`.
+- `aprovacaoValeParaACompra(pedido, visto)`: a aprovação só vale para o valor e a versão (`atualizado_em`) que o
+  aprovador viu; senão, "A compra mudou depois que você abriu a tela. Confira de novo."
+- A SDC tem schemas próprios (`registrarCompraDeVooPelaSdcSchema`, `registrarReservaPelaSdcSchema`): lista fechada de
+  campos, sem `cartaoEmbarqueUrl`, companhia de lista curta, textos sem link nem quebra de linha (docs/09 §15.4).
 - `totaisDoPagamento`: quantidade e soma "a aprovar" e "aprovado" (Voos do time, área da SDC).
 
 ---
@@ -515,7 +519,7 @@ hotel, que a fatura da SDC vai citar). Formato a confirmar (§11).
 | `cancelado_por` | uuid → `core.usuario` ON DELETE SET NULL | |
 | `motivo_cancelamento` | text | |
 | `forma_pagamento` | text | 0015. Informada no retorno da SDC (ex.: "Faturado SDC"); `CHECK` de 1 a 60 caracteres. Hoje só a hospedagem preenche |
-| `retorno_registrado_pela_sdc` | uuid → `acesso_sdc` ON DELETE RESTRICT | 0016. Quem da SDC lançou a compra; vazio quando foi o time (`retorno_registrado_por`) |
+| `retorno_registrado_pela_sdc` | uuid → `acesso_sdc` ON DELETE RESTRICT | 0016. Quem da SDC lançou a compra; vazio quando foi o time (`retorno_registrado_por`). `CHECK pedido_sdc_retorno_autor_check`: nunca os dois preenchidos |
 | `aprovado_em` | timestamptz | 0016. Preenchido = pagamento aprovado pelo time. `CHECK`: só com `situacao = 'EMITIDO'` e `valor_centavos` preenchido |
 | `aprovado_por` | uuid → `core.usuario` ON DELETE SET NULL | 0016 |
 | `observacao_aprovacao` | text | 0016. Até 500 caracteres, só junto da aprovação |
@@ -744,7 +748,7 @@ Server actions (Zod):
 `@/fluxos/sdc`: `carregarVoosDaSdc`, `carregarHospedagensDaSdc`, `registrarCompraDeVoo`, `registrarReservaDeHospedagem`,
 `listarAcessoDaSdc`, `incluirAcessoDaSdc`, `definirAcessoDaSdc`; repositórios `sdc-repository.ts` e
 `acesso-sdc-repository.ts`). A SDC identifica o pedido pela referência `SDC-…`, nunca por id. No time, as actions novas
-são `aprovarPagamentoAcao` (`{ pedidoId, confirmo: true, observacao? }`) e `desfazerAprovacaoAcao` (`{ pedidoId }`).
+são `aprovarPagamentoAcao` (`{ pedidoId, valorCentavos, atualizadoEm, confirmo: true, observacao? }`: o valor e a versão que a tela mostrou entram no compare-and-set) e `desfazerAprovacaoAcao` (`{ pedidoId }`).
 "Copiar pedido" (texto pronto para o canal de hoje) continua, para quando a agência preferir receber por fora. Toda mudança de voo/quarto muda o `dados_hash` da copy de hospedagem → a Comunicação mostra "Desatualizada".
 
 ### 6.7 Custos — `/custos`, `/custos/nova`, `/eventos/[eventoId]/custos`

@@ -444,7 +444,7 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
                     <dd className="flex flex-wrap items-center gap-2">
                       <ChipDoPagamento pedido={pedido} />
                       {escrita && situacaoDoPagamento(pedido) === "A_APROVAR" && (
-                        <BotaoAprovarPagamento acao={aprovarPagamentoAcao} pedidoId={pedido.id} referencia={pedido.referencia} valor={dinheiro(pedido.valorCentavos ?? 0)} />
+                        <BotaoAprovarPagamento acao={aprovarPagamentoAcao} pedidoId={pedido.id} referencia={pedido.referencia} valor={dinheiro(pedido.valorCentavos ?? 0)} valorCentavos={pedido.valorCentavos ?? 0} atualizadoEm={pedido.atualizadoEm} />
                       )}
                       {escrita && situacaoDoPagamento(pedido) === "APROVADO" && <BotaoDesfazerAprovacao acao={desfazerAprovacaoAcao} pedidoId={pedido.id} referencia={pedido.referencia} />}
                     </dd>

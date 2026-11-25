@@ -88,6 +88,17 @@ export function efeitoNaAprovacao(pedido: CompraDoPedido, quem: QuemMexeNaCompra
 
 export const MENSAGEM_COMPRA_APROVADA = "O pagamento deste pedido já foi aprovado pelo time de eventos. Para corrigir a compra, peça ao time para desfazer a aprovação.";
 
+export const MENSAGEM_COMPRA_MUDOU = "A compra mudou depois que você abriu a tela. Confira de novo.";
+
+/**
+ * A aprovação fica presa ao que o aprovador viu: o mesmo valor e a mesma versão do pedido (atualizado_em, comparado em
+ * milissegundos, que é o que a tela recebe). Qualquer correção da compra entre a tela abrir e o clique invalida.
+ */
+export function aprovacaoValeParaACompra(pedido: { valorCentavos: number | null; atualizadoEm: Date }, visto: { valorCentavos: number; atualizadoEm: string }): boolean {
+  const versaoVista = Date.parse(visto.atualizadoEm);
+  return pedido.valorCentavos === visto.valorCentavos && Number.isFinite(versaoVista) && pedido.atualizadoEm.getTime() === versaoVista;
+}
+
 export type TotaisDoPagamento = { aAprovar: number; aAprovarCentavos: number; aprovados: number; aprovadoCentavos: number };
 
 /** A soma que a planilha faz: quanto está esperando a aprovação do time e quanto já foi aprovado para pagamento. */

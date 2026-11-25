@@ -91,6 +91,14 @@ describe.skipIf(!TEST_DATABASE_URL)("migration 0016 (acesso da SDC e aprovação
     await banco.sql(`update eventos.pedido_sdc set aprovado_em = null, aprovado_por = null, observacao_aprovacao = null where id = $1`, [emitidoId]);
   });
 
+  it("a compra tem um autor só: o time OU a SDC, nunca os dois", async () => {
+    const { id: daSdc } = await um(`insert into eventos.acesso_sdc (email, nome) values ('autor.sdc@exemplo.test', 'Autor SDC') returning id`);
+    await expect(banco.sql(`update eventos.pedido_sdc set retorno_registrado_pela_sdc = $2 where id = $1`, [emitidoId, daSdc])).rejects.toThrow(/pedido_sdc_retorno_autor_check/);
+    await banco.sql(`update eventos.pedido_sdc set retorno_registrado_por = null, retorno_registrado_pela_sdc = $2 where id = $1`, [emitidoId, daSdc]);
+    await expect(banco.sql(`update eventos.pedido_sdc set retorno_registrado_por = $2 where id = $1`, [emitidoId, usuarioId])).rejects.toThrow(/pedido_sdc_retorno_autor_check/);
+    await banco.sql(`update eventos.pedido_sdc set retorno_registrado_por = $2, retorno_registrado_pela_sdc = null where id = $1`, [emitidoId, usuarioId]);
+  });
+
   it("o histórico diz quem fez: USUARIO com usuário, SDC com a linha da lista, SISTEMA sem nenhum dos dois", async () => {
     sdcId = (await um(`insert into eventos.acesso_sdc (email, nome, criado_por) values ('atendimento.sdc@exemplo.test', 'SDC (teste)', $1) returning id`, [usuarioId])).id as string;
     const registrar = (origem: string, usuario: string | null, acesso: string | null) =>

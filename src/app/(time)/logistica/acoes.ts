@@ -126,6 +126,8 @@ export async function registrarRetornoDeHospedagemAcao(_estado: ResultadoAcao, f
   });
 }
 
+const reais = (centavos: number) => (centavos / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
 /** Voos, Hospedagem e a área da SDC mostram a situação do pagamento. */
 function revalidarPagamento(eventoId: string) {
   revalidarLogistica(eventoId);
@@ -136,7 +138,7 @@ export async function aprovarPagamentoAcao(_estado: ResultadoAcao, form: FormDat
   return executarAcao(form, aprovarPagamentoSchema, "logistica.aprovar_pagamento", async (dados, ator) => {
     const pedido = await aprovarPagamento(dados, ator, new Date());
     revalidarPagamento(pedido.eventoId);
-    return `Pagamento do pedido ${pedido.referencia} aprovado. A SDC já vê como aprovado.`;
+    return `Pagamento do pedido ${pedido.referencia} aprovado: ${reais(pedido.valorCentavos ?? 0)}. A SDC já vê como aprovado.`;
   });
 }
 

@@ -14,6 +14,7 @@ ALTER TABLE "eventos"."registro_acao" DROP COLUMN IF EXISTS "acesso_sdc_id";
 ALTER TABLE "eventos"."registro_acao" ADD CONSTRAINT "registro_acao_origem_check" CHECK ("origem" IN ('USUARIO', 'SISTEMA'));
 ALTER TABLE "eventos"."registro_acao" ADD CONSTRAINT "registro_acao_autoria_check" CHECK (("origem" = 'USUARIO') = ("usuario_id" IS NOT NULL));
 
+ALTER TABLE "eventos"."pedido_sdc" DROP CONSTRAINT IF EXISTS "pedido_sdc_retorno_autor_check";
 ALTER TABLE "eventos"."pedido_sdc" DROP CONSTRAINT IF EXISTS "pedido_sdc_aprovacao_obs_check";
 ALTER TABLE "eventos"."pedido_sdc" DROP CONSTRAINT IF EXISTS "pedido_sdc_aprovacao_check";
 ALTER TABLE "eventos"."pedido_sdc" DROP COLUMN IF EXISTS "observacao_aprovacao";

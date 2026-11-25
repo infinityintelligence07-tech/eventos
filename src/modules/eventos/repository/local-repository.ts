@@ -2,7 +2,7 @@ import { and, asc, eq, isNull, ne, or, sql } from "drizzle-orm";
 
 import type { Executor } from "@/core/db/database";
 import { type AutorDaAcao, autoriaDe, registrarAcao } from "@/core/db/registro-acao";
-import { evento, hospedagem, local } from "@/core/db/schema/eventos";
+import { evento, hospedagem, local, registroAcao } from "@/core/db/schema/eventos";
 
 import type { SalvarLocal, TipoDeLocal, UsoDoLocal } from "../domain/local";
 
@@ -17,6 +17,13 @@ export type LocalCadastrado = DadosDoLocal & { id: string; uso: UsoDoLocal; atua
 // compararia a coluna dela mesma.
 const usoEmEventos = sql<number>`(select count(*) from ${evento} e where e.local_id = "local"."id" and e.deleted_at is null)::int`;
 const usoEmHospedagens = sql<number>`(select count(*) from ${hospedagem} h where h.local_id = "local"."id")::int`;
+
+/** Comparação de nome e cidade: sem maiúsculas, sem acentos e com um espaço só entre as palavras. */
+const normalizado = (valor: unknown) =>
+  sql`translate(lower(regexp_replace(btrim(${valor}), '[[:space:]]+', ' ', 'g')), 'áàâãäéèêëíìîïóòôõöúùûüçñ', 'aaaaaeeeeiiiiooooouuuucn')`;
+
+/** O que a SDC informa do hotel (o resto do cadastro é do time, em Configurações › Locais e hotéis). */
+export type HotelInformado = Pick<DadosDoLocal, "nome" | "cidade" | "uf" | "logradouro" | "numero" | "bairro">;
 
 const COLUNAS = {
   id: local.id,
@@ -91,15 +98,48 @@ export function criarRepositorioLocal(executor: Executor) {
       return linha !== undefined;
     },
 
-    /** Hotel ativo com este nome nesta cidade (sem diferenciar maiúsculas), para não cadastrar o mesmo hotel duas vezes. */
+    /** Hotel ativo com este nome nesta cidade (comparação normalizada), para não cadastrar o mesmo hotel duas vezes. */
     async hotelComNome({ nome, cidade, uf }: Pick<DadosDoLocal, "nome" | "cidade" | "uf">): Promise<string | null> {
       const [linha] = await executor
         .select({ id: local.id })
         .from(local)
-        .where(and(isNull(local.deletedAt), eq(local.tipo, "HOTEL"), eq(local.uf, uf), sql`lower(${local.nome}) = lower(${nome})`, sql`lower(${local.cidade}) = lower(${cidade})`))
+        .where(and(isNull(local.deletedAt), eq(local.tipo, "HOTEL"), eq(local.uf, uf), sql`${normalizado(local.nome)} = ${normalizado(nome)}`, sql`${normalizado(local.cidade)} = ${normalizado(cidade)}`))
         .orderBy(asc(local.criadoEm))
         .limit(1);
       return linha?.id ?? null;
+    },
+
+    /**
+     * O hotel que a própria SDC cadastrou para a hospedagem deste pedido, se só essa hospedagem o usa. É o que ela pode
+     * corrigir no lugar de cadastrar outro (cada correção de nome criaria um registro novo em Locais e hotéis).
+     * Nulo = o hotel do pedido veio do time, é usado em outra hospedagem ou evento, ou ainda não há hotel.
+     */
+    async hotelDaSdcDoPedido(pedidoId: string): Promise<(HotelInformado & { id: string }) | null> {
+      const [linha] = await executor
+        .select({ id: local.id, nome: local.nome, cidade: local.cidade, uf: local.uf, logradouro: local.logradouro, numero: local.numero, bairro: local.bairro })
+        .from(hospedagem)
+        .innerJoin(local, eq(local.id, hospedagem.localId))
+        .where(
+          and(
+            eq(hospedagem.pedidoId, pedidoId),
+            eq(local.tipo, "HOTEL"),
+            isNull(local.deletedAt),
+            sql`exists (select 1 from ${registroAcao} r where r.entidade = 'LOCAL' and r.entidade_id = "local"."id" and r.acao = 'LOCAL_CRIADO' and r.origem = 'SDC')`,
+            sql`not exists (select 1 from ${hospedagem} outra where outra.local_id = "local"."id" and outra.pedido_id is distinct from ${pedidoId})`,
+            sql`not exists (select 1 from ${evento} e where e.local_id = "local"."id")`,
+          ),
+        );
+      return linha ?? null;
+    },
+
+    /** Corrige só o que a SDC informa (nome, cidade, UF e endereço); o resto do cadastro fica como o time deixou. */
+    async corrigirHotelInformado(localId: string, dados: HotelInformado, instante: Date): Promise<boolean> {
+      const alterados = await executor
+        .update(local)
+        .set({ nome: dados.nome, cidade: dados.cidade, uf: dados.uf, logradouro: dados.logradouro, numero: dados.numero, bairro: dados.bairro, atualizadoEm: instante })
+        .where(and(eq(local.id, localId), eq(local.tipo, "HOTEL"), isNull(local.deletedAt)))
+        .returning({ id: local.id });
+      return alterados.length === 1;
     },
 
     async criar(dados: DadosDoLocal, instante: Date): Promise<string> {

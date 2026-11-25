@@ -8,8 +8,10 @@ import {
   transicaoDoPedido,
 } from "../domain/pedido";
 import {
+  aprovacaoValeParaACompra,
   efeitoNaAprovacao,
   MENSAGEM_COMPRA_APROVADA,
+  MENSAGEM_COMPRA_MUDOU,
   mensagemDaRecusaDaAprovacao,
   podeAprovarPagamento,
   podeDesfazerAprovacao,
@@ -63,7 +65,8 @@ export type TrechoEmitido = {
   localizador: string;
   partidaEm: Date;
   chegadaEm: Date;
-  cartaoEmbarqueUrl: string | null;
+  /** Ausente = não mexe na coluna (a SDC nunca grava nem apaga o link; só o time). */
+  cartaoEmbarqueUrl?: string | null;
 };
 
 export type RegistroDoPedido = {
@@ -114,8 +117,8 @@ export type RepositorioPedidos = {
       aprovacaoCai?: boolean;
     },
   ): Promise<boolean>;
-  /** Compare-and-set: aprova só se o pedido ainda está EMITIDO, com valor e sem aprovação. */
-  aprovarPagamento(pedidoId: string, aprovacao: { usuarioId: string; instante: Date; observacao: string | null }): Promise<boolean>;
+  /** Compare-and-set: aprova só se o pedido ainda está EMITIDO, sem aprovação, com o valor e a versão que o aprovador viu. */
+  aprovarPagamento(pedidoId: string, visto: { valorCentavos: number; atualizadoEm: string }, aprovacao: { usuarioId: string; instante: Date; observacao: string | null }): Promise<boolean>;
   /** Compare-and-set: desfaz só se ainda está aprovado. */
   desfazerAprovacao(pedidoId: string, instante: Date): Promise<boolean>;
   registrarEmissaoDosTrechos(pedidoId: string, trechos: TrechoEmitido[], instante: Date): Promise<void>;
@@ -275,7 +278,7 @@ export async function cancelarPedido(repo: RepositorioPedidos, entrada: Cancelar
  */
 export async function registrarRetornoDeVoo(
   repo: RepositorioPedidos,
-  entrada: RegistrarRetornoDeVoo,
+  entrada: Omit<RegistrarRetornoDeVoo, "trechos"> & { trechos: (Omit<RegistrarRetornoDeVoo["trechos"][number], "cartaoEmbarqueUrl"> & { cartaoEmbarqueUrl?: string })[] },
   { autor, instante }: ContextoDoRetorno,
 ): Promise<PedidoTravado> {
   const pedido = await pedidoTravado(repo, entrada.pedidoId);
@@ -305,7 +308,8 @@ export async function registrarRetornoDeVoo(
       localizador: trecho.localizador,
       partidaEm: instanteDeSaoPaulo(trecho.partidaEm),
       chegadaEm: instanteDeSaoPaulo(trecho.chegadaEm),
-      cartaoEmbarqueUrl: trecho.cartaoEmbarqueUrl ?? null,
+      // O link do cartão de embarque é só do time: quando quem registra é a SDC, a coluna fica como estava.
+      ...(quemMexe(autor) === "TIME" ? { cartaoEmbarqueUrl: trecho.cartaoEmbarqueUrl ?? null } : {}),
     })),
     instante,
   );
@@ -399,13 +403,18 @@ export async function registrarRetornoDeHospedagem(
  */
 export async function aprovarPagamento(
   repo: RepositorioPedidos,
-  entrada: { pedidoId: string; observacao?: string },
+  entrada: { pedidoId: string; valorCentavos: number; atualizadoEm: string; observacao?: string },
   { usuarioId, instante }: ContextoDaAcao,
 ): Promise<PedidoTravado> {
   const pedido = await pedidoTravado(repo, entrada.pedidoId);
   const verificacao = podeAprovarPagamento(pedido);
   if (!verificacao.ok) throw new ErroDaLogistica(mensagemDaRecusaDaAprovacao(verificacao.motivo));
-  if (!(await repo.aprovarPagamento(pedido.id, { usuarioId, instante, observacao: entrada.observacao ?? null }))) throw new LogisticaMudouError(`o pedido ${pedido.referencia} mudou`);
+  // A aprovação vale para o que o aprovador viu: mesmo valor e mesma versão do pedido (a SDC pode ter corrigido a
+  // compra entre a tela abrir e o clique). O compare-and-set confere os dois de novo na gravação.
+  const visto = { valorCentavos: entrada.valorCentavos, atualizadoEm: entrada.atualizadoEm };
+  if (!aprovacaoValeParaACompra(pedido, visto) || !(await repo.aprovarPagamento(pedido.id, visto, { usuarioId, instante, observacao: entrada.observacao ?? null }))) {
+    throw new ErroDaLogistica(MENSAGEM_COMPRA_MUDOU);
+  }
   await repo.registrar({
     pedidoId: pedido.id,
     eventoId: pedido.eventoId,

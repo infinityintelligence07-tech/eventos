@@ -734,19 +734,35 @@ compra e registra o valor, o time aprova o pagamento dizendo que usou**. Ela vê
 
 ### 15.2 Resolução de quem entrou
 
-`situacaoDoAtor()` ganhou um sexto resultado, `{ situacao: "SDC", sdc: AtorSdc }`. A decisão é uma função pura
-(`decidirQuemEntrou`, `src/core/auth/sdc.ts`), lida do banco a cada requisição:
+`situacaoDoAtor()` ganhou um sexto resultado, `{ situacao: "SDC", sdc: AtorSdc }`. As decisões são funções puras
+(`decidirQuemEntrou` e `sessaoAutenticadaPeloGoogle`, `src/core/auth/sdc.ts`), com tudo lido de novo a cada requisição:
 
-1. **O time vem primeiro.** Resolve-se o ator do time como antes (§3.2). Se deu `OK`, é do time e acabou: quem é do
-   time continua sendo do time mesmo que o e-mail também esteja na lista da SDC.
-2. Só quando **não** é do time (`SEM_CADASTRO` ou `SEM_PERFIL`) a lista da SDC é consultada, pelo e-mail em minúsculas
-   e sem espaços. Linha `ativo = true` → SDC. Sem linha ou desativada → o resultado do passo 1, sem mudança.
-3. **Desativar corta no próximo clique:** não há sessão própria da SDC nem cache entre requisições; a linha é lida de
+1. **O time vem primeiro.** Resolve-se o ator do time como antes (§3.2). Se deu `OK`, é do time e acabou.
+2. **Gente da IAM nunca é SDC** (decisão da líder, 25/11/2026). Se o e-mail existe em `core.usuario` (ativo ou não,
+   apagado ou não), a lista da SDC **não é consultada**: usuário sem perfil do Eventos continua `SEM_PERFIL` e usuário
+   inativo continua `SEM_CADASTRO`. Quem perde o perfil ou é desativado fica sem acesso; não "vira" SDC. A tela recusa
+   incluir (e reativar) esse e-mail: "Este e-mail é de alguém da IAM. O acesso dela é em Acesso do time."
+3. Só para e-mail que **não existe** em `core.usuario` a lista é consultada, pelo e-mail em minúsculas e sem espaços.
+   Linha `ativo = true` → candidata a SDC. Sem linha ou desativada → `SEM_CADASTRO`.
+4. **A sessão precisa ter sido autenticada pelo Google** (`sessaoAutenticadaPeloGoogle`, função pura, fail-closed).
+   O Supabase aceita outras formas de criar sessão (e-mail e senha, código por e-mail, anônimo) e o app, sozinho, só
+   via "e-mail confirmado". Para ser SDC exige-se, tudo junto: usuário não anônimo com e-mail confirmado; uma
+   identidade `google` em `getUser().identities` com **o mesmo e-mail** (e não marcada como não verificada); e o token
+   desta sessão (`getClaims()`, que confere a assinatura) com `sub` do mesmo usuário e `amr` contendo `oauth` e nenhum
+   método de senha, código, link mágico, anônimo, SSO ou recuperação. Informação ausente, erro do `getClaims()` ou
+   formato inesperado → não é SDC.
+5. **Desativar corta no próximo clique:** não há sessão própria da SDC nem cache entre requisições; a linha é lida de
    novo em cada página e em cada action.
 
-Onde a lista é consultada: no login pelo **Google** (Supabase, com e-mail confirmado pelo provedor) e, no modo local,
-pelo cookie do "Entrar como" (que guarda o id da linha de `acesso_sdc`). **Não** é consultada na sessão por e-mail e
-senha do IAM Control (docs/10): aquele caminho só resolve o time.
+Onde a lista é consultada: no login pelo **Google** (passos acima) e, no modo local, pelo cookie do "Entrar como" (que
+guarda o id da linha de `acesso_sdc`; vale a mesma regra do passo 2 e a tela não oferece linhas de gente da IAM).
+**Não** é consultada na sessão por e-mail e senha do IAM Control (docs/10): aquele caminho só resolve o time.
+
+**O time não mudou nesta rodada:** para o time o app continua aceitando qualquer sessão do Supabase com e-mail
+confirmado (o e-mail precisa existir em `core.usuario` com perfil). **Recomendação registrada:** aplicar ao time a
+mesma exigência de provedor (identidade `google` com o mesmo e-mail + `amr`), ou então garantir no painel do Supabase
+que só o Google está ligado (§15.8). Enquanto isso não for feito, a proteção do time contra uma conta criada por
+senha com o e-mail de alguém depende de "Confirm email" estar ligado no projeto.
 
 `AtorSdc = { acessoSdcId, nome, email, origem }` é um tipo **separado** de `Ator`: não tem `usuarioId` nem `perfis`,
 então não serve em `pode()`, em `executarAcao` nem em nenhum fluxo do time. O compilador recusa a troca.
@@ -778,8 +794,21 @@ time nem o banco).
   no que a SDC recebe, que não há nenhum uuid, e fecha a **lista de campos** (campo novo quebra o teste).
 - **Faz:** registrar ou corrigir a compra de um pedido que já existe, enquanto o time não aprovou
   (`registrarCompraDeVooAcao`, `registrarReservaAcao`). Voo: companhia, número do voo, código da reserva, horários e
-  valor. Hospedagem: o hotel (nome, cidade, UF; cria o local `HOTEL` se não existir, reaproveita se já existir), número
-  da reserva, valor e forma de pagamento. As regras são as mesmas do registro feito pelo time (mesmo serviço).
+  valor. Hospedagem: o hotel (nome, cidade, UF), número da reserva, valor e forma de pagamento. As regras de transição
+  são as mesmas do registro feito pelo time (mesmo serviço), com um schema próprio e mais estreito:
+  - **Lista fechada de campos.** O trecho da SDC tem só sentido, companhia, número do voo, localizador, partida e
+    chegada. **Não tem o link do cartão de embarque**: a SDC não grava nem apaga `cartao_embarque_url` (só o time põe
+    link; o serviço não toca na coluna quando o autor é a SDC). Um teste compara as colunas antes e depois da compra.
+  - **Textos sem link.** Companhia, nome e endereço do hotel, número da reserva e forma de pagamento vão para copys
+    que o time manda ao staff: recusam `://`, `www.`, caracteres de controle e quebra de linha ("Não use links nem
+    endereços de site neste campo."). A observação aceita várias linhas, mas não link. A companhia vem de uma lista
+    curta (Azul, LATAM, GOL) ou "Outra" com texto validado.
+  - **Hotel sem multiplicar cadastro.** Mesmo nome + cidade + UF (comparação sem maiúsculas, acentos e espaços
+    repetidos) reaproveita o hotel que já existe, sem alterá-lo. Ao corrigir a reserva, o hotel que a própria SDC
+    criou para aquele pedido (e que só ele usa) é **corrigido** (`LOCAL_ALTERADO`, origem `SDC`) em vez de nascer
+    outro. Hotel cadastrado pelo time nunca é alterado pela SDC.
+  - **Só no que ela enxerga.** A escrita aplica o mesmo recorte de período da lista (eventos terminados há até 120
+    dias): fora dele, "Pedido não encontrado".
 - **Não faz:** criar, alterar ou cancelar pedido, mexer em quartos, aprovar. Não há action para isso em `/sdc`, e as do
   time recusam a SDC (§15.3). Pedido cancelado ou já aprovado é recusado pelo serviço.
 
@@ -790,6 +819,10 @@ Estado derivado, função pura `situacaoDoPagamento` (`src/modules/logistica/dom
 
 - Só se aprova compra registrada **com valor**; cancelado não se aprova. A tela pede a confirmação "Confirmo que usamos
   e que este valor pode ser pago" (obrigatória no schema) e aceita uma observação.
+- **A aprovação fica presa ao que o aprovador viu:** o formulário leva o `valorCentavos` e a versão do pedido
+  (`atualizadoEm`) que a tela mostrou; o serviço e o compare-and-set do banco conferem os dois. Se a SDC corrigiu a
+  compra entre a tela abrir e o clique: "A compra mudou depois que você abriu a tela. Confira de novo." A mensagem de
+  sucesso diz o valor aprovado.
 - A aprovação **cai sozinha** quando o time corrige a compra, altera ou cancela o pedido (registro `APROVACAO_DESFEITA`).
 - Com o pagamento aprovado a SDC não altera mais nada. O time pode desfazer a aprovação.
 - Permissão `logistica.aprovar_pagamento`, dos dois perfis. O banco reforça: `aprovado_em` só com `situacao = 'EMITIDO'`
@@ -814,21 +847,36 @@ Só acrescenta; nenhuma linha existente muda. Os pedidos já emitidos ficam "a a
 | Objeto | O que muda |
 |---|---|
 | `eventos.acesso_sdc` (nova) | RLS ligada. `app_eventos`: `SELECT, INSERT` e `UPDATE (nome, ativo, atualizado_em)`; sem `DELETE`, sem trocar e-mail. `app_eventos_leitura`: `SELECT`. `app_eventos_copia` e `app_eventos_worker`: nada. |
-| `eventos.pedido_sdc` | `retorno_registrado_pela_sdc`, `aprovado_em`, `aprovado_por`, `observacao_aprovacao` + dois `CHECK`s. |
+| `eventos.pedido_sdc` | `retorno_registrado_pela_sdc`, `aprovado_em`, `aprovado_por`, `observacao_aprovacao` + três `CHECK`s (aprovação só de `EMITIDO` com valor; observação só com aprovação; `pedido_sdc_retorno_autor_check`: a compra tem um autor só, time **ou** SDC). |
 | `eventos.registro_acao` | `acesso_sdc_id`; origem `SDC`; `CHECK` de autoria novo (as linhas antigas continuam válidas). |
 
 O `.down.sql` **para** se o histórico já tiver ação de origem `SDC` (voltar apagaria quem fez). Teste:
 `src/core/db/__tests__/acesso-da-sdc.integracao.test.ts` (down → dados antigos → up; privilégios por papel).
 
 **O banco não separa SDC de time:** as duas áreas usam os mesmos papéis (`app_eventos_leitura` e `app_eventos`). A
-separação é feita no servidor do app (§15.3 e §15.4). Ver §15.9.
+separação é feita no servidor do app (§15.3 e §15.4). **Passo futuro registrado (não feito):** um papel de banco só
+da SDC (`app_eventos_sdc`), com `SELECT` por coluna nas tabelas dos pedidos e `UPDATE` só nas colunas da compra, e um
+pool próprio para `/sdc`. Ver §15.9.
 
 ### 15.8 Ações manuais antes de liberar para a SDC
 
 1. Aplicar a migration `0016` em produção (com o resto do deploy).
-2. Supabase Auth: garantir que a conta Google da SDC consegue criar sessão (cadastro aberto **ou** usuário criado antes
-   pelo painel; §2.4). **Isto não foi testado com um e-mail de fora de verdade.**
+2. **Painel do Supabase (projeto `iam-pessoas`, Authentication)** — conferir com o Lucas, porque vale para o GH também:
+   - **Providers:** só **Google** (e o que o GH realmente usa) ligado. Desligar o que não se usa: e-mail e senha se
+     ninguém entra assim por este projeto, telefone, link mágico/OTP, Web3, outros OAuth.
+   - **Confirm email: ligado.** É o que impede alguém de criar por senha uma conta "confirmada" com o e-mail de outra
+     pessoa. O ator SDC já não depende disso (passo 4 da §15.2); o time ainda depende.
+   - **Secure email change: ligado** (trocar o e-mail exige confirmar nos dois endereços).
+   - **Allow anonymous sign-ins: desligado.**
+   - **Allow manual linking: desligado**, e conferir que a vinculação automática de identidades só acontece com
+     e-mail verificado (padrão do Supabase).
+   - **Cadastro:** ou "Allow new users to sign up" ligado (a conta Google da SDC cria o usuário no primeiro login), ou
+     desligado **e** o usuário da SDC criado antes — neste caso a identidade `google` precisa nascer no login dela, o
+     que não acontece com cadastro fechado; **testar antes de escolher** (§2.4).
 3. A líder inclui os e-mails em Configurações › Acesso da SDC e pede um teste de entrada à agência.
+   **O login de um e-mail de fora, de verdade, não foi testado**, nem o formato real de `identities` e `amr` do projeto:
+   se o teste falhar com a pessoa caindo em "sem cadastro", é a exigência do passo 4 da §15.2 recusando — conferir o
+   que `getUser()` e `getClaims()` devolvem para ela antes de mexer na regra.
 4. Contrato com a SDC como operadora de dados (§9.2): agora ela vê nomes de quem viaja dentro do sistema.
 
 ### 15.9 Riscos conhecidos
@@ -841,9 +889,12 @@ separação é feita no servidor do app (§15.3 e §15.4). Ver §15.9.
   com o GH.
 - **E-mail é a identidade:** quem controla a caixa do e-mail listado entra como SDC. Vale o e-mail confirmado pelo
   Google; e-mail compartilhado da agência = várias pessoas com o mesmo nome no histórico. Preferir um e-mail por pessoa.
-- **Conta da IAM sem perfil do Eventos que esteja na lista** entra como SDC (por desenho: a lista é a decisão da líder).
+- **`amr` depois de renovar o token e vínculo de identidades:** a regra aceita métodos desconhecidos junto de `oauth`
+  (para não derrubar a SDC quando o Supabase acrescenta a renovação do token) e recusa os de senha/código/anônimo. Se
+  o projeto ligar outro provedor OAuth além do Google, uma conta com as duas identidades e o mesmo e-mail passaria
+  entrando pelo outro provedor. Mitigação: só o Google ligado (§15.8).
 - **Sem limite de valor nem dupla aprovação:** qualquer pessoa do time aprova qualquer valor, inclusive de um pedido
   que ela mesma fez.
-- **Textos livres da SDC** (observação, nome do hotel, forma de pagamento) aparecem nas telas do time; saem escapados
-  pelo React e têm limite de tamanho, mas são conteúdo de terceiros.
+- **Textos livres da SDC** continuam sendo conteúdo de terceiros nas telas e copys do time: sem link, sem quebra de
+  linha e com limite de tamanho (§15.4), mas o texto em si não é conferido (um nome de hotel errado vai para a copy).
 - **Sem limite de tentativas** próprio nas actions da SDC (além do que o provedor e o Next oferecem).

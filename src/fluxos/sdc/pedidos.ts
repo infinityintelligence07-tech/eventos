@@ -101,7 +101,7 @@ const PEDIDO_NAO_ENCONTRADO = "Pedido não encontrado. Recarregue a página.";
  * Mesmas validações e transições do registro feito pelo time; pedido cancelado ou já aprovado é recusado pelo serviço.
  */
 export async function registrarCompraDeVoo({ referencia, ...compra }: RegistrarCompraDeVooPelaSdc, sdc: AtorSdcDaEscrita, agora: Date): Promise<{ referencia: string }> {
-  const pedidoId = await criarRepositorioDaSdc(await bancoParaLeitura()).idDoPedido(referencia, "VOO");
+  const pedidoId = await criarRepositorioDaSdc(await bancoParaLeitura()).idDoPedido(referencia, "VOO", { desde: desde(agora) });
   if (!pedidoId) throw new RegraDeNegocioError(PEDIDO_NAO_ENCONTRADO);
   await registrarRetornoDeVooPelaSdc({ pedidoId, ...compra }, sdc, agora);
   return { referencia };
@@ -109,7 +109,7 @@ export async function registrarCompraDeVoo({ referencia, ...compra }: RegistrarC
 
 /** A SDC registra (ou corrige) a reserva de uma hospedagem: o hotel, o número da reserva, o valor total e o pagamento. */
 export async function registrarReservaDeHospedagem({ referencia, hotel, ...reserva }: RegistrarReservaPelaSdc, sdc: AtorSdcDaEscrita, agora: Date): Promise<{ referencia: string }> {
-  const pedidoId = await criarRepositorioDaSdc(await bancoParaLeitura()).idDoPedido(referencia, "HOSPEDAGEM");
+  const pedidoId = await criarRepositorioDaSdc(await bancoParaLeitura()).idDoPedido(referencia, "HOSPEDAGEM", { desde: desde(agora) });
   if (!pedidoId) throw new RegraDeNegocioError(PEDIDO_NAO_ENCONTRADO);
   await registrarRetornoDeHospedagemPelaSdc({ pedidoId, novoHotel: hotel, ...reserva }, sdc, agora);
   return { referencia };

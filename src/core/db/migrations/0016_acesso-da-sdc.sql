@@ -4,7 +4,8 @@
 --   1. eventos.acesso_sdc: a lista de e-mails da agência, mantida pela líder em Configurações. A pessoa da SDC é de fora
 --      da empresa: não tem core.usuario nem perfil do GH (nada é gravado no core).
 --   2. pedido_sdc: quem da SDC lançou a compra (retorno_registrado_pela_sdc) e a aprovação do pagamento pelo time
---      (aprovado_em, aprovado_por, observacao_aprovacao). O banco só aceita aprovação de pedido EMITIDO com valor.
+--      (aprovado_em, aprovado_por, observacao_aprovacao). O banco só aceita aprovação de pedido EMITIDO com valor,
+--      e a compra tem um autor só: o time (retorno_registrado_por) OU a SDC, nunca os dois.
 --   3. registro_acao: origem 'SDC' com acesso_sdc_id, para o histórico dizer qual e-mail da SDC fez o quê. As linhas
 --      antigas (USUARIO e SISTEMA) continuam válidas nos CHECKs novos.
 CREATE TABLE "eventos"."acesso_sdc" (
@@ -37,6 +38,7 @@ CREATE INDEX "pedido_sdc_aprovado_por_idx" ON "eventos"."pedido_sdc" USING btree
 CREATE INDEX "registro_acao_acesso_sdc_idx" ON "eventos"."registro_acao" USING btree ("acesso_sdc_id");--> statement-breakpoint
 ALTER TABLE "eventos"."pedido_sdc" ADD CONSTRAINT "pedido_sdc_aprovacao_check" CHECK ("eventos"."pedido_sdc"."aprovado_em" IS NULL OR ("eventos"."pedido_sdc"."situacao" = 'EMITIDO' AND "eventos"."pedido_sdc"."valor_centavos" IS NOT NULL));--> statement-breakpoint
 ALTER TABLE "eventos"."pedido_sdc" ADD CONSTRAINT "pedido_sdc_aprovacao_obs_check" CHECK ("eventos"."pedido_sdc"."observacao_aprovacao" IS NULL OR ("eventos"."pedido_sdc"."aprovado_em" IS NOT NULL AND length("eventos"."pedido_sdc"."observacao_aprovacao") <= 500));--> statement-breakpoint
+ALTER TABLE "eventos"."pedido_sdc" ADD CONSTRAINT "pedido_sdc_retorno_autor_check" CHECK ("eventos"."pedido_sdc"."retorno_registrado_por" IS NULL OR "eventos"."pedido_sdc"."retorno_registrado_pela_sdc" IS NULL);--> statement-breakpoint
 ALTER TABLE "eventos"."registro_acao" ADD CONSTRAINT "registro_acao_origem_check" CHECK ("eventos"."registro_acao"."origem" IN ('USUARIO', 'SISTEMA', 'SDC'));--> statement-breakpoint
 ALTER TABLE "eventos"."registro_acao" ADD CONSTRAINT "registro_acao_autoria_check" CHECK (("eventos"."registro_acao"."origem" = 'USUARIO') = ("eventos"."registro_acao"."usuario_id" IS NOT NULL) AND ("eventos"."registro_acao"."origem" = 'SDC') = ("eventos"."registro_acao"."acesso_sdc_id" IS NOT NULL));
 --> statement-breakpoint

@@ -917,7 +917,7 @@ Toast: "Voo do pedido SDC-000013 registrado. A copy de hospedagem da pessoa foi 
 
 **Pagamento: time solicita, SDC registra o valor, time aprova (25/11/2026).** Desde que a SDC tem acesso (§10.5), a compra pode ser registrada **por ela** ou, como antes, pelo time em nome dela. A linha mostra quem registrou ("Compra registrada pela SDC ([nome da lista])" ou o selo "Registrado pelo time").
 - **Chip de pagamento** ao lado do preço: "A aprovar" (compra registrada com valor), "Aprovado para pagamento" (com a data) ou nada (sem compra). Cancelado não tem pagamento.
-- **"Aprovar pagamento"** (na linha e no painel do pedido, só quando está "a aprovar"): confirmação com o resumo do pedido e do valor, a caixa obrigatória **"Confirmo que usamos e que este valor pode ser pago"** e uma observação opcional. Toast: "Pagamento do pedido SDC-000013 aprovado. A SDC já vê como aprovado."
+- **"Aprovar pagamento"** (na linha e no painel do pedido, só quando está "a aprovar"): confirmação com o resumo do pedido e do valor, a caixa obrigatória **"Confirmo que usamos e que este valor pode ser pago"** e uma observação opcional. Toast: "Pagamento do pedido SDC-000013 aprovado: R$ 980,00. A SDC já vê como aprovado." Se a SDC corrigiu a compra depois que a tela abriu, a aprovação é recusada: "A compra mudou depois que você abriu a tela. Confira de novo."
 - **"Desfazer aprovação"** (quando aprovado): volta para "a aprovar" e a SDC pode corrigir a compra.
 - **"Corrigir compra"**: com a compra registrada, o time pode corrigir os dados; se o pagamento estava aprovado, a aprovação cai e precisa ser dada de novo. O mesmo vale para alterar ou cancelar o pedido.
 - **Totais** no topo da tela: "Pagamento a aprovar: R$ … · N compras" e "Aprovado para pagamento: R$ … · N compras", como a soma da planilha. Compras "a aprovar" de eventos que já passaram continuam na lista até serem aprovadas.
@@ -990,10 +990,10 @@ Vazio: "Nenhum crédito de hotel registrado."
 **Voos (`/sdc/voos`)** — "Passagens pedidas pelo time de eventos. Registre a compra e o valor de cada pedido; o time confere e aprova o pagamento."
 - Totais ("Pagamento a aprovar" e "Aprovado para pagamento") e filtro por situação: **A comprar | Aguardando aprovação | Aprovado | Cancelado | Todos**.
 - Pedidos por mês e por evento ("16 a 18/12 · IPR_POA_12 · Imersão · Centro de Eventos — Porto Alegre (RS)"). Cada pedido: referência `SDC-…`, nome do passageiro, o que o time pediu por trecho ("Ida: VCP → POA em 14/12 (manhã)"), a observação do time e, depois da compra, companhia, voo, horários, reserva e valor.
-- **"Registrar compra"** (a comprar) ou **"Corrigir compra"** (aguardando aprovação): por trecho, Companhia, Número do voo, Código da reserva (localizador), Partida e Chegada; "Valor total da compra (R$)" e "Observação para o time (opcional)".
+- **"Registrar compra"** (a comprar) ou **"Corrigir compra"** (aguardando aprovação): por trecho, Companhia (lista: Azul, LATAM, GOL ou "Outra", que abre "Nome da companhia"), Número do voo, Código da reserva (localizador), Partida e Chegada (sem link de cartão de embarque: só o time põe); "Valor total da compra (R$)" e "Observação para o time (opcional)".
 - Situação: "A comprar", "Aguardando aprovação do time", "Aprovado para pagamento em dd/mm" (só leitura), "Cancelado" (só leitura). Pedido alterado pelo time depois da compra: "O time alterou este pedido depois da compra. Confira o trecho e registre a compra de novo."
 
-**Hospedagem (`/sdc/hospedagem`)** — cada pedido mostra o evento, check-in e check-out, quantos quartos e pessoas e a lista de quartos com os nomes de quem divide. **"Registrar reserva"** (ou "Corrigir reserva"): o hotel (Nome, Cidade, UF e, se quiser, rua, número e bairro), Número da reserva, Valor total e Forma de pagamento (padrão "Faturado SDC").
+**Hospedagem (`/sdc/hospedagem`)** — cada pedido mostra o evento, check-in e check-out, quantos quartos e pessoas e a lista de quartos com os nomes de quem divide. **"Registrar reserva"** (ou "Corrigir reserva"): o hotel (Nome, Cidade, UF e, se quiser, rua, número e bairro), Número da reserva, Valor total e Forma de pagamento (padrão "Faturado SDC"). Os textos são de uma linha e não aceitam links ("Não use links nem endereços de site neste campo."). Corrigir o nome do hotel corrige o mesmo cadastro, sem criar outro.
 
 **O que não aparece para a SDC:** telefone, e-mail, documento, endereço, função, escala, custos, histórico, quem do time pediu ou aprovou. Ela não cria, não altera e não cancela pedido, nem mexe nos quartos.
 
@@ -1218,6 +1218,7 @@ Cabeçalho: "Configurações" / "Valores e modelos usados pelo sistema. Mudança
 
 - Cartão "Pessoas da SDC com acesso à área de voos e hospedagem": tabela com Nome, E-mail, situação (chip "Ativo" ou "Desativado: não entra") e, para a líder, "Desativar" / "Reativar". O time vê a lista sem controles ("A líder inclui os e-mails da agência.").
 - Cartão "Incluir alguém da SDC" (só a líder, `config.acesso_da_sdc`): **Nome** e **E-mail (conta Google)** ("O mesmo e-mail com que a pessoa entra no Google."). Ajuda: "A pessoa não precisa de cadastro na IAM: basta o e-mail da conta Google dela. O e-mail não muda depois; para trocar, desative este e inclua o novo."
+- E-mail de alguém da IAM (qualquer conta do cadastro, ativa ou não) é recusado: "Este e-mail é de alguém da IAM. O acesso dela é em Acesso do time."
 - Desativar corta o acesso no próximo clique da pessoa. E-mail repetido é recusado ("Este e-mail já está na lista da SDC."; se estiver desativado, a mensagem manda reativar).
 - Vazio: "Ninguém da SDC tem acesso ainda." / "Inclua abaixo o e-mail de quem cuida dos pedidos na agência."
 

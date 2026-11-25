@@ -1,7 +1,8 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 
 import type { Executor } from "@/core/db/database";
 import { registrarAcao } from "@/core/db/registro-acao";
+import { usuario } from "@/core/db/schema/core";
 import { acessoSdc } from "@/core/db/schema/eventos";
 
 // eventos.acesso_sdc: a lista de e-mails da SDC (docs/09 §15). O e-mail não muda depois de incluído e ninguém é
@@ -21,6 +22,16 @@ export function criarRepositorioAcessoSdc(executor: Executor) {
     async porEmail(email: string): Promise<AcessoDaSdc | null> {
       const [linha] = await executor.select(COLUNAS).from(acessoSdc).where(eq(acessoSdc.email, email));
       return linha ?? null;
+    },
+
+    /** O e-mail (já normalizado) existe em core.usuario, ativo ou não: é de alguém da IAM e nunca entra na lista da SDC. */
+    async emailEhDaIam(email: string): Promise<boolean> {
+      const [linha] = await executor
+        .select({ id: usuario.id })
+        .from(usuario)
+        .where(sql`lower(btrim(${usuario.email})) = ${email}`)
+        .limit(1);
+      return Boolean(linha);
     },
 
     async travar(acessoSdcId: string): Promise<AcessoDaSdc | null> {

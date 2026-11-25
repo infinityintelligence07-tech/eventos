@@ -147,7 +147,8 @@ async function hotelDoRetorno(
   { localId, novoHotel }: Pick<RegistrarRetornoDeHospedagem, "localId" | "novoHotel">,
   autor: AutorDaAcao,
   agora: Date,
-  reaproveitar: boolean,
+  /** Preenchido = quem registra é a SDC: reaproveita hotel igual e corrige o hotel que ela mesma criou para este pedido. */
+  daSdc: { pedidoId: string } | null,
 ): Promise<string> {
   if (!novoHotel) {
     if (!localId) throw new RegraDeNegocioError("Escolha o hotel que a SDC reservou ou cadastre um novo.");
@@ -170,8 +171,17 @@ async function hotelDoRetorno(
   };
   const existente = await locais.hotelComNome(dados);
   if (existente) {
-    if (reaproveitar) return existente;
+    if (daSdc) return existente;
     throw new RegraDeNegocioError(`Já existe o hotel "${dados.nome}" em ${dados.cidade}/${dados.uf}. Escolha-o na lista em vez de cadastrar de novo.`);
+  }
+  // Correção da reserva pela SDC: o hotel que ela mesma cadastrou para este pedido é corrigido, em vez de nascer
+  // outro registro em Locais e hotéis a cada nome diferente.
+  const doPedido = daSdc ? await locais.hotelDaSdcDoPedido(daSdc.pedidoId) : null;
+  if (doPedido) {
+    const informado = { nome: dados.nome, cidade: dados.cidade, uf: dados.uf, logradouro: dados.logradouro, numero: dados.numero, bairro: dados.bairro };
+    if (!(await locais.corrigirHotelInformado(doPedido.id, informado, agora))) throw new RegraDeNegocioError("O hotel deste pedido mudou. Recarregue a página.");
+    await locais.registrar(doPedido.id, { acao: "LOCAL_ALTERADO", ...autor, dados: { mudancas: mudancasDoLocal(doPedido, informado), origem: "correção da SDC" } });
+    return doPedido.id;
   }
   const hotelId = await locais.criar(dados, agora);
   await locais.registrar(hotelId, { acao: "LOCAL_CRIADO", ...autor, dados: { mudancas: mudancasDoLocal(null, dados), origem: "retorno da SDC" } });
@@ -186,7 +196,7 @@ export function registrarRetornoDeHospedagem({ localId, novoHotel, ...retorno }:
   const autor = { usuarioId: ator.usuarioId };
   return traduzirErros(() =>
     transacao(ator, async (tx) => {
-      const hotelId = await hotelDoRetorno(tx, { localId, novoHotel }, autor, agora, false);
+      const hotelId = await hotelDoRetorno(tx, { localId, novoHotel }, autor, agora, null);
       return servicoDePedidos.registrarRetornoDeHospedagem(criarRepositorioPedidos(tx), { ...retorno, localId: hotelId }, { autor, instante: agora });
     }),
   );
@@ -201,7 +211,7 @@ export function registrarRetornoDeHospedagemPelaSdc(retorno: Omit<RegistrarRetor
   const { novoHotel, ...resto } = retorno;
   return traduzirErros(() =>
     transacao(sdc, async (tx) => {
-      const hotelId = await hotelDoRetorno(tx, { novoHotel }, autor, agora, true);
+      const hotelId = await hotelDoRetorno(tx, { novoHotel }, autor, agora, { pedidoId: resto.pedidoId });
       return servicoDePedidos.registrarRetornoDeHospedagem(criarRepositorioPedidos(tx), { ...resto, localId: hotelId }, { autor, instante: agora });
     }),
   );

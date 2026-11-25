@@ -15,6 +15,7 @@ import {
   resolverAcessoPorId,
   resolverAtorPorEmail,
   segredoDaSessao,
+  sessaoAutenticadaPeloGoogle,
   usuarioDoCookieLocal,
 } from "@/core/auth";
 import { type Permissao, pode } from "@/core/autorizacao";
@@ -75,8 +76,18 @@ async function situacaoDaSessao(): Promise<SituacaoDoAtor> {
   if (error || !user) return { situacao: "SEM_SESSAO", destino: "/login" };
   // O Google confirma o e-mail; sem confirmação, o e-mail não identifica ninguém.
   if (!user.email || !user.email_confirmed_at) return { situacao: "SEM_CADASTRO" };
-  // Só aqui (login pelo provedor, com e-mail confirmado) a lista da SDC é consultada, e só para quem não é do time.
-  return resolverAcessoPorEmail(user.email, await bancoParaLeitura());
+  // Só aqui a lista da SDC é consultada, só para e-mail que não é de ninguém da IAM e só se ESTA sessão foi autenticada
+  // pelo Google (docs/09 §15.2). As claims vêm de getClaims(), que confere a assinatura do token; erro = não é SDC.
+  return resolverAcessoPorEmail(user.email, await bancoParaLeitura(), {
+    pelaContaGoogle: async () => {
+      try {
+        const { data, error: erroDasClaims } = await supabase.auth.getClaims();
+        return !erroDasClaims && sessaoAutenticadaPeloGoogle(user, data?.claims);
+      } catch {
+        return false;
+      }
+    },
+  });
 }
 
 /**

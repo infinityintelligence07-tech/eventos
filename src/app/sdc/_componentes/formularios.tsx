@@ -5,7 +5,7 @@ import { useState } from "react";
 import { type AcaoDoFormulario, ErroDoFormulario, useAcao } from "@/app/(time)/_componentes/ui";
 import { Aviso } from "@/app/(time)/_componentes/ui/aviso";
 import { Botao } from "@/app/(time)/_componentes/ui/botao";
-import { CampoDeTexto, CampoDeTextoLongo } from "@/app/(time)/_componentes/ui/campo";
+import { CampoDeSelecao, CampoDeTexto, CampoDeTextoLongo, type OpcaoDoCampo } from "@/app/(time)/_componentes/ui/campo";
 import { PainelLateral } from "@/app/(time)/_componentes/ui/dialogo";
 
 // Formulários da área da SDC: registrar (ou corrigir) a compra de um pedido. O pedido vai pela referência (SDC-…).
@@ -16,12 +16,46 @@ export type TrechoDaCompra = {
   /** "Ida: VCP → POA em 14/12 (manhã)". */
   rotulo: string;
   partidaSugerida: string;
+  /** Uma das companhias da lista, "OUTRA" ou vazio (ainda não informada). */
   companhia: string;
+  outraCompanhia: string;
   numeroVoo: string;
   localizador: string;
   partidaEm: string;
   chegadaEm: string;
 };
+
+/** Valor da opção "Outra" (o mesmo do schema da SDC). */
+const OUTRA = "OUTRA";
+
+/** Companhia de uma lista curta; "Outra" abre o campo para escrever o nome. */
+function CampoDaCompanhia({ indice, trecho, companhias, erros }: { indice: number; trecho: TrechoDaCompra; companhias: OpcaoDoCampo[]; erros: (campo: string) => string[] | undefined }) {
+  const [escolhida, setEscolhida] = useState(trecho.companhia);
+  return (
+    <>
+      <CampoDeSelecao
+        nome={`trechos[${indice}].companhia`}
+        rotulo="Companhia"
+        obrigatorio
+        vazio="Escolha…"
+        opcoes={companhias}
+        value={escolhida}
+        onChange={(evento) => setEscolhida(evento.target.value)}
+        erros={erros(`trechos.${indice}.companhia`)}
+      />
+      {escolhida === OUTRA && (
+        <CampoDeTexto
+          nome={`trechos[${indice}].outraCompanhia`}
+          rotulo="Nome da companhia"
+          obrigatorio
+          maxLength={40}
+          defaultValue={trecho.outraCompanhia}
+          erros={erros(`trechos.${indice}.outraCompanhia`)}
+        />
+      )}
+    </>
+  );
+}
 
 /** Compra do voo: companhia, número do voo, código da reserva e horários de cada trecho, mais o valor. */
 export function BotaoRegistrarCompraDeVoo({
@@ -32,10 +66,12 @@ export function BotaoRegistrarCompraDeVoo({
   valor,
   observacao,
   corrigindo,
+  companhias,
 }: {
   acao: AcaoDoFormulario;
   referencia: string;
   passageiro: string;
+  companhias: OpcaoDoCampo[];
   trechos: TrechoDaCompra[];
   valor: string;
   observacao: string;
@@ -58,7 +94,7 @@ export function BotaoRegistrarCompraDeVoo({
               <legend className="px-1 text-[13px] font-semibold">{trecho.rotulo}</legend>
               <input type="hidden" name={`trechos[${indice}].sentido`} value={trecho.sentido} />
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <CampoDeTexto nome={`trechos[${indice}].companhia`} rotulo="Companhia" obrigatorio defaultValue={trecho.companhia} placeholder="Azul" erros={erros(`trechos.${indice}.companhia`)} />
+                <CampoDaCompanhia indice={indice} trecho={trecho} companhias={companhias} erros={erros} />
                 <CampoDeTexto nome={`trechos[${indice}].numeroVoo`} rotulo="Número do voo" obrigatorio defaultValue={trecho.numeroVoo} placeholder="AD4120" erros={erros(`trechos.${indice}.numeroVoo`)} />
                 <CampoDeTexto
                   className="sm:col-span-2"

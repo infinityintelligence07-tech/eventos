@@ -158,7 +158,7 @@ function LinhaDoVoo({ linha, base, parametros, escrita, diasDoAtraso }: { linha:
         )}
         {escrita && pedido && situacaoDoPagamento(pedido) === "A_APROVAR" && (
           <span className="mr-1 inline-flex">
-            <BotaoAprovarPagamento acao={aprovarPagamentoAcao} pedidoId={pedido.id} referencia={pedido.referencia} valor={dinheiro(pedido.valorCentavos ?? 0)} />
+            <BotaoAprovarPagamento acao={aprovarPagamentoAcao} pedidoId={pedido.id} referencia={pedido.referencia} valor={dinheiro(pedido.valorCentavos ?? 0)} valorCentavos={pedido.valorCentavos ?? 0} atualizadoEm={pedido.atualizadoEm} />
           </span>
         )}
         {pedido && !(escrita && aguardandoSdc(pedido.situacao)) && (
@@ -377,7 +377,7 @@ function PainelDoPedido({ pedido, base, parametros, escrita }: { pedido: PedidoC
             )}
             {escrita && situacaoDoPagamento(pedido) === "APROVADO" && <BotaoDesfazerAprovacao acao={desfazerAprovacaoAcao} pedidoId={pedido.id} referencia={pedido.referencia} tamanho="normal" />}
             {escrita && situacaoDoPagamento(pedido) === "A_APROVAR" && (
-              <BotaoAprovarPagamento acao={aprovarPagamentoAcao} pedidoId={pedido.id} referencia={pedido.referencia} valor={dinheiro(pedido.valorCentavos ?? 0)} tamanho="normal" />
+              <BotaoAprovarPagamento acao={aprovarPagamentoAcao} pedidoId={pedido.id} referencia={pedido.referencia} valor={dinheiro(pedido.valorCentavos ?? 0)} valorCentavos={pedido.valorCentavos ?? 0} atualizadoEm={pedido.atualizadoEm} tamanho="normal" />
             )}
             {escrita && aguardandoSdc(pedido.situacao) && (
               <BotaoLink variante="primario" href={enderecoCom(base, parametros, { modo: "registrar", registrado: null })} scroll={false}>

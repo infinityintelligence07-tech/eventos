@@ -3989,6 +3989,10 @@
           "name": "pedido_sdc_aprovacao_obs_check",
           "value": "\"eventos\".\"pedido_sdc\".\"observacao_aprovacao\" IS NULL OR (\"eventos\".\"pedido_sdc\".\"aprovado_em\" IS NOT NULL AND length(\"eventos\".\"pedido_sdc\".\"observacao_aprovacao\") <= 500)"
         },
+        "pedido_sdc_retorno_autor_check": {
+          "name": "pedido_sdc_retorno_autor_check",
+          "value": "\"eventos\".\"pedido_sdc\".\"retorno_registrado_por\" IS NULL OR \"eventos\".\"pedido_sdc\".\"retorno_registrado_pela_sdc\" IS NULL"
+        },
         "pedido_sdc_forma_pagamento_check": {
           "name": "pedido_sdc_forma_pagamento_check",
           "value": "\"eventos\".\"pedido_sdc\".\"forma_pagamento\" IS NULL OR length(\"eventos\".\"pedido_sdc\".\"forma_pagamento\") BETWEEN 1 AND 60"

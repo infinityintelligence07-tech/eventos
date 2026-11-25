@@ -430,11 +430,19 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
       return alterados.length === 1;
     },
 
-    async aprovarPagamento(pedidoId, { usuarioId, instante, observacao }) {
+    async aprovarPagamento(pedidoId, visto, { usuarioId, instante, observacao }) {
       const alterados = await executor
         .update(pedidoSdc)
         .set({ aprovadoEm: instante, aprovadoPor: usuarioId, observacaoAprovacao: observacao, atualizadoEm: instante })
-        .where(and(eq(pedidoSdc.id, pedidoId), eq(pedidoSdc.situacao, "EMITIDO"), isNotNull(pedidoSdc.valorCentavos), isNull(pedidoSdc.aprovadoEm)))
+        .where(
+          and(
+            eq(pedidoSdc.id, pedidoId),
+            eq(pedidoSdc.situacao, "EMITIDO"),
+            isNull(pedidoSdc.aprovadoEm),
+            eq(pedidoSdc.valorCentavos, visto.valorCentavos),
+            mesmaVersao(pedidoSdc.atualizadoEm, visto.atualizadoEm),
+          ),
+        )
         .returning({ id: pedidoSdc.id });
       return alterados.length === 1;
     },
@@ -458,7 +466,8 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
             localizador: trecho.localizador,
             partidaEm: trecho.partidaEm,
             chegadaEm: trecho.chegadaEm,
-            cartaoEmbarqueUrl: trecho.cartaoEmbarqueUrl,
+            // Ausente = quem registra é a SDC: o link do time fica como estava.
+            ...(trecho.cartaoEmbarqueUrl !== undefined ? { cartaoEmbarqueUrl: trecho.cartaoEmbarqueUrl } : {}),
             atualizadoEm: instante,
           })
           .where(and(eq(trechoVoo.pedidoId, pedidoId), eq(trechoVoo.sentido, trecho.sentido)));
