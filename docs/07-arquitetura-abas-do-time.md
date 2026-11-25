@@ -133,7 +133,7 @@ O import do cliente do banco continua **sob demanda** (`await import("@/core/db/
 | `comunicacao` (existe) | `mensagem`, `modelo_copy` | `convocacao`, `escala`, `evento`, `local`, `core.pessoa`, `pessoa_evento`, `hospedagem`, `quarto*`, `trecho_voo` |
 | `disponibilidade` (novo) | `enquete`, `enquete_evento`, `disponibilidade` | `evento`, `core.pessoa`, `pessoa_evento` |
 | `pessoas` (novo) | `pessoa_evento`, `pessoa_funcao`, `pessoa_veiculo` | `core.pessoa`, `convocacao` (histórico) |
-| `logistica` (novo) | `pedido_sdc`, `trecho_voo`, `hospedagem`, `quarto`, `quarto_ocupante`, `carona`, `convocacao.carona_id` | `convocacao`, `evento`, `local`, `pessoa_evento` |
+| `logistica` (novo) | `pedido_sdc`, `trecho_voo`, `hospedagem`, `quarto`, `quarto_ocupante`, `hospedagem_pessoa` (0017), `carona`, `convocacao.carona_id`; e, quando a pessoa entra na escala já na lista de hotel, `convocacao.precisa_hotel` (`vincularHotelDaPessoa`, chamado pelo fluxo da escala) | `convocacao`, `evento`, `local`, `pessoa_evento` |
 | `logistica` — acesso da SDC (0016) | `acesso_sdc` (a lista de e-mails da agência, pelo fluxo `@/fluxos/sdc`; só a líder); a SDC, na área dela, escreve em `pedido_sdc`, `trecho_voo`, `hospedagem` e cria `local` do tipo `HOTEL`, sempre pelo mesmo serviço do retorno | só `pedido_sdc`, `trecho_voo`, `hospedagem`, `quarto*`, `evento`, `local` e os **nomes** de `core.pessoa` (consultas próprias, docs/09 §15.4) |
 | `custos` (novo) | `regra_custo`, `solicitacao_custo`, `deslocamento`, `custo_item`, `rota_cache`, `protocolo_sequencia` (pela função `eventos.proximo_protocolo()`) | `convocacao`, `evento`, `pessoa_veiculo`, `tipo_evento` |
 | `src/core/db/registro-acao.ts` (infra) | `registro_acao` (chamado pelos repositórios de cada módulo, dentro da mesma transação) | — |
@@ -433,6 +433,50 @@ stateDiagram-v2
   campos, sem `cartaoEmbarqueUrl`, companhia de lista curta, textos sem link nem quebra de linha (docs/09 §15.4).
 - `totaisDoPagamento`: quantidade e soma "a aprovar" e "aprovado" (Voos do time, área da SDC).
 
+### 4.6 Quem precisa de hotel — sem depender da escala (25/11/2026, migration 0017)
+
+"Precisamos que os hotéis também possam ser pedidos juntos com os voos, não apenas na escala." O hotel é pedido à SDC
+até 3 meses antes do evento, quando a escala ainda não existe. Por isso "precisa de hotel" deixou de ser só da escala.
+
+**Três origens, uma lista.** A lista de quem precisa de hotel num evento é a **união** (uma linha por pessoa, com as
+origens que ela tem; funções puras em `domain/hotel.ts`, leitura em `precisamDeHotel` / `origensDoHotel`):
+
+| Origem | Onde fica | Como entra | Na tela |
+|---|---|---|---|
+| `ESCALA` | `convocacao.precisa_hotel` (convocação principal ativa) | a caixa "Hotel" na linha da pessoa na escala, como antes | "da escala" |
+| `VOO` | `pedido_sdc.precisa_hotel` (pedido de voo não cancelado) | "Também precisa de hotel" no Novo pedido de voo (marcada por padrão) ou no painel do pedido | "do pedido de voo" |
+| `AVULSA` | `hospedagem_pessoa` | "Acrescentar pessoa" na tela de Hospedagem | "acrescentada aqui" |
+
+Vale a mesma regra do pedido de voo para acrescentar: qualquer pessoa ativa do cadastro de staff, qualquer evento futuro
+não cancelado. **Só quem está na lista entra em quarto**; a escala não é exigida.
+
+**Regras de conflito entre origens** (uma regra só: *ninguém sai de um quarto sem alguém tirar*):
+
+1. **Tirar uma origem à mão** (desmarcar "Hotel" na escala, desmarcar "Também precisa de hotel" no voo, "Tirar da lista"
+   na Hospedagem) — `podeTirarOrigem`:
+   - a pessoa tem outra origem → passa; ela continua na lista (e no quarto) pela outra;
+   - era a única origem e ela **não** está num quarto → passa; ela sai da lista;
+   - era a única origem e ela **está num quarto** → **recusado** ("…já está num quarto. Tire a pessoa do quarto em
+     Hospedagem antes…"). É a recusa que já existia na escala, agora só quando a escala é a única origem.
+2. **Origem que some por consequência** (a pessoa sai da escala — removida, cancelada ou recusou; o pedido de voo é
+   cancelado) — `precisaManterComoAvulsa` / `manterNoQuartoSemOrigem`: se ela está num quarto e ficou sem nenhuma
+   origem, **continua no quarto** e passa a constar como acrescentada na Hospedagem (`hospedagem_pessoa` + registro
+   `HOSPEDE_MANTIDO_NO_QUARTO` com o motivo). A mensagem da ação avisa o time, que decide na Hospedagem se tira. Fora de
+   quarto, ela só sai da lista. (Antes da 0017, apagar a convocação apagava o ocupante junto, em silêncio.)
+3. **Entrar na escala depois** (`porNaVaga` → `vincularHotelDaPessoa`, na mesma transação, como os pedidos de voo): o
+   quarto que a pessoa já tinha se liga à convocação principal (`quarto_ocupante.convocacao_id`) e, se ela já estava na
+   lista por outra origem, a caixa "Hotel" da escala **nasce marcada**, para a escala mostrar o que já vale. O período
+   próprio e o quarto não mudam.
+4. **Segunda função / troca de principal:** o quarto é da pessoa no evento; `transferirLogisticaDaConvocacao` só troca o
+   vínculo.
+
+**Consumidores do ocupante** (todos por pessoa no evento): rooming list e texto do pedido de hospedagem, "Distribuir
+por sexo", "Mover para…" e troca de lugar, período próprio, a copy de hospedagem (`comunicacao-repository.hospedagens`
+casa a convocação com o quarto pela pessoa e pelo evento, e os colegas de quarto são todos os ocupantes) e a área
+`/sdc` (nomes na lista de quartos; nenhum campo novo). Registros: `OCUPANTE_*` passam a levar `pessoaId`;
+`HOSPEDE_ACRESCENTADO` / `HOSPEDE_RETIRADO` / `HOSPEDE_MANTIDO_NO_QUARTO` são do evento (entidade `EVENTO`, com a
+pessoa em `em_nome_de_pessoa_id`); `HOTEL_MARCADO` / `HOTEL_DESMARCADO` são do pedido de voo.
+
 ---
 
 ## 5. Mudanças de banco (migration 0004, só no banco local)
@@ -491,7 +535,7 @@ erDiagram
   pedido_sdc |o--o| hospedagem : "reserva pela SDC"
   hospedagem ||--|{ quarto : ""
   quarto ||--o{ quarto_ocupante : ""
-  convocacao ||--o| quarto_ocupante : ""
+  convocacao |o--o| quarto_ocupante : "vínculo opcional (0017)"
 ```
 
 Referência única: sequência `eventos.pedido_sdc_referencia_seq`, formato **`SDC-000001`** (uma numeração para voo e
@@ -578,16 +622,25 @@ hospedagem nasce sem hotel e ele entra no retorno do pedido. Apartamento da IAM 
 | `valor_diaria_centavos` | integer | `CHECK (valor_diaria_centavos IS NULL OR valor_diaria_centavos >= 0)` |
 | `criado_em`, `atualizado_em` | timestamptz | |
 
-**`eventos.quarto_ocupante`**
+**`eventos.quarto_ocupante`** (desde a 0017 o ocupante é a **pessoa no evento**; a convocação é só um vínculo)
 
 | Coluna | Tipo | Regra |
 |---|---|---|
-| `quarto_id` | uuid not null → `quarto` ON DELETE CASCADE | PK `(quarto_id, convocacao_id)` |
-| `convocacao_id` | uuid not null → `convocacao` ON DELETE CASCADE | **unique** (uma cama por convocação; cobre o índice da FK) |
+| `quarto_id` | uuid not null → `quarto` ON DELETE CASCADE | PK `(quarto_id, pessoa_id)` |
+| `evento_id` | uuid not null → `evento` ON DELETE RESTRICT | 0017. Repete o evento do quarto (quarto → hospedagem) para o banco garantir **`UNIQUE (evento_id, pessoa_id)`**: uma cama por pessoa no evento |
+| `pessoa_id` | uuid not null → `core.pessoa` ON DELETE RESTRICT | 0017. Quem ocupa a cama |
+| `convocacao_id` | uuid → `convocacao` ON DELETE **SET NULL** | opcional desde a 0017 (era obrigatória, com CASCADE); **unique**. Preenchido quando a pessoa está na escala; sair da escala não tira do quarto |
+| `check_in`, `check_out` | date | período próprio do ocupante (0007); nulos = o da hospedagem |
 | `criado_em` | timestamptz not null default now() | |
 
-Regras no serviço (com `FOR UPDATE` no quarto): ocupantes < `capacidade`; sexo da pessoa igual ao do quarto quando o
-quarto tem sexo; convocação ativa e do mesmo evento da hospedagem.
+**`eventos.hospedagem_pessoa`** (0017): quem foi acrescentado à lista de hotel direto na Hospedagem. `evento_id` → `evento`
+(RESTRICT), `pessoa_id` → `core.pessoa` (RESTRICT), PK `(evento_id, pessoa_id)`, `criado_por` → `core.usuario` (SET NULL),
+`criado_em`. RLS ligada; `app_eventos`: `SELECT, INSERT, DELETE`; `app_eventos_leitura`: `SELECT`; cópia e worker: nada.
+
+**`eventos.pedido_sdc.precisa_hotel`** (0017): boolean not null default false. Só vale no voo: "também precisa de hotel".
+
+Regras no serviço (com `FOR UPDATE` no quarto e na `pessoa_evento` da pessoa): ocupantes < `capacidade`; sexo da pessoa
+igual ao do quarto quando o quarto tem sexo; pessoa na lista de quem precisa de hotel do evento (§4.6).
 
 Fora desta migration: **créditos de hotel** e **fatura da SDC** (aba "Créditos de hotel" fica "em breve"; ver §11).
 
@@ -1057,6 +1110,7 @@ Onde a doc 08 diverge, vale o que está aqui.
 | Item 7, janela de voo (24/11/2026) | O D-90 virou configurável em Configurações › Aviso de voos (7 a 365 dias, padrão 90). O "atrasado" deixou de ser 60 fixo: é dois terços do aviso, no máximo 60 (§4.5). O aviso é só na tela, para a líder e o time. |
 | Voos e hotel pela SDC (24/11/2026, migration 0015) | "Nós solicitamos e eles compram." Voo: pedido por evento + pessoa do staff, sem depender da escala; mais de um pedido ativo por pessoa no evento, com confirmação; tela agrupada por mês e evento como a planilha; aviso por evento, com "não precisa de voo". Hospedagem: o time monta os quartos sem hotel, pede à SDC e registra no retorno o hotel, a reserva, o valor e a forma de pagamento; apartamento da IAM continua sem pedido; "sem hospedagem" por evento. Datas de solicitação e de compra são as do registro no sistema. Sem login nem perfil para a SDC (não decidido). |
 | Acesso da SDC e aprovação do pagamento (25/11/2026, migration 0016) | "Time solicita, SDC coloca o valor e nosso time aprova falando que usamos." A SDC entra pelo Google com um e-mail da lista mantida pela líder (nada no cadastro do GH), vê só pedidos de voo e de hospedagem e registra tudo da compra. O time aprova **depois** da compra; a aprovação cai se a compra mudar. Detalhes e riscos em docs/09 §15. |
+| Hotel sem depender da escala (25/11/2026, migration 0017) | "Precisamos que os hotéis também possam ser pedidos juntos com os voos, não apenas na escala." Quem precisa de hotel é a união de três origens (escala, "Também precisa de hotel" no pedido de voo, acrescentada na Hospedagem); o ocupante do quarto passou a ser a pessoa no evento, com a convocação opcional. Regras de conflito e consumidores em §4.6. |
 | Formulário de custo do staff (24/11/2026) | `/solicitar-custo` substitui o Google Forms: aberto do primeiro dia do evento até 5 dias depois do último (inclusive, fuso de São Paulo); fora do prazo, só o time registra. A pessoa informa só deslocamento e despesas; remuneração e alimentação são fixas e entram sozinhas pela regra (quantidade 1, como a tela do time sugere). Tipo de combustível e data do evento ficam de fora. Correção pelo staff só da reprovada, até 5 dias depois da reprovação. Detalhe na doc 08 §11.4. |
 | Comprovante do custo (24/11/2026) | Anexo no formulário do staff: até 3 arquivos de 8 MB (JPEG, PNG, WebP ou PDF, conferidos pelos bytes), obrigatório quando há deslocamento ou despesa. Storage do Supabase, bucket privado `eventos-comprovantes`, pelo protocolo S3 com chave de acesso S3 (nunca a `service_role`); leitura por rota autenticada que redireciona para URL pré-assinada de 5 minutos. Sem as variáveis, o anexo fica desligado e o formulário funciona sem o campo. |
 | Custo aprovado (24/11/2026) | Mensagem pronta para copiar e mandar no WhatsApp (primeiro nome, evento, protocolo, valor). O sistema não envia. **Construção futura:** envio automático pelo WhatsApp. |

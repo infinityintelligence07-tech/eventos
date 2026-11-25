@@ -907,6 +907,8 @@ escala: é de um **evento** e de uma **pessoa do staff**, como uma linha da plan
 Vazio: "Nenhum pedido de voo nos próximos eventos." / "Peça as passagens por aqui, como na planilha: escolha o evento e a pessoa do staff, mesmo antes de montar a escala. A SDC compra e o time registra o voo." + "Novo pedido".
 
 **Painel "Novo pedido"**: Evento (qualquer evento futuro, com ou sem escala; fixo na aba Logística do evento); Passageiro (qualquer pessoa ativa do cadastro de staff, esteja ou não na escala); Trecho (Origem, Destino, Ida e volta / Só ida / Só volta); datas (sugeridas pelo evento) e horário preferido; Observação para a SDC. Primário "Registrar pedido".
+**"Também precisa de hotel"** (caixa do Novo pedido, **marcada por padrão**: quem vai de avião quase sempre dorme no hotel, e os dois são pedidos à SDC na mesma época). Ajuda: "A pessoa entra na lista de quem precisa de hotel neste evento, mesmo sem escala. Os quartos são montados em Hospedagem. Desmarque se ela não vai dormir no hotel." Marcada, depois de registrar aparece no painel a faixa "[Staff 07] entrou na lista de quem precisa de hotel" com o link **"Montar os quartos"**. No painel de um pedido de voo que já existe, a linha **Hotel** diz "Também precisa de hotel" (com "Ver quartos") ou "Não precisa de hotel por este pedido", com "Marcar" / "Desmarcar". Desmarcar com a pessoa já num quarto só é recusado se o voo for a única origem do hotel dela. Cancelar o pedido não tira ninguém do quarto.
+**Aviso "N pessoas com voo pedido e sem quarto"** (faixa de informação no topo de Voos, quando houver): "Quem voa e também precisa de hotel já está na lista da Hospedagem. Monte os quartos para pedir o hotel à SDC junto com o voo." + uma linha por evento, com link para a Hospedagem dele.
 Se a pessoa **já tem pedido ativo naquele evento**, o painel avisa ("[Staff 07] já tem pedido de voo neste evento: SDC-000012 (ida e volta). Registre outro só se for uma compra a mais, como um trecho extra.") e pede a caixa **"É outra compra para a mesma pessoa"**; sem ela o pedido é recusado com a mesma explicação (evita duplicar por engano).
 Depois: faixa de sucesso no painel "Pedido SDC-000013 registrado. A SDC ainda não tem portal: copie o pedido e envie pelo canal de sempre." + "Copiar pedido". Registrar um pedido num evento marcado como "não precisa de voo" desfaz a marca.
 
@@ -925,15 +927,30 @@ Toast: "Voo do pedido SDC-000013 registrado. A copy de hospedagem da pessoa foi 
 
 ### 10.2 Hospedagem (rooming list)
 
-**Nós montamos os quartos; a SDC escolhe e reserva o hotel.** A tela parte de quem o time marcou com "Hotel" na escala do
-evento (seção 6.2) e serve para dizer **quem fica com quem**. O hotel só aparece depois que a SDC responde ao pedido.
+**Nós montamos os quartos; a SDC escolhe e reserva o hotel.** A tela parte de **quem precisa de hotel no evento** e serve
+para dizer **quem fica com quem**. O hotel só aparece depois que a SDC responde ao pedido.
+
+**Hotel sem depender da escala (25/11/2026).** O hotel é pedido à SDC junto com o voo, até 3 meses antes, quando a escala
+ainda não existe. A lista de quem precisa de hotel é a união de três origens, sem repetir a pessoa, e a tela mostra de
+onde veio cada uma: **"da escala"** (a caixa Hotel na escala, como antes), **"do pedido de voo"** ("Também precisa de
+hotel" no pedido, §10.1) e **"acrescentada aqui"**. Quem não está na escala aparece com "· fora da escala". O seletor
+de evento traz todos os eventos de hoje em diante, com ou sem escala.
+- **"Acrescentar pessoa"** (na faixa do topo): seletor com as pessoas ativas do cadastro de staff que ainda não estão na
+  lista, por nome, + "Acrescentar". Toast: "[Staff 07] entrou na lista de quem precisa de hotel. Coloque num quarto."
+  Some em evento cancelado ou que já terminou.
+- **"Tirar da lista"** (em "Sem quarto", para quem foi acrescentada aqui). Se ela também veio da escala ou do voo,
+  continua na lista por essas origens. Num quarto só por ter sido acrescentada: "…está num quarto. Tire a pessoa do
+  quarto antes de tirá-la da lista."
+- **Ninguém sai de um quarto sem alguém tirar:** se a pessoa sai da escala ou o pedido de voo dela é cancelado e ela já
+  está num quarto sem outra origem, ela continua no quarto e passa a aparecer como "acrescentada aqui"; o toast da ação
+  avisa ("Ela continua no quarto: tire em Hospedagem se não for mais dormir no hotel.").
 
 **Layout por evento** (seletor de evento obrigatório nesta aba; os marcados aparecem como "· sem hospedagem"), de cima para baixo; depois dos quartos vem a seção de caronas do mesmo evento (§10.3):
-1. **Faixa da escala** (sempre): "8 pessoas marcadas para hotel na escala de CONF_AM_60" + "5 com quarto e 3 sem quarto. Coloque cada pessoa num quarto para definir quem divide com quem." Tom de atenção enquanto houver gente sem quarto, sucesso quando todo mundo tem e informação quando ninguém foi marcado. Link **"Abrir a escala"** ("Marcar na escala" quando ninguém foi marcado). Se há gente ativa na escala sem a marca: "4 pessoas da escala não estão marcadas para hotel. Se falta alguém aqui, marque Hotel na escala."
-2. **Sem quarto · N** (cartão, logo abaixo da faixa; só aparece quando há alguém sem quarto, mesmo antes de existir quarto): cada pessoa com função e sexo e o seletor "Colocar no quarto…". A opção do quarto diz quem já está nele: "Quarto 2 · 1 de 2 · Feminino · com Bia" (ou "· vazio"). Ação "Distribuir por sexo (N)". Sem quarto criado: "Clique em "Montar quartos" logo abaixo para começar a distribuir."
+1. **Faixa de quem precisa de hotel** (sempre): "8 pessoas precisam de hotel em CONF_AM_60" + "5 com quarto e 3 sem quarto. Coloque cada pessoa num quarto para definir quem divide com quem." Tom de atenção enquanto houver gente sem quarto, sucesso quando todo mundo tem e informação quando a lista está vazia ("Ninguém na lista de hotel de CONF_AM_60" + "Entra em quarto quem precisa de hotel neste evento. A lista não depende da escala: acrescente a pessoa aqui, marque "Também precisa de hotel" no pedido de voo ou marque Hotel na escala."). Link **"Abrir a escala"** e o **"Acrescentar pessoa"**. Se há gente ativa na escala fora da lista: "4 pessoas da escala não estão na lista de hotel. Se falta alguém, marque Hotel na escala ou acrescente aqui."
+2. **Sem quarto · N** (cartão, logo abaixo da faixa; só aparece quando há alguém sem quarto, mesmo antes de existir quarto): cada pessoa com função e sexo, a origem ("da escala · do pedido de voo", "acrescentada aqui · fora da escala"), o seletor "Colocar no quarto…" e, para quem foi acrescentada aqui, "Tirar da lista". A opção do quarto diz quem já está nele: "Quarto 2 · 1 de 2 · Feminino · com Bia" (ou "· vazio"). Ação "Distribuir por sexo (N)". Sem quarto criado: "Clique em "Montar quartos" logo abaixo para começar a distribuir."
 3. **Primeiro passo — "Montar quartos"** (estado vazio "Nenhum quarto montado para este evento."): abre o painel com as datas de **entrada e saída** já sugeridas pelo evento (véspera do início até o dia seguinte ao fim), a observação e o campo "Onde", que fica em **"Hotel pela SDC (ela escolhe e reserva)"**; só se escolhe ali um apartamento da IAM (não passa pela SDC) ou um hotel já definido. Ao lado, **"Este evento não tem hospedagem"**.
 4. **Cartão da hospedagem**: título "Hotel a definir pela SDC" (ou o nome do hotel, depois do retorno; ou "Apartamento da IAM"). Linhas: Período ("Entrada 14/12 · saída 18/12"); Quartos ("3 quartos · 7 pessoas"); **Pedido à SDC**; Reserva; Valor total e forma de pagamento ("R$ 2.400,00 · Faturado SDC"); Resposta da SDC; Observação. Ações: "Copiar rooming list", "Copiar pedido" (depois de pedir), "Editar" e, sem quartos nem pedido, "Remover".
-5. **Quartos** (grade de cartões `md:grid-cols-2 xl:grid-cols-3`): "Quarto 1 · duplo · 2 de 2" e, na linha de baixo, "Feminino · 2 pessoas dividem o quarto"; lista de ocupantes com "Período", **"Mover para…"** e "Tirar". Aviso de atenção no cartão quando misturar sexos. "+ Novo quarto" no fim.
+5. **Quartos** (grade de cartões `md:grid-cols-2 xl:grid-cols-3`): "Quarto 1 · duplo · 2 de 2" e, na linha de baixo, "Feminino · 2 pessoas dividem o quarto"; lista de ocupantes (com a origem embaixo do nome) com "Período", **"Mover para…"** e "Tirar". Aviso de atenção no cartão quando misturar sexos. "+ Novo quarto" no fim.
 
 **Pedido à SDC (na linha do cartão):**
 - Sem quartos: "Monte os quartos para pedir a hospedagem à SDC." (o pedido diz quantos quartos e quem divide com quem).
@@ -948,9 +965,9 @@ evento (seção 6.2) e serve para dizer **quem fica com quem**. O hotel só apar
 
 **"Mover para…" em um passo** (seletor de quem já está num quarto), com dois grupos:
 - **Outro quarto:** os quartos com vaga (os cheios aparecem desabilitados, "(cheio)").
-- **Trocar de lugar com:** cada pessoa dos outros quartos, "Dani Lima (Quarto 2)". As duas trocam de quarto de uma vez, mesmo com os dois quartos cheios, sem passar por "Sem quarto". Vale a regra de sempre (sexo do quarto, escala ativa, marcada para hotel); recusada, nada muda.
+- **Trocar de lugar com:** cada pessoa dos outros quartos, "Dani Lima (Quarto 2)". As duas trocam de quarto de uma vez, mesmo com os dois quartos cheios, sem passar por "Sem quarto". Vale a regra de sempre (sexo do quarto e as duas na lista de quem precisa de hotel); recusada, nada muda.
 
-Só quem está marcado entra em quarto e na distribuição por sexo. Quem já está num quarto continua aparecendo no quarto.
+Só quem está na lista entra em quarto e na distribuição por sexo. Quem já está num quarto continua aparecendo no quarto.
 Arrastar entre quartos é opcional; o seletor "Mover para…" é obrigatório (WCAG 2.5.7). Mudança de quarto deixa a copy de hospedagem desatualizada; enquanto o hotel não vem da SDC, a copy de hospedagem da pessoa fica bloqueada por falta do hotel e libera sozinha depois do retorno.
 
 ### 10.3 Caronas
