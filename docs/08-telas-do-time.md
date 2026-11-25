@@ -1066,14 +1066,15 @@ O staff envia a solicitação pelo **formulário dele** (`/solicitar-custo`, §1
 6. **Parecer anterior** (se reprovada antes e reenviada): "Reprovada em 15/11: falta o comprovante do pedágio."
 7. **Barra de ação fixa do painel:** perigo contorno **"Reprovar"** e primário **"Aprovar"**.
    - **Aprovar sem alerta:** aprova direto. Toast "STF-202611-0012 aprovada. Seguiu para o financeiro." O painel **fica na solicitação**
-     aprovada, com a faixa "Avise [nome]: copie a mensagem de aprovado abaixo e mande pelo WhatsApp." e a ação "Próxima da fila".
+     aprovada, com a faixa "Avise [nome]: abra a conversa no WhatsApp pela mensagem de aprovado abaixo, ou copie o texto." (sem
+     telefone válido no cadastro: "Avise [nome]: copie a mensagem de aprovado abaixo e mande pelo WhatsApp.") e a ação "Próxima da fila".
    - **Aprovar com alerta crítico:** modal "Aprovar com alerta crítico?" — texto com o alerta — campo "Motivo da aprovação (obrigatório)" (ex.: "Carro da pessoa é antigo; consumo conferido"). Botão "Aprovar".
    - **Reprovar:** modal "Reprovar STF-202611-0012?" — "A pessoa vai ver o motivo e poderá corrigir e reenviar." Campo "Motivo (obrigatório)". Botão "Reprovar".
    - **Reprovar:** depois de reprovar, o painel avança para a próxima da fila (a pessoa vê o motivo no formulário dela e pode corrigir, §11.4).
    - Já aprovada/reprovada: a barra mostra "Aprovada em 15/11 às 10:20" e, enquanto o financeiro não tiver pago, o link "Reabrir auditoria" (confirmação simples).
 8. **Mensagem de aprovado** (toda solicitação aprovada, logo depois de aprovar e sempre que o painel for aberto de novo): cartão com o
-   texto pronto e o botão **"Copiar mensagem"** (`BotaoCopiar`). O texto leva o primeiro nome, o evento, o protocolo e o valor aprovado
-   (`mensagemDeCustoAprovado`, no domínio de custos):
+   texto pronto e os botões **"Abrir no WhatsApp"** (`BotaoLink` secundário pequeno, `MessageCircle`) e **"Copiar mensagem"**
+   (`BotaoCopiar`). O texto leva o primeiro nome, o evento, o protocolo e o valor aprovado (`mensagemDeCustoAprovado`, no domínio de custos):
 
    ```
    Olá, Ana!
@@ -1086,8 +1087,24 @@ O staff envia a solicitação pelo **formulário dele** (`/solicitar-custo`, §1
    O valor seguiu para o financeiro fazer o pagamento. Qualquer dúvida, fale com o time de eventos.
    ```
 
-   O sistema **não envia nada sozinho**: o time copia e manda pelo WhatsApp. **Construção futura:** envio automático da mensagem
-   de aprovado pelo WhatsApp (e o registro de que foi enviada), junto com o envio das copys.
+   - **"Abrir no WhatsApp"** é um link `https://wa.me/<número>?text=<mensagem>` que abre, em nova aba
+     (`target="_blank"`, `rel="noopener noreferrer"`), a conversa com **aquela pessoa** já com a mensagem escrita: no celular abre o
+     app, no computador o WhatsApp Web. O time só aperta enviar. O número vem do telefone do cadastro (`core.pessoa.telefone`, o
+     mesmo da ficha em Pessoas), passado para o formato internacional por `telefoneParaWhatsApp` (domínio de pessoas): aceita com ou
+     sem +55, com máscara, com zero na frente do DDD, e põe o nono dígito em celular anotado com 8. Número sem DDD, de outro país
+     ou com dois telefones no mesmo campo não vira link.
+   - **Sem telefone válido no cadastro:** o botão não aparece e fica a nota "Sem telefone no cadastro: copie a mensagem e envie pelo
+     contato de sempre." O "Copiar mensagem" continua igual.
+   - **Telefone é dado pessoal:** ele não é mostrado no cartão. O servidor monta o link e o número existe só dentro do `href`; só é
+     lido para quem tem `custos.auditar` (nunca para o visitante da demo) e só em solicitação aprovada. Não vai para log
+     (`linkDoWhatsApp` está na lista de mascaramento), `registro_acao` nem mensagem de erro. A área `/sdc` e as páginas do staff
+     (`/solicitar-custo`) não recebem o link nem o telefone.
+   - **Nada é registrado como "enviado":** abrir a conversa não grava nada, porque o sistema não sabe se a pessoa apertou enviar.
+     O texto de ajuda do cartão diz isso: "O botão abre a conversa com a mensagem já escrita; quem aperta enviar é você. O sistema
+     não envia sozinho e não sabe se a mensagem foi enviada."
+
+   O sistema **não envia nada sozinho**: o time abre a conversa (ou copia) e manda pelo WhatsApp. **Construção futura:** envio
+   automático da mensagem de aprovado pelo WhatsApp (e o registro de que foi enviada), junto com o envio das copys.
 
 ### 11.3 Registrar solicitação (em nome da pessoa)
 

@@ -200,6 +200,11 @@ export function criarRepositorioSolicitacoes(executor: Executor): RepositorioSol
   /** As solicitações mais recentes da pessoa (sem travar: serve à leitura). */
   solicitacoesDaPessoa(pessoaId: string, filtro?: { eventoId?: string; limite?: number }): Promise<SolicitacaoDaPessoa[]>;
   consumoDaPessoa(pessoaId: string): Promise<number | null>;
+  /**
+   * Telefone do cadastro (core.pessoa), só para o link do WhatsApp da mensagem de aprovado. Fica fora de `detalhe` de
+   * propósito: o detalhe também serve à tela do próprio staff e à correção, que não precisam dele.
+   */
+  telefoneDaPessoa(pessoaId: string): Promise<string | null>;
 } {
   function consultaDaFila() {
     return executor
@@ -319,6 +324,14 @@ export function criarRepositorioSolicitacoes(executor: Executor): RepositorioSol
         comprovantes: (await comprovantesDaSolicitacao(executor, base.id)).map(({ id, nome, tipo, tamanhoBytes, criadoEm }) => ({ id, nome, tipo, tamanhoBytes, criadoEm })),
         historico,
       };
+    },
+
+    async telefoneDaPessoa(pessoaId) {
+      const [linha] = await executor
+        .select({ telefone: pessoa.telefone })
+        .from(pessoa)
+        .where(and(eq(pessoa.id, pessoaId), isNull(pessoa.deletedAt)));
+      return linha?.telefone ?? null;
     },
 
     async eventosParaRegistro(desde) {

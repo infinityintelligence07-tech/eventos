@@ -14,14 +14,16 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Custos" };
 
 export default async function PaginaCustos({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  await exigirAtor();
+  const ator = await exigirAtor();
   const parametros = parametrosDeCustos(await searchParams);
   const filtro = { ...filtroDosParametros(parametros), eventoId: parametros.evento };
-  const [dados, solicitacao, escrita, permissoes, site] = await Promise.all([
+  const permissoes = await permissoesDoAtor("custos.reabrir_auditoria", "custos.auditar");
+  // O link do WhatsApp leva o telefone da pessoa: só para quem audita custos, e nunca para o visitante da demo.
+  const comLinkDoWhatsApp = permissoes["custos.auditar"] && ator.origem !== "DEMO";
+  const [dados, solicitacao, escrita, site] = await Promise.all([
     carregarFilaDeAuditoria(filtro, new Date()),
-    parametros.protocolo ? carregarSolicitacao(parametros.protocolo, filtro) : null,
+    parametros.protocolo ? carregarSolicitacao(parametros.protocolo, filtro, { comLinkDoWhatsApp }) : null,
     situacaoDaEscrita(),
-    permissoesDoAtor("custos.reabrir_auditoria"),
     enderecoDoSite(),
   ]);
   return (
