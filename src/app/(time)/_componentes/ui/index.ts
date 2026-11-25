@@ -56,6 +56,8 @@ export { PainelPelaUrl } from "./painel-pela-url";
 export { ACAO_NAO_EXECUTADA, errosDoCampo, type FalhaDaAcao, type ResultadoAcao, temErroDeCampo } from "./resultado-acao";
 export { FaixaSemPermissao, motivoSemPermissao, SemPermissaoNaAcao } from "./permissao";
 export { ResumoDeErros } from "./resumo-de-erros";
+export { type PropsDoSeletor, Seletor } from "./seletor";
+export type { OpcaoDoSeletor } from "./seletor-logica";
 export { SeloRegistradoPeloTime } from "./selo";
 export { Chip, ChipDaEscala, iconeDaSituacao, rotuloDaSituacao, type TomDoChip } from "./situacao";
 export { CabecaDaTabela, CelulaDaTabela, ColunaDaTabela, LinhaDaTabela, RodapeDaTabela, Tabela } from "./tabela";
