@@ -7,6 +7,14 @@ import {
   type TrechoDesejado,
   transicaoDoPedido,
 } from "../domain/pedido";
+import {
+  efeitoNaAprovacao,
+  MENSAGEM_COMPRA_APROVADA,
+  mensagemDaRecusaDaAprovacao,
+  podeAprovarPagamento,
+  podeDesfazerAprovacao,
+  type QuemMexeNaCompra,
+} from "../domain/pagamento";
 import { dataEmSaoPaulo, instanteDeSaoPaulo } from "../domain/datas";
 import type {
   AlterarPedido,
@@ -22,6 +30,15 @@ import type {
 
 export type ContextoDaAcao = { usuarioId: string; instante: Date };
 
+/**
+ * Quem registra a compra de um pedido: alguém do time (em nome da SDC) ou a própria SDC, pela área dela. A pessoa da
+ * SDC não tem core.usuario: é identificada pela linha dela em eventos.acesso_sdc.
+ */
+export type AutorDoRetorno = { usuarioId: string } | { acessoSdcId: string };
+export type ContextoDoRetorno = { autor: AutorDoRetorno; instante: Date };
+
+const quemMexe = (autor: AutorDoRetorno): QuemMexeNaCompra => ("acessoSdcId" in autor ? "SDC" : "TIME");
+
 /** Evento do pedido, travado. `dataFim` no fuso de São Paulo (AAAA-MM-DD). */
 export type EventoDoPedido = { id: string; dataFim: string; cancelado: boolean };
 
@@ -32,6 +49,9 @@ export type PedidoTravado = {
   situacao: SituacaoDoPedido;
   eventoId: string;
   pessoaId: string | null;
+  valorCentavos: number | null;
+  /** Preenchido = pagamento aprovado pelo time. */
+  aprovadoEm: Date | null;
   atualizadoEm: Date;
   sentidos: ("IDA" | "VOLTA")[];
 };
@@ -88,10 +108,16 @@ export type RepositorioPedidos = {
       para: SituacaoDoPedido;
       instante: Date;
       observacaoTime?: string | null;
-      emissao?: { valorCentavos: number; observacaoSdc: string | null; usuarioId: string; formaPagamento?: string | null };
+      emissao?: { valorCentavos: number; observacaoSdc: string | null; autor: AutorDoRetorno; formaPagamento?: string | null };
       cancelamento?: { usuarioId: string; motivo: string };
+      /** A compra mudou: a aprovação do pagamento (se havia) deixa de valer. */
+      aprovacaoCai?: boolean;
     },
   ): Promise<boolean>;
+  /** Compare-and-set: aprova só se o pedido ainda está EMITIDO, com valor e sem aprovação. */
+  aprovarPagamento(pedidoId: string, aprovacao: { usuarioId: string; instante: Date; observacao: string | null }): Promise<boolean>;
+  /** Compare-and-set: desfaz só se ainda está aprovado. */
+  desfazerAprovacao(pedidoId: string, instante: Date): Promise<boolean>;
   registrarEmissaoDosTrechos(pedidoId: string, trechos: TrechoEmitido[], instante: Date): Promise<void>;
   /** Hospedagem travada, para pedir à SDC. `localTipo` nulo = hotel ainda não definido (a SDC escolhe). */
   travarHospedagemSemPedido(hospedagemId: string): Promise<{ eventoId: string; pedidoId: string | null; localTipo: string | null; quartos: number } | null>;
@@ -101,7 +127,7 @@ export type RepositorioPedidos = {
   tipoDoLocal(localId: string): Promise<string | null>;
   /** Grava na hospedagem do pedido o hotel que a SDC reservou e o número da reserva. false = o pedido não tem hospedagem. */
   registrarReserva(pedidoId: string, reserva: { numeroReserva: string; localId: string }, instante: Date): Promise<boolean>;
-  registrar(registro: RegistroDoPedido & { usuarioId: string }): Promise<void>;
+  registrar(registro: RegistroDoPedido & AutorDoRetorno): Promise<void>;
 };
 
 async function pedidoTravado(repo: RepositorioPedidos, pedidoId: string): Promise<PedidoTravado> {
@@ -110,9 +136,28 @@ async function pedidoTravado(repo: RepositorioPedidos, pedidoId: string): Promis
   return pedido;
 }
 
+/**
+ * Mexer na compra de um pedido com o pagamento aprovado: a SDC é recusada; com o time, a aprovação cai (e fica no
+ * histórico). Devolve se a aprovação caiu, para o chamador gravar junto com a mudança.
+ */
+function aprovacaoAoMexer(pedido: PedidoTravado, quem: QuemMexeNaCompra): boolean {
+  const efeito = efeitoNaAprovacao(pedido, quem);
+  if (!efeito.permitido) throw new ErroDaLogistica(MENSAGEM_COMPRA_APROVADA);
+  return efeito.aprovacaoCai;
+}
+
+/** No histórico: o time registra "em nome da SDC"; a SDC registra por ela mesma. `correcao` = já havia compra. */
+function dadosDaAutoria(autor: AutorDoRetorno, pedido: PedidoTravado): Record<string, unknown> {
+  return { ...(quemMexe(autor) === "TIME" ? { emNomeDe: "SDC" } : {}), ...(pedido.situacao === "EMITIDO" ? { correcao: true } : {}) };
+}
+
+async function registrarQuedaDaAprovacao(repo: RepositorioPedidos, pedido: PedidoTravado, autor: AutorDoRetorno, motivo: string): Promise<void> {
+  await repo.registrar({ pedidoId: pedido.id, eventoId: pedido.eventoId, acao: "APROVACAO_DESFEITA", ...autor, dados: { motivo, valorCentavos: pedido.valorCentavos } });
+}
+
 function destinoDaAcao(pedido: PedidoTravado, acao: AcaoNoPedido): SituacaoDoPedido {
   const transicao = transicaoDoPedido(pedido.situacao, acao);
-  if ("erro" in transicao) throw new ErroDaLogistica(mensagemDaTransicaoInvalida(pedido.situacao, acao));
+  if ("erro" in transicao) throw new ErroDaLogistica(mensagemDaTransicaoInvalida(pedido.situacao));
   return transicao.para;
 }
 
@@ -177,13 +222,15 @@ export async function alterarPedido(repo: RepositorioPedidos, entrada: AlterarPe
   const pedido = await pedidoTravado(repo, entrada.pedidoId);
   const para = destinoDaAcao(pedido, "ALTERAR");
   if (entrada.trechos && pedido.tipo !== "VOO") throw new ErroDaLogistica("Pedido de hospedagem não tem trechos de voo.");
+  const aprovacaoCai = aprovacaoAoMexer(pedido, "TIME");
 
   const mudou = await repo.mudarPedido(
     pedido.id,
     { de: pedido.situacao, atualizadoEm: entrada.atualizadoEm },
-    { para, instante, observacaoTime: entrada.observacaoTime ?? null },
+    { para, instante, observacaoTime: entrada.observacaoTime ?? null, aprovacaoCai },
   );
   if (!mudou) throw new LogisticaMudouError(`o pedido ${pedido.referencia} mudou`);
+  if (aprovacaoCai) await registrarQuedaDaAprovacao(repo, pedido, { usuarioId }, "pedido alterado");
   if (entrada.trechos) await repo.substituirTrechosDesejados(pedido.id, entrada.trechos.map(trechoDesejado), instante);
 
   await repo.registrar({
@@ -201,8 +248,10 @@ export async function alterarPedido(repo: RepositorioPedidos, entrada: AlterarPe
 export async function cancelarPedido(repo: RepositorioPedidos, entrada: CancelarPedido, { usuarioId, instante }: ContextoDaAcao): Promise<PedidoTravado> {
   const pedido = await pedidoTravado(repo, entrada.pedidoId);
   const para = destinoDaAcao(pedido, "CANCELAR");
-  const mudou = await repo.mudarPedido(pedido.id, { de: pedido.situacao }, { para, instante, cancelamento: { usuarioId, motivo: entrada.motivo } });
+  const aprovacaoCai = aprovacaoAoMexer(pedido, "TIME");
+  const mudou = await repo.mudarPedido(pedido.id, { de: pedido.situacao }, { para, instante, cancelamento: { usuarioId, motivo: entrada.motivo }, aprovacaoCai });
   if (!mudou) throw new LogisticaMudouError(`o pedido ${pedido.referencia} mudou`);
+  if (aprovacaoCai) await registrarQuedaDaAprovacao(repo, pedido, { usuarioId }, "pedido cancelado");
   // A hospedagem fica sem pedido para poder pedir de novo; o pedido cancelado continua na lista da SDC.
   if (pedido.tipo === "HOSPEDAGEM") await repo.desvincularHospedagemDoPedido(pedido.id, instante);
 
@@ -219,15 +268,20 @@ export async function cancelarPedido(repo: RepositorioPedidos, entrada: Cancelar
   return { ...pedido, situacao: para };
 }
 
-/** Voo emitido informado pela SDC e lançado pelo time (selo "Registrado pelo time" em retorno_registrado_por). */
+/**
+ * A compra do voo: lançada pela própria SDC (área dela) ou pelo time em nome dela (selo "Registrado pelo time").
+ * Vale também para corrigir uma compra já registrada; com o pagamento aprovado, a SDC é recusada e, com o time, a
+ * aprovação cai. As validações são as mesmas para os dois.
+ */
 export async function registrarRetornoDeVoo(
   repo: RepositorioPedidos,
   entrada: RegistrarRetornoDeVoo,
-  { usuarioId, instante }: ContextoDaAcao,
+  { autor, instante }: ContextoDoRetorno,
 ): Promise<PedidoTravado> {
   const pedido = await pedidoTravado(repo, entrada.pedidoId);
   if (pedido.tipo !== "VOO") throw new ErroDaLogistica("Este pedido é de hospedagem: registre o número da reserva.");
   const para = destinoDaAcao(pedido, "REGISTRAR_RETORNO");
+  const aprovacaoCai = aprovacaoAoMexer(pedido, quemMexe(autor));
 
   const informados = new Set(entrada.trechos.map((trecho) => trecho.sentido));
   const faltando = pedido.sentidos.filter((sentido) => !informados.has(sentido));
@@ -238,9 +292,10 @@ export async function registrarRetornoDeVoo(
   const mudou = await repo.mudarPedido(
     pedido.id,
     { de: pedido.situacao },
-    { para, instante, emissao: { valorCentavos: entrada.valorCentavos, observacaoSdc: entrada.observacaoSdc ?? null, usuarioId } },
+    { para, instante, emissao: { valorCentavos: entrada.valorCentavos, observacaoSdc: entrada.observacaoSdc ?? null, autor }, aprovacaoCai },
   );
   if (!mudou) throw new LogisticaMudouError(`o pedido ${pedido.referencia} mudou`);
+  if (aprovacaoCai) await registrarQuedaDaAprovacao(repo, pedido, autor, "compra corrigida");
   await repo.registrarEmissaoDosTrechos(
     pedido.id,
     entrada.trechos.map((trecho) => ({
@@ -260,9 +315,9 @@ export async function registrarRetornoDeVoo(
     acao: "RETORNO_REGISTRADO",
     statusDe: pedido.situacao,
     statusPara: para,
-    usuarioId,
+    ...autor,
     // Localizador e número da reserva ficam no trecho/hospedagem; o histórico imutável só diz que houve (docs/09 §7.1).
-    dados: { emNomeDe: "SDC", valorCentavos: entrada.valorCentavos, trechos: entrada.trechos.length, temLocalizador: entrada.trechos.some((trecho) => Boolean(trecho.localizador)) },
+    dados: { ...dadosDaAutoria(autor, pedido), valorCentavos: entrada.valorCentavos, trechos: entrada.trechos.length, temLocalizador: entrada.trechos.some((trecho) => Boolean(trecho.localizador)) },
   });
   return { ...pedido, situacao: para };
 }
@@ -307,20 +362,22 @@ export async function registrarPedidoDeHospedagem(
 export async function registrarRetornoDeHospedagem(
   repo: RepositorioPedidos,
   entrada: Omit<RegistrarRetornoDeHospedagem, "localId" | "novoHotel"> & { localId: string },
-  { usuarioId, instante }: ContextoDaAcao,
+  { autor, instante }: ContextoDoRetorno,
 ): Promise<PedidoTravado> {
   const pedido = await pedidoTravado(repo, entrada.pedidoId);
   if (pedido.tipo !== "HOSPEDAGEM") throw new ErroDaLogistica("Este pedido é de voo: registre os dados do voo.");
   const para = destinoDaAcao(pedido, "REGISTRAR_RETORNO");
+  const aprovacaoCai = aprovacaoAoMexer(pedido, quemMexe(autor));
   const tipoDoLocal = await repo.tipoDoLocal(entrada.localId);
   if (tipoDoLocal === null) throw new ErroDaLogistica("Hotel não encontrado. Escolha outro ou cadastre o hotel que a SDC reservou.");
   if (tipoDoLocal !== "HOTEL") throw new ErroDaLogistica("Escolha um hotel: a SDC não reserva apartamento da IAM nem local de evento.");
   const mudou = await repo.mudarPedido(
     pedido.id,
     { de: pedido.situacao },
-    { para, instante, emissao: { valorCentavos: entrada.valorCentavos, observacaoSdc: entrada.observacaoSdc ?? null, usuarioId, formaPagamento: entrada.formaPagamento } },
+    { para, instante, emissao: { valorCentavos: entrada.valorCentavos, observacaoSdc: entrada.observacaoSdc ?? null, autor, formaPagamento: entrada.formaPagamento }, aprovacaoCai },
   );
   if (!mudou) throw new LogisticaMudouError(`o pedido ${pedido.referencia} mudou`);
+  if (aprovacaoCai) await registrarQuedaDaAprovacao(repo, pedido, autor, "compra corrigida");
   if (!(await repo.registrarReserva(pedido.id, { numeroReserva: entrada.numeroReserva, localId: entrada.localId }, instante))) {
     throw new LogisticaMudouError(`o pedido ${pedido.referencia} ficou sem hospedagem`);
   }
@@ -330,8 +387,41 @@ export async function registrarRetornoDeHospedagem(
     acao: "RETORNO_REGISTRADO",
     statusDe: pedido.situacao,
     statusPara: para,
-    usuarioId,
-    dados: { emNomeDe: "SDC", valorCentavos: entrada.valorCentavos, temNumeroReserva: Boolean(entrada.numeroReserva), localId: entrada.localId, formaPagamento: entrada.formaPagamento },
+    ...autor,
+    dados: { ...dadosDaAutoria(autor, pedido), valorCentavos: entrada.valorCentavos, temNumeroReserva: Boolean(entrada.numeroReserva), localId: entrada.localId, formaPagamento: entrada.formaPagamento },
   });
   return { ...pedido, situacao: para };
+}
+
+/**
+ * O time confere a compra e aprova o pagamento: "usamos e este valor pode ser pago". Só com a compra registrada e com
+ * valor; pedido cancelado não se aprova. A observação é do time (pode ir para o histórico).
+ */
+export async function aprovarPagamento(
+  repo: RepositorioPedidos,
+  entrada: { pedidoId: string; observacao?: string },
+  { usuarioId, instante }: ContextoDaAcao,
+): Promise<PedidoTravado> {
+  const pedido = await pedidoTravado(repo, entrada.pedidoId);
+  const verificacao = podeAprovarPagamento(pedido);
+  if (!verificacao.ok) throw new ErroDaLogistica(mensagemDaRecusaDaAprovacao(verificacao.motivo));
+  if (!(await repo.aprovarPagamento(pedido.id, { usuarioId, instante, observacao: entrada.observacao ?? null }))) throw new LogisticaMudouError(`o pedido ${pedido.referencia} mudou`);
+  await repo.registrar({
+    pedidoId: pedido.id,
+    eventoId: pedido.eventoId,
+    acao: "PAGAMENTO_APROVADO",
+    comentario: entrada.observacao ?? null,
+    usuarioId,
+    dados: { referencia: pedido.referencia, tipo: pedido.tipo, valorCentavos: pedido.valorCentavos },
+  });
+  return { ...pedido, aprovadoEm: instante };
+}
+
+/** O time desfaz a aprovação (para a SDC corrigir a compra, por exemplo). O pedido volta para "a aprovar". */
+export async function desfazerAprovacao(repo: RepositorioPedidos, entrada: { pedidoId: string }, { usuarioId, instante }: ContextoDaAcao): Promise<PedidoTravado> {
+  const pedido = await pedidoTravado(repo, entrada.pedidoId);
+  if (!podeDesfazerAprovacao(pedido)) throw new ErroDaLogistica("Este pagamento não está aprovado. Recarregue a página.");
+  if (!(await repo.desfazerAprovacao(pedido.id, instante))) throw new LogisticaMudouError(`o pedido ${pedido.referencia} mudou`);
+  await registrarQuedaDaAprovacao(repo, pedido, { usuarioId }, "desfeita pelo time");
+  return { ...pedido, aprovadoEm: null };
 }

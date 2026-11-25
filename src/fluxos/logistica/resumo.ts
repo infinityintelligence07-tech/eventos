@@ -1,6 +1,8 @@
 import { bancoParaLeitura } from "@/fluxos/_base";
 import { criarRepositorioPedidos, dataEmSaoPaulo, textoDosDiasQueFaltam } from "@/modules/logistica";
 
+const reais = (centavos: number) => (centavos / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
 import { type ItemDoInicio, LIMITE_DE_EXEMPLOS } from "./comum";
 import { avisoDeVoosPorEvento } from "./voos";
 
@@ -12,7 +14,8 @@ import { avisoDeVoosPorEvento } from "./voos";
 export async function resumoParaInicio(agora: Date): Promise<ItemDoInicio[]> {
   const hoje = dataEmSaoPaulo(agora);
   const db = await bancoParaLeitura();
-  const [aviso, alterados] = await Promise.all([avisoDeVoosPorEvento(db, hoje), criarRepositorioPedidos(db).pedidos({ desde: hoje, situacoes: ["ALTERADO"] })]);
+  const repo = criarRepositorioPedidos(db);
+  const [aviso, alterados, aAprovar] = await Promise.all([avisoDeVoosPorEvento(db, hoje), repo.pedidos({ desde: hoje, situacoes: ["ALTERADO"] }), repo.pedidos({ aAprovar: true })]);
 
   return [
     {
@@ -25,6 +28,18 @@ export async function resumoParaInicio(agora: Date): Promise<ItemDoInicio[]> {
         rotulo: evento.codigo ?? evento.nome,
         detalhe: evento.janela === "ATRASADO" ? `atrasado · ${textoDosDiasQueFaltam(evento.dias)}` : textoDosDiasQueFaltam(evento.dias),
         href: `/logistica/voos?evento=${evento.eventoId}`,
+      })),
+    },
+    {
+      // Time solicita → SDC compra e registra o valor → time confere e aprova o pagamento (voo e hospedagem).
+      chave: "compras-a-aprovar",
+      titulo: "Compras da SDC a aprovar",
+      quantidade: aAprovar.length,
+      href: "/logistica/voos?situacao=EMITIDO",
+      exemplos: aAprovar.slice(0, LIMITE_DE_EXEMPLOS).map((pedido) => ({
+        rotulo: `${pedido.referencia} · ${pedido.pessoaNome ?? "Hospedagem"}`,
+        detalhe: `${pedido.evento.codigo ?? pedido.evento.nome} · ${reais(pedido.valorCentavos ?? 0)}`,
+        href: pedido.tipo === "VOO" ? `/logistica/voos?evento=${pedido.evento.id}&ref=${pedido.referencia}` : `/logistica/hospedagem?evento=${pedido.evento.id}`,
       })),
     },
     {

@@ -5,10 +5,12 @@ import type { LinhaDeVoo, PedidoCarregado, VoosCarregados } from "@/fluxos/logis
 import {
   aguardandoSdc,
   type EventoDaLogistica,
+  type PedidoDaSdc,
   rotuloDaPreferencia,
   rotuloDoMes,
   rotuloDoSentido,
   rotuloDoTrajeto,
+  situacaoDoPagamento,
   type Sentido,
   textoDosDiasQueFaltam,
   trajetoDosTrechos,
@@ -26,8 +28,25 @@ import { EstadoVazio } from "../../_componentes/ui/estados";
 import { dataCurta, dataEHora, dinheiro, hora, periodo } from "../../_componentes/ui/formatos";
 import { SeloRegistradoPeloTime } from "../../_componentes/ui/selo";
 import { CabecaDaTabela, CelulaDaTabela, ColunaDaTabela, LinhaDaTabela, Tabela } from "../../_componentes/ui/tabela";
-import { alterarPedidoAcao, cancelarPedidoAcao, dispensarLogisticaDoEventoAcao, registrarPedidoDeVooAcao, registrarRetornoDeVooAcao } from "../acoes";
-import { BotaoCancelarPedido, FormularioAlterarPedido, FormularioNovoPedido, FormularioRegistrarVoo, type TrechosIniciais } from "./formularios-de-voo";
+import {
+  alterarPedidoAcao,
+  aprovarPagamentoAcao,
+  cancelarPedidoAcao,
+  desfazerAprovacaoAcao,
+  dispensarLogisticaDoEventoAcao,
+  registrarPedidoDeVooAcao,
+  registrarRetornoDeVooAcao,
+} from "../acoes";
+import {
+  BotaoAprovarPagamento,
+  BotaoCancelarPedido,
+  BotaoDesfazerAprovacao,
+  FormularioAlterarPedido,
+  FormularioNovoPedido,
+  FormularioRegistrarVoo,
+  type TrechosIniciais,
+} from "./formularios-de-voo";
+import { ChipDoPagamento, TotaisDoPagamentoNaTela } from "./pagamento";
 import { ChipDoVoo, enderecoCom, paraCampoDeDataEHora, paraCampoDeDinheiro } from "./situacoes";
 
 // Voos como na planilha do time: pedidos agrupados por mês e por evento, uma linha por compra. Nós solicitamos, a SDC
@@ -61,6 +80,12 @@ function CelulaDoSentido({ trechos, sentido }: { trechos: TrechoDoPedido[]; sent
       <span className="block whitespace-nowrap text-[12px] tabular-nums text-[var(--ds-label-2)]">{quando}</span>
     </CelulaDaTabela>
   );
+}
+
+/** Quem lançou a compra: a própria SDC (pela área dela) ou alguém do time em nome dela. */
+function QuemRegistrou({ pedido }: { pedido: PedidoDaSdc }) {
+  if (pedido.retornoPelaSdc) return <span className="text-[12px] text-[var(--ds-label-2)]">Compra registrada pela SDC ({pedido.retornoPelaSdc})</span>;
+  return pedido.retornoRegistradoPor ? <SeloRegistradoPeloTime em={pedido.emitidoEm} por={pedido.retornoRegistradoPor} /> : null;
 }
 
 const distintos = (valores: (string | null)[]) => [...new Set(valores.filter((valor): valor is string => Boolean(valor)))];
@@ -104,7 +129,8 @@ function LinhaDoVoo({ linha, base, parametros, escrita, diasDoAtraso }: { linha:
       <CelulaDaTabela>
         <span className="flex flex-wrap items-center gap-1">
           <ChipDoVoo situacao={linha.situacao} />
-          {pedido?.retornoRegistradoPor && <SeloRegistradoPeloTime em={pedido.emitidoEm} por={pedido.retornoRegistradoPor} />}
+          {pedido && <ChipDoPagamento pedido={pedido} />}
+          {pedido && <QuemRegistrou pedido={pedido} />}
         </span>
         {linha.situacao === "A_PEDIR" && (
           <span className="mt-1 block text-[12px] text-[var(--ds-label-2)]">
@@ -129,6 +155,11 @@ function LinhaDoVoo({ linha, base, parametros, escrita, diasDoAtraso }: { linha:
           <BotaoLink tamanho="pequeno" className="whitespace-nowrap" href={abrir({ ref: pedido.referencia, modo: "registrar" })} scroll={false}>
             Registrar voo
           </BotaoLink>
+        )}
+        {escrita && pedido && situacaoDoPagamento(pedido) === "A_APROVAR" && (
+          <span className="mr-1 inline-flex">
+            <BotaoAprovarPagamento acao={aprovarPagamentoAcao} pedidoId={pedido.id} referencia={pedido.referencia} valor={dinheiro(pedido.valorCentavos ?? 0)} />
+          </span>
         )}
         {pedido && !(escrita && aguardandoSdc(pedido.situacao)) && (
           <BotaoLink tamanho="pequeno" className="whitespace-nowrap" href={abrir({ ref: pedido.referencia })} scroll={false}>
@@ -185,8 +216,19 @@ function DetalheDoPedido({ pedido, registrado }: { pedido: PedidoCarregado; regi
         <dt className="text-[var(--ds-label-2)]">Situação</dt>
         <dd className="flex flex-wrap items-center gap-1">
           <ChipDoVoo situacao={pedido.situacao} />
-          {pedido.retornoRegistradoPor && <SeloRegistradoPeloTime em={pedido.emitidoEm} por={pedido.retornoRegistradoPor} />}
+          <ChipDoPagamento pedido={pedido} />
+          <QuemRegistrou pedido={pedido} />
         </dd>
+        {pedido.aprovadoEm && (
+          <>
+            <dt className="text-[var(--ds-label-2)]">Pagamento</dt>
+            <dd>
+              Aprovado em {dataEHora(pedido.aprovadoEm)}
+              {pedido.aprovadoPor ? ` por ${pedido.aprovadoPor}` : ""}
+              {pedido.observacaoAprovacao ? ` — “${pedido.observacaoAprovacao}”` : ""}
+            </dd>
+          </>
+        )}
         <dt className="text-[var(--ds-label-2)]">Evento</dt>
         <dd>
           {pedido.evento.codigo ?? pedido.evento.nome} · {periodo(pedido.evento.dataInicio, pedido.evento.dataFim)}
@@ -269,7 +311,9 @@ function PainelDoPedido({ pedido, base, parametros, escrita }: { pedido: PedidoC
     );
   }
 
-  if (modo === "registrar" && aguardandoSdc(pedido.situacao)) {
+  // Registrar a compra (aguardando a SDC) ou corrigir a que já foi registrada (EMITIDO): se o pagamento já estava
+  // aprovado, a aprovação cai e o pedido volta para "a aprovar".
+  if (modo === "registrar" && pedido.situacao !== "CANCELADO") {
     return (
       <PainelPelaUrl titulo={`Registrar voo · ${pedido.referencia}`} subtitulo={subtitulo} aoFecharIrPara={fechar}>
         <FormularioRegistrarVoo
@@ -325,6 +369,15 @@ function PainelDoPedido({ pedido, base, parametros, escrita }: { pedido: PedidoC
               <BotaoLink href={enderecoCom(base, parametros, { modo: "alterar", registrado: null })} scroll={false}>
                 Alterar pedido
               </BotaoLink>
+            )}
+            {escrita && pedido.situacao === "EMITIDO" && (
+              <BotaoLink href={enderecoCom(base, parametros, { modo: "registrar", registrado: null })} scroll={false}>
+                Corrigir compra
+              </BotaoLink>
+            )}
+            {escrita && situacaoDoPagamento(pedido) === "APROVADO" && <BotaoDesfazerAprovacao acao={desfazerAprovacaoAcao} pedidoId={pedido.id} referencia={pedido.referencia} tamanho="normal" />}
+            {escrita && situacaoDoPagamento(pedido) === "A_APROVAR" && (
+              <BotaoAprovarPagamento acao={aprovarPagamentoAcao} pedidoId={pedido.id} referencia={pedido.referencia} valor={dinheiro(pedido.valorCentavos ?? 0)} tamanho="normal" />
             )}
             {escrita && aguardandoSdc(pedido.situacao) && (
               <BotaoLink variante="primario" href={enderecoCom(base, parametros, { modo: "registrar", registrado: null })} scroll={false}>
@@ -443,6 +496,7 @@ export function SecaoDeVoos({
       </div>
       {!escrita && <FaixaSomenteLeitura />}
       <AvisoDeCompra aviso={dados.avisoDeCompra} base={base} parametros={parametros} escrita={escrita} />
+      <TotaisDoPagamentoNaTela totais={dados.totais} />
       <BarraDeFiltros resultado={dados.total === 1 ? "1 linha" : `${dados.total} linhas`}>
         {comSeletorDeEvento && (
           <SeletorDeFiltro

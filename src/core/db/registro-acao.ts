@@ -26,11 +26,24 @@ export type EntidadeRegistrada =
   | "EVENTO"
   | "VAGA";
 
-/** Valores do CHECK registro_acao_origem_check. USUARIO exige usuario_id; SISTEMA (sincronização) exige que seja nulo. */
-export type OrigemDoRegistro = "USUARIO" | "SISTEMA";
+/**
+ * Valores do CHECK registro_acao_origem_check. USUARIO exige usuario_id; SISTEMA (sincronização) não tem autor;
+ * SDC exige acesso_sdc_id (a pessoa da agência não tem core.usuario).
+ */
+export type OrigemDoRegistro = "USUARIO" | "SISTEMA" | "SDC";
 
-/** Quem fez: alguém do time (usuarioId obrigatório) ou o sistema (sincronização, sem usuário). */
-export type AutoriaDoRegistro = { origem?: "USUARIO"; usuarioId: string } | { origem: "SISTEMA"; usuarioId?: null };
+/** Quem fez: alguém do time (usuarioId), o sistema (sincronização) ou alguém da SDC (linha de eventos.acesso_sdc). */
+export type AutoriaDoRegistro =
+  | { origem?: "USUARIO"; usuarioId: string; acessoSdcId?: undefined }
+  | { origem: "SISTEMA"; usuarioId?: null; acessoSdcId?: undefined }
+  | { origem: "SDC"; acessoSdcId: string; usuarioId?: undefined };
+
+/** Autor de uma ação que tanto o time quanto a SDC podem fazer (registrar a compra de um pedido). */
+export type AutorDaAcao = { usuarioId: string } | { acessoSdcId: string };
+
+export function autoriaDe(autor: AutorDaAcao): AutoriaDoRegistro {
+  return "acessoSdcId" in autor ? { origem: "SDC", acessoSdcId: autor.acessoSdcId } : { usuarioId: autor.usuarioId };
+}
 
 export type EntradaDoRegistro = AutoriaDoRegistro & {
   entidade: EntidadeRegistrada;
@@ -73,7 +86,8 @@ export async function registrarAcao(executor: Executor, entrada: EntradaDoRegist
     comentario: entrada.comentario ?? null,
     emNomeDePessoaId: entrada.emNomeDePessoaId ?? null,
     origem: entrada.origem ?? "USUARIO",
-    usuarioId: entrada.origem === "SISTEMA" ? null : entrada.usuarioId,
+    usuarioId: entrada.origem === "SISTEMA" || entrada.origem === "SDC" ? null : entrada.usuarioId,
+    acessoSdcId: entrada.origem === "SDC" ? entrada.acessoSdcId : null,
     dados: entrada.dados ?? {},
   });
   const contagem = contagemDaTransacao.getStore();

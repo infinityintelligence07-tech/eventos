@@ -209,7 +209,8 @@ describe("máquina do pedido à SDC (§4.5)", () => {
     ["PEDIDO", "REGISTRAR_RETORNO", { para: "EMITIDO" }],
     ["PEDIDO", "CANCELAR", { para: "CANCELADO" }],
     ["EMITIDO", "ALTERAR", { para: "ALTERADO" }],
-    ["EMITIDO", "REGISTRAR_RETORNO", { erro: "TRANSICAO_INVALIDA" }],
+    // Corrigir a compra já registrada (a aprovação do pagamento é decidida em domain/pagamento.ts).
+    ["EMITIDO", "REGISTRAR_RETORNO", { para: "EMITIDO" }],
     ["EMITIDO", "CANCELAR", { para: "CANCELADO" }],
     ["ALTERADO", "ALTERAR", { para: "ALTERADO" }],
     ["ALTERADO", "REGISTRAR_RETORNO", { para: "EMITIDO" }],

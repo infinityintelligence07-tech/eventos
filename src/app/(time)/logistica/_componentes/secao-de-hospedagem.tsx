@@ -2,7 +2,7 @@ import { Hotel, Sparkles } from "lucide-react";
 import Link from "next/link";
 
 import type { HospedagemDoEventoCarregada } from "@/fluxos/logistica";
-import { destinoDaTroca, destinoNoQuarto, diasEntre, rotuloDaCapacidade, rotuloDoSexoDoQuarto, somarDias, textoDoPeriodo } from "@/modules/logistica";
+import { destinoDaTroca, destinoNoQuarto, diasEntre, rotuloDaCapacidade, rotuloDoSexoDoQuarto, situacaoDoPagamento, somarDias, textoDoPeriodo } from "@/modules/logistica";
 import { BotaoCopiar, FormularioDeAcao } from "@/app/(time)/_componentes/ui";
 
 import { Aviso, FaixaSomenteLeitura } from "../../_componentes/ui/aviso";
@@ -16,7 +16,9 @@ import {
   adicionarQuartoAcao,
   alterarHospedagemAcao,
   aplicarRoomingSugeridoAcao,
+  aprovarPagamentoAcao,
   cancelarPedidoAcao,
+  desfazerAprovacaoAcao,
   criarHospedagemAcao,
   definirPeriodoDoOcupanteAcao,
   dispensarLogisticaDoEventoAcao,
@@ -29,7 +31,8 @@ import {
   tirarDoQuartoAcao,
 } from "../acoes";
 import { BotaoDefinirHospedagem, BotaoPeriodoDoOcupante, BotaoRegistrarReserva, FormularioNovoQuarto } from "./formularios-de-hospedagem";
-import { BotaoCancelarPedido } from "./formularios-de-voo";
+import { BotaoAprovarPagamento, BotaoCancelarPedido, BotaoDesfazerAprovacao } from "./formularios-de-voo";
+import { ChipDoPagamento } from "./pagamento";
 import { ChipDoVoo, paraCampoDeDinheiro } from "./situacoes";
 
 // Hospedagem do evento: nós montamos os quartos (quem divide com quem), a SDC escolhe e reserva o hotel. A tela começa
@@ -432,6 +435,18 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
                           </BotaoDeEnvio>
                         </FormularioDeAcao>
                       )}
+                    </dd>
+                  </>
+                )}
+                {pedido && situacaoDoPagamento(pedido) !== "SEM_COMPRA" && situacaoDoPagamento(pedido) !== "CANCELADO" && (
+                  <>
+                    <dt className="text-[var(--ds-label-2)]">Pagamento</dt>
+                    <dd className="flex flex-wrap items-center gap-2">
+                      <ChipDoPagamento pedido={pedido} />
+                      {escrita && situacaoDoPagamento(pedido) === "A_APROVAR" && (
+                        <BotaoAprovarPagamento acao={aprovarPagamentoAcao} pedidoId={pedido.id} referencia={pedido.referencia} valor={dinheiro(pedido.valorCentavos ?? 0)} />
+                      )}
+                      {escrita && situacaoDoPagamento(pedido) === "APROVADO" && <BotaoDesfazerAprovacao acao={desfazerAprovacaoAcao} pedidoId={pedido.id} referencia={pedido.referencia} />}
                     </dd>
                   </>
                 )}

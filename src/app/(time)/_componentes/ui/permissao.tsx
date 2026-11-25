@@ -26,6 +26,9 @@ export function motivoSemPermissao(permissao: Permissao): string {
       return "Só a líder pode mudar as regras de custo.";
     case "config.acesso_do_time":
       return "Só a líder pode liberar ou retirar o acesso ao sistema.";
+    case "config.acesso_da_sdc":
+      return "Só a líder pode liberar ou retirar o acesso da SDC.";
+    case "logistica.aprovar_pagamento":
     case "evento.editar":
     case "escala.montar":
     case "escala.registrar_resposta":

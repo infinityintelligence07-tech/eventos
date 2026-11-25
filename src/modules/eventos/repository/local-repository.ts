@@ -1,7 +1,7 @@
 import { and, asc, eq, isNull, ne, or, sql } from "drizzle-orm";
 
 import type { Executor } from "@/core/db/database";
-import { registrarAcao } from "@/core/db/registro-acao";
+import { type AutorDaAcao, autoriaDe, registrarAcao } from "@/core/db/registro-acao";
 import { evento, hospedagem, local } from "@/core/db/schema/eventos";
 
 import type { SalvarLocal, TipoDeLocal, UsoDoLocal } from "../domain/local";
@@ -91,6 +91,17 @@ export function criarRepositorioLocal(executor: Executor) {
       return linha !== undefined;
     },
 
+    /** Hotel ativo com este nome nesta cidade (sem diferenciar maiúsculas), para não cadastrar o mesmo hotel duas vezes. */
+    async hotelComNome({ nome, cidade, uf }: Pick<DadosDoLocal, "nome" | "cidade" | "uf">): Promise<string | null> {
+      const [linha] = await executor
+        .select({ id: local.id })
+        .from(local)
+        .where(and(isNull(local.deletedAt), eq(local.tipo, "HOTEL"), eq(local.uf, uf), sql`lower(${local.nome}) = lower(${nome})`, sql`lower(${local.cidade}) = lower(${cidade})`))
+        .orderBy(asc(local.criadoEm))
+        .limit(1);
+      return linha?.id ?? null;
+    },
+
     async criar(dados: DadosDoLocal, instante: Date): Promise<string> {
       const [criado] = await executor
         .insert(local)
@@ -128,9 +139,10 @@ export function criarRepositorioLocal(executor: Executor) {
     /** Endereço de local de evento ou hotel não é dado pessoal: as mudanças vão com os valores. */
     async registrar(
       localId: string,
-      { acao, usuarioId, dados }: { acao: "LOCAL_CRIADO" | "LOCAL_ALTERADO" | "LOCAL_ARQUIVADO"; usuarioId: string; dados: Record<string, unknown> },
+      { acao, dados, ...autor }: { acao: "LOCAL_CRIADO" | "LOCAL_ALTERADO" | "LOCAL_ARQUIVADO"; dados: Record<string, unknown> } & AutorDaAcao,
     ): Promise<void> {
-      await registrarAcao(executor, { entidade: "LOCAL", entidadeId: localId, acao, usuarioId, dados });
+      // O autor é alguém do time ou, quando o hotel nasce do retorno de uma hospedagem, alguém da SDC.
+      await registrarAcao(executor, { ...autoriaDe(autor), entidade: "LOCAL", entidadeId: localId, acao, dados });
     },
   };
 }

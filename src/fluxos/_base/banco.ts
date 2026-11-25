@@ -10,7 +10,7 @@ import {
   verificarAtor,
   verificarServidor,
 } from "@/core/ambiente";
-import type { AtorDaEscrita } from "@/core/autorizacao";
+import type { QuemEscreve } from "@/core/autorizacao";
 import { criarDb, type Db, type Executor } from "@/core/db/database";
 import { bancoDoAmbiente, bancoParaLeitura } from "@/core/db/leitura";
 import { contandoRegistros } from "@/core/db/registro-acao";
@@ -98,8 +98,8 @@ export type DependenciasDaGuarda = {
 
 export type GuardaDeEscrita = {
   /** Sem `ator` (undefined), confere só as travas 1 a 3: é o que o cabeçalho mostra. */
-  situacao(ator?: AtorDaEscrita | null): Promise<SituacaoDaEscrita>;
-  bancoParaEscrita(ator: AtorDaEscrita | null): Promise<Db>;
+  situacao(ator?: QuemEscreve | null): Promise<SituacaoDaEscrita>;
+  bancoParaEscrita(ator: QuemEscreve | null): Promise<Db>;
 };
 
 /**
@@ -123,7 +123,7 @@ export function criarGuardaDeEscrita(dependencias: DependenciasDaGuarda): Guarda
     }
   }
 
-  async function situacao(ator?: AtorDaEscrita | null): Promise<SituacaoDaEscrita> {
+  async function situacao(ator?: QuemEscreve | null): Promise<SituacaoDaEscrita> {
     const atual = await travasDoAmbienteEDoServidor();
     if (!atual.liberada || ator === undefined) return atual;
     return verificarAtor(atual.modo, ator);
@@ -154,7 +154,7 @@ export async function lerEmTransacao<T>(trabalho: (tx: Executor) => Promise<T>):
 }
 
 /** O único caminho para escrever: as quatro travas; lança EscritaDesligadaError se alguma estiver fechada. */
-export function bancoParaEscrita(ator: AtorDaEscrita): Promise<Db> {
+export function bancoParaEscrita(ator: QuemEscreve): Promise<Db> {
   return guarda.bancoParaEscrita(ator);
 }
 
@@ -179,6 +179,6 @@ export async function transacaoNoBanco<T>(db: Db, trabalho: (tx: Executor) => Pr
 }
 
 /** Transação de escrita do caso de uso (docs/09 §5.2): passa pelas quatro travas. Tudo usa o `tx` recebido. */
-export async function transacao<T>(ator: AtorDaEscrita, trabalho: (tx: Executor) => Promise<T>): Promise<T> {
+export async function transacao<T>(ator: QuemEscreve, trabalho: (tx: Executor) => Promise<T>): Promise<T> {
   return transacaoNoBanco(await bancoParaEscrita(ator), trabalho);
 }

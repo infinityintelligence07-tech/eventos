@@ -5,13 +5,15 @@ import { cache } from "react";
 import { modoDemo, modoLocal } from "@/core/ambiente";
 import {
   type Ator,
+  type AtorSdc,
   ATOR_DA_DEMO,
   COOKIE_ATOR_LOCAL,
   COOKIE_SESSAO,
   criarSupabaseDoServidor,
   lerSessao,
+  resolverAcessoPorEmail,
+  resolverAcessoPorId,
   resolverAtorPorEmail,
-  resolverAtorPorId,
   segredoDaSessao,
   usuarioDoCookieLocal,
 } from "@/core/auth";
@@ -31,7 +33,12 @@ export type SituacaoDoAtor =
   | { situacao: "SEM_SESSAO"; destino: "/login" | "/entrar-local" }
   /** Sessão válida sem core.usuario ativo: sai da sessão e volta ao login com aviso. */
   | { situacao: "SEM_CADASTRO" }
-  | { situacao: "SEM_PERFIL"; email: string };
+  | { situacao: "SEM_PERFIL"; email: string }
+  /**
+   * Alguém da SDC (ativo em eventos.acesso_sdc e que não é do time). NÃO é um ator do time: `obterAtor()` devolve nulo
+   * e `exigirAtor()` manda para /sdc, então nenhuma página nem action do time aceita esta situação.
+   */
+  | { situacao: "SDC"; sdc: AtorSdc };
 
 /** Modo local com as três travas abertas (a mesma decisão da guarda de escrita, inclusive o marcador no banco). */
 export async function entradaLocalLiberada(): Promise<boolean> {
@@ -43,7 +50,7 @@ async function situacaoLocal(): Promise<SituacaoDoAtor> {
   if (!(await entradaLocalLiberada())) return { situacao: "SEM_SESSAO", destino: "/login" };
   const usuarioId = usuarioDoCookieLocal((await cookies()).get(COOKIE_ATOR_LOCAL)?.value);
   if (!usuarioId) return { situacao: "SEM_SESSAO", destino: "/entrar-local" };
-  const resolucao = await resolverAtorPorId(usuarioId, await bancoParaLeitura());
+  const resolucao = await resolverAcessoPorId(usuarioId, await bancoParaLeitura());
   return resolucao.situacao === "SEM_CADASTRO" ? { situacao: "SEM_SESSAO", destino: "/entrar-local" } : resolucao;
 }
 
@@ -68,7 +75,8 @@ async function situacaoDaSessao(): Promise<SituacaoDoAtor> {
   if (error || !user) return { situacao: "SEM_SESSAO", destino: "/login" };
   // O Google confirma o e-mail; sem confirmação, o e-mail não identifica ninguém.
   if (!user.email || !user.email_confirmed_at) return { situacao: "SEM_CADASTRO" };
-  return resolverAtorPorEmail(user.email, await bancoParaLeitura());
+  // Só aqui (login pelo provedor, com e-mail confirmado) a lista da SDC é consultada, e só para quem não é do time.
+  return resolverAcessoPorEmail(user.email, await bancoParaLeitura());
 }
 
 /**
@@ -120,6 +128,9 @@ export async function exigirAtor(): Promise<Ator> {
       redirect("/auth/encerrar?motivo=sem-cadastro");
     case "SEM_PERFIL":
       redirect("/sem-acesso");
+    case "SDC":
+      // A SDC nunca entra nas telas do time: o lugar dela é a área própria.
+      redirect("/sdc");
     default: {
       const desconhecida: never = atual;
       throw new Error(`situação do ator desconhecida: ${JSON.stringify(desconhecida)}`);

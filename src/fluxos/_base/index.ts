@@ -1,5 +1,5 @@
 export type { Db, Executor } from "@/core/db/database";
-export { type AutoriaDoRegistro, type EntidadeRegistrada, type EntradaDoRegistro, registrarAcao } from "@/core/db/registro-acao";
+export { type AutorDaAcao, autoriaDe, type AutoriaDoRegistro, type EntidadeRegistrada, type EntradaDoRegistro, registrarAcao } from "@/core/db/registro-acao";
 export {
   type LeituraDoServidor,
   type ModoDeEscrita,
@@ -7,7 +7,7 @@ export {
   type TravaDeEscrita,
   USUARIO_TESTE,
 } from "@/core/ambiente";
-export { AcessoNegadoError, type AtorDaEscrita } from "@/core/autorizacao";
+export { AcessoNegadoError, type AtorDaEscrita, type AtorSdcDaEscrita, type QuemEscreve } from "@/core/autorizacao";
 export {
   bancoParaEscrita,
   bancoParaLeitura,

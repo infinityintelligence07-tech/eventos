@@ -16,6 +16,7 @@ const ABAS: (AbaDaPagina & { permissao: Permissao })[] = [
   { href: "/configuracoes/locais", rotulo: "Locais e hotéis", permissao: "config.locais" },
   { href: "/configuracoes/voos", rotulo: "Aviso de voos", permissao: "config.aviso_de_voos" },
   { href: "/configuracoes/acesso", rotulo: "Acesso do time", permissao: "config.acesso_do_time" },
+  { href: "/configuracoes/acesso-da-sdc", rotulo: "Acesso da SDC", permissao: "config.acesso_da_sdc" },
 ];
 
 export default async function LayoutDasConfiguracoes({ children }: { children: ReactNode }) {

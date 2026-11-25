@@ -1,9 +1,11 @@
-import { and, asc, count, desc, eq, inArray, isNull, ne, notInArray, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne, notInArray, sql, type SQL } from "drizzle-orm";
 
 import { pessoa, polo, usuario } from "@/core/db/schema/core";
 import type { Executor } from "@/core/db/database";
-import { registrarAcao } from "@/core/db/registro-acao";
-import { convocacao, escala, evento, hospedagem, local, pedidoSdc, pessoaEvento, quarto, tipoEvento, trechoVoo } from "@/core/db/schema/eventos";
+import { autoriaDe, registrarAcao } from "@/core/db/registro-acao";
+import { alias } from "drizzle-orm/pg-core";
+
+import { acessoSdc, convocacao, escala, evento, hospedagem, local, pedidoSdc, pessoaEvento, quarto, tipoEvento, trechoVoo } from "@/core/db/schema/eventos";
 
 import type { PreferenciaDeHorario, Sentido, SituacaoDoPedido, TipoDoPedido } from "../domain/pedido";
 import type { RepositorioPedidos } from "../service/pedidos";
@@ -66,6 +68,12 @@ export type PedidoDaSdc = {
   solicitadoEm: Date;
   emitidoEm: Date | null;
   retornoRegistradoPor: string | null;
+  /** Nome de quem da SDC lançou a compra pela área dela (nulo = foi o time, ou ainda não há compra). */
+  retornoPelaSdc: string | null;
+  /** Aprovação do pagamento pelo time: quando, por quem (nome) e a observação. */
+  aprovadoEm: Date | null;
+  aprovadoPor: string | null;
+  observacaoAprovacao: string | null;
   canceladoEm: Date | null;
   motivoCancelamento: string | null;
   /** ISO com milissegundos: versão para o compare-and-set da tela. */
@@ -100,7 +108,8 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
   /** Pessoas ativas do cadastro de staff, por nome: quem pode receber um pedido de voo. */
   staffAtivoPorNome(): Promise<{ pessoaId: string; nome: string }[]>;
   temPedidoDeVooAtivo(eventoId: string): Promise<boolean>;
-  pedidos(filtro: { desde?: string; eventoId?: string; tipo?: TipoDoPedido; referencia?: string; situacoes?: SituacaoDoPedido[] }): Promise<PedidoDaSdc[]>;
+  /** `aAprovar`: só compras registradas, com valor, que o time ainda não aprovou para pagamento (de qualquer data). */
+  pedidos(filtro: { desde?: string; eventoId?: string; tipo?: TipoDoPedido; referencia?: string; situacoes?: SituacaoDoPedido[]; aAprovar?: boolean }): Promise<PedidoDaSdc[]>;
 } {
   async function trechosDosPedidos(ids: string[]): Promise<Map<string, TrechoDoPedido[]>> {
     const porPedido = new Map<string, TrechoDoPedido[]>();
@@ -232,13 +241,15 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
       return linhas;
     },
 
-    async pedidos({ desde, eventoId, tipo, referencia, situacoes }) {
+    async pedidos({ desde, eventoId, tipo, referencia, situacoes, aAprovar }) {
+      const aprovador = alias(usuario, "aprovador");
       const condicoes: (SQL | undefined)[] = [
         eventoId ? eq(pedidoSdc.eventoId, eventoId) : undefined,
         desde && !eventoId && !referencia ? eventoTerminaDesde(desde) : undefined,
         tipo ? eq(pedidoSdc.tipo, tipo) : undefined,
         referencia ? eq(pedidoSdc.referencia, referencia) : undefined,
         situacoes ? inArray(pedidoSdc.situacao, situacoes) : undefined,
+        aAprovar ? and(eq(pedidoSdc.situacao, "EMITIDO"), isNotNull(pedidoSdc.valorCentavos), isNull(pedidoSdc.aprovadoEm)) : undefined,
       ];
       const linhas = await executor
         .select({
@@ -257,6 +268,10 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
           solicitadoEm: pedidoSdc.solicitadoEm,
           emitidoEm: pedidoSdc.emitidoEm,
           retornoRegistradoPor: sql<string | null>`case when ${pedidoSdc.retornoRegistradoPor} is null then null else coalesce(${usuario.nomeUsuario}, ${usuario.email}, 'time') end`,
+          retornoPelaSdc: acessoSdc.nome,
+          aprovadoEm: pedidoSdc.aprovadoEm,
+          aprovadoPor: sql<string | null>`case when ${pedidoSdc.aprovadoEm} is null then null else coalesce(${aprovador.nomeUsuario}, ${aprovador.email}, 'time') end`,
+          observacaoAprovacao: pedidoSdc.observacaoAprovacao,
           canceladoEm: pedidoSdc.canceladoEm,
           motivoCancelamento: pedidoSdc.motivoCancelamento,
           atualizadoEm: pedidoSdc.atualizadoEm,
@@ -266,6 +281,8 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
         .leftJoin(local, eq(local.id, evento.localId))
         .leftJoin(pessoa, eq(pessoa.id, pedidoSdc.pessoaId))
         .leftJoin(usuario, eq(usuario.id, pedidoSdc.retornoRegistradoPor))
+        .leftJoin(aprovador, eq(aprovador.id, pedidoSdc.aprovadoPor))
+        .leftJoin(acessoSdc, eq(acessoSdc.id, pedidoSdc.retornoRegistradoPelaSdc))
         .where(and(...condicoes))
         .orderBy(asc(inicioDoEvento), desc(pedidoSdc.referencia));
       const trechos = await trechosDosPedidos(linhas.map((linha) => linha.id));
@@ -361,6 +378,8 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
           situacao: pedidoSdc.situacao,
           eventoId: pedidoSdc.eventoId,
           pessoaId: pedidoSdc.pessoaId,
+          valorCentavos: pedidoSdc.valorCentavos,
+          aprovadoEm: pedidoSdc.aprovadoEm,
           atualizadoEm: pedidoSdc.atualizadoEm,
         })
         .from(pedidoSdc)
@@ -388,13 +407,17 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
                 emitidoEm: mudanca.instante,
                 valorCentavos: mudanca.emissao.valorCentavos,
                 observacaoSdc: mudanca.emissao.observacaoSdc,
-                retornoRegistradoPor: mudanca.emissao.usuarioId,
+                // Um ou outro: o time em nome da SDC, ou a própria SDC.
+                retornoRegistradoPor: "usuarioId" in mudanca.emissao.autor ? mudanca.emissao.autor.usuarioId : null,
+                retornoRegistradoPelaSdc: "acessoSdcId" in mudanca.emissao.autor ? mudanca.emissao.autor.acessoSdcId : null,
                 ...(mudanca.emissao.formaPagamento !== undefined ? { formaPagamento: mudanca.emissao.formaPagamento } : {}),
               }
             : {}),
           ...(mudanca.cancelamento
             ? { canceladoEm: mudanca.instante, canceladoPor: mudanca.cancelamento.usuarioId, motivoCancelamento: mudanca.cancelamento.motivo }
             : {}),
+          // Alterar e cancelar tiram o pedido de EMITIDO: a aprovação sai junto (o CHECK do banco exige). Corrigir a compra também a derruba.
+          ...(mudanca.aprovacaoCai || mudanca.para !== "EMITIDO" ? { aprovadoEm: null, aprovadoPor: null, observacaoAprovacao: null } : {}),
         })
         .where(
           and(
@@ -403,6 +426,24 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
             condicao.atualizadoEm ? mesmaVersao(pedidoSdc.atualizadoEm, condicao.atualizadoEm) : undefined,
           ),
         )
+        .returning({ id: pedidoSdc.id });
+      return alterados.length === 1;
+    },
+
+    async aprovarPagamento(pedidoId, { usuarioId, instante, observacao }) {
+      const alterados = await executor
+        .update(pedidoSdc)
+        .set({ aprovadoEm: instante, aprovadoPor: usuarioId, observacaoAprovacao: observacao, atualizadoEm: instante })
+        .where(and(eq(pedidoSdc.id, pedidoId), eq(pedidoSdc.situacao, "EMITIDO"), isNotNull(pedidoSdc.valorCentavos), isNull(pedidoSdc.aprovadoEm)))
+        .returning({ id: pedidoSdc.id });
+      return alterados.length === 1;
+    },
+
+    async desfazerAprovacao(pedidoId, instante) {
+      const alterados = await executor
+        .update(pedidoSdc)
+        .set({ aprovadoEm: null, aprovadoPor: null, observacaoAprovacao: null, atualizadoEm: instante })
+        .where(and(eq(pedidoSdc.id, pedidoId), isNotNull(pedidoSdc.aprovadoEm)))
         .returning({ id: pedidoSdc.id });
       return alterados.length === 1;
     },
@@ -459,8 +500,9 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
       return alteradas.length === 1;
     },
 
-    async registrar({ pedidoId, eventoId, acao, statusDe, statusPara, comentario, emNomeDePessoaId, dados, usuarioId }) {
+    async registrar({ pedidoId, eventoId, acao, statusDe, statusPara, comentario, emNomeDePessoaId, dados, ...autor }) {
       await registrarAcao(executor, {
+        ...autoriaDe(autor),
         entidade: "PEDIDO_SDC",
         entidadeId: pedidoId,
         eventoId,
@@ -469,7 +511,6 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
         statusPara,
         comentario,
         emNomeDePessoaId,
-        usuarioId,
         dados,
       });
     },

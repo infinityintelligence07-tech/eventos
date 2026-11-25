@@ -234,7 +234,8 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
     const emitido = await um(`select situacao, valor_centavos, retorno_registrado_por, emitido_em from eventos.pedido_sdc where id = $1`, [pedido.id]);
     expect(emitido).toMatchObject({ situacao: "EMITIDO", valor_centavos: 98000, retorno_registrado_por: usuarioId });
     expect(await um(`select partida_em from eventos.trecho_voo where pedido_id = $1 and sentido = 'IDA'`, [pedido.id])).toEqual({ partida_em: new Date("2026-12-14T11:10:00Z") });
-    await expect(registrarRetornoDaSdc({ ...retorno, trechos: [] }, ator(), agora)).rejects.toThrow(/já foi emitido/);
+    // Compra já registrada: registrar de novo é corrigir (as validações são as mesmas).
+    await expect(registrarRetornoDaSdc({ ...retorno, trechos: [] }, ator(), agora)).rejects.toThrow(/Informe o voo de ida e de volta/);
 
     const versao = (await carregarPedido(pedido.referencia))!.atualizadoEm;
     await expect(alterarPedido({ pedidoId: pedido.id, atualizadoEm: "2020-01-01T00:00:00.000Z" }, ator(), agora)).rejects.toBeInstanceOf(ConflitoDeVersaoError);

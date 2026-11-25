@@ -30,6 +30,7 @@ const EXPLICACAO: Record<string, string> = {
   "custos-criticos": "Solicitações com alerta crítico de consumo ou distância.",
   // O fluxo manda a explicação com os dias configurados em Configurações › Aviso de voos; esta é a de reserva.
   "voos-a-pedir": "Eventos que entraram no prazo do aviso e ainda não têm nenhum pedido de voo à SDC.",
+  "compras-a-aprovar": "A SDC registrou a compra e o valor. Confira e aprove o pagamento, confirmando que a passagem ou o hotel foi usado.",
   "pedidos-alterados": "Pedidos mudados pelo time depois da emissão, esperando novo retorno da SDC.",
   "disponibilidade.enquetes-fechando": "Enquetes de disponibilidade perto de fechar.",
 };

@@ -70,6 +70,7 @@ const ORDEM_DOS_CARTOES = [
   "custos-para-auditar",
   "custos-criticos",
   "voos-a-pedir",
+  "compras-a-aprovar",
   "pedidos-alterados",
   "disponibilidade.enquetes-fechando",
 ];

@@ -1,4 +1,4 @@
-import { bancoParaLeitura, RegraDeNegocioError, transacao, type AtorDaEscrita } from "@/fluxos/_base";
+import { type AtorSdcDaEscrita, type AutorDaAcao, bancoParaLeitura, type Executor, RegraDeNegocioError, transacao, type AtorDaEscrita } from "@/fluxos/_base";
 import { criarRepositorioLocal, mudancasDoLocal } from "@/modules/eventos";
 import {
   type AdicionarQuarto,
@@ -13,6 +13,7 @@ import {
   type LocalDeHospedagem,
   misturaSexos,
   nomeComPeriodo,
+  type NovoHotel,
   type PessoaDaEquipe,
   type PorNoQuarto,
   type RegistrarPedidoDeHospedagem,
@@ -137,37 +138,71 @@ export function registrarPedidoDeHospedagem(entrada: RegistrarPedidoDeHospedagem
 }
 
 /**
- * "Registrar reserva" em nome da SDC: é aqui que o hotel entra. O time escolhe um hotel de Locais e hotéis ou cadastra
- * na hora o que a SDC reservou (com o mínimo: nome, cidade e UF; o resto se completa em Configurações).
+ * Hotel do retorno: um de Locais e hotéis (só o time escolhe da lista) ou um novo, cadastrado na hora com o mínimo.
+ * `reaproveitar`: a SDC não vê a lista de locais, então ela sempre digita o hotel; se já existe um com o mesmo nome na
+ * mesma cidade, usa esse em vez de recusar ou duplicar.
+ */
+async function hotelDoRetorno(
+  tx: Executor,
+  { localId, novoHotel }: Pick<RegistrarRetornoDeHospedagem, "localId" | "novoHotel">,
+  autor: AutorDaAcao,
+  agora: Date,
+  reaproveitar: boolean,
+): Promise<string> {
+  if (!novoHotel) {
+    if (!localId) throw new RegraDeNegocioError("Escolha o hotel que a SDC reservou ou cadastre um novo.");
+    return localId;
+  }
+  const locais = criarRepositorioLocal(tx);
+  const dados = {
+    tipo: "HOTEL" as const,
+    nome: novoHotel.nome,
+    cidade: novoHotel.cidade,
+    uf: novoHotel.uf,
+    logradouro: novoHotel.logradouro ?? null,
+    numero: novoHotel.numero ?? null,
+    bairro: novoHotel.bairro ?? null,
+    cep: null,
+    complemento: null,
+    lat: null,
+    lng: null,
+    capacidade: null,
+  };
+  const existente = await locais.hotelComNome(dados);
+  if (existente) {
+    if (reaproveitar) return existente;
+    throw new RegraDeNegocioError(`Já existe o hotel "${dados.nome}" em ${dados.cidade}/${dados.uf}. Escolha-o na lista em vez de cadastrar de novo.`);
+  }
+  const hotelId = await locais.criar(dados, agora);
+  await locais.registrar(hotelId, { acao: "LOCAL_CRIADO", ...autor, dados: { mudancas: mudancasDoLocal(null, dados), origem: "retorno da SDC" } });
+  return hotelId;
+}
+
+/**
+ * "Registrar reserva" pelo time, em nome da SDC: é aqui que o hotel entra. O time escolhe um hotel de Locais e hotéis
+ * ou cadastra na hora o que a SDC reservou (com o mínimo: nome, cidade e UF; o resto se completa em Configurações).
  */
 export function registrarRetornoDeHospedagem({ localId, novoHotel, ...retorno }: RegistrarRetornoDeHospedagem, ator: AtorDaEscrita, agora: Date) {
+  const autor = { usuarioId: ator.usuarioId };
   return traduzirErros(() =>
     transacao(ator, async (tx) => {
-      let hotelId = localId;
-      if (novoHotel) {
-        const locais = criarRepositorioLocal(tx);
-        const dados = {
-          tipo: "HOTEL" as const,
-          nome: novoHotel.nome,
-          cidade: novoHotel.cidade,
-          uf: novoHotel.uf,
-          logradouro: novoHotel.logradouro ?? null,
-          numero: novoHotel.numero ?? null,
-          bairro: novoHotel.bairro ?? null,
-          cep: null,
-          complemento: null,
-          lat: null,
-          lng: null,
-          capacidade: null,
-        };
-        if (await locais.existeComMesmoNome(dados)) {
-          throw new RegraDeNegocioError(`Já existe o hotel "${dados.nome}" em ${dados.cidade}/${dados.uf}. Escolha-o na lista em vez de cadastrar de novo.`);
-        }
-        hotelId = await locais.criar(dados, agora);
-        await locais.registrar(hotelId, { acao: "LOCAL_CRIADO", usuarioId: ator.usuarioId, dados: { mudancas: mudancasDoLocal(null, dados), origem: "retorno da SDC" } });
-      }
-      if (!hotelId) throw new RegraDeNegocioError("Escolha o hotel que a SDC reservou ou cadastre um novo.");
-      return servicoDePedidos.registrarRetornoDeHospedagem(criarRepositorioPedidos(tx), { ...retorno, localId: hotelId }, contexto(ator.usuarioId, agora));
+      const hotelId = await hotelDoRetorno(tx, { localId, novoHotel }, autor, agora, false);
+      return servicoDePedidos.registrarRetornoDeHospedagem(criarRepositorioPedidos(tx), { ...retorno, localId: hotelId }, { autor, instante: agora });
+    }),
+  );
+}
+
+/**
+ * A mesma reserva registrada pela própria SDC, na área dela (src/fluxos/sdc). A SDC sempre informa o hotel pelo nome
+ * (não tem acesso à lista de locais) e nunca corrige compra com o pagamento já aprovado (o serviço recusa).
+ */
+export function registrarRetornoDeHospedagemPelaSdc(retorno: Omit<RegistrarRetornoDeHospedagem, "localId"> & { novoHotel: NovoHotel }, sdc: AtorSdcDaEscrita, agora: Date) {
+  const autor = { acessoSdcId: sdc.acessoSdcId };
+  const { novoHotel, ...resto } = retorno;
+  return traduzirErros(() =>
+    transacao(sdc, async (tx) => {
+      const hotelId = await hotelDoRetorno(tx, { novoHotel }, autor, agora, true);
+      return servicoDePedidos.registrarRetornoDeHospedagem(criarRepositorioPedidos(tx), { ...resto, localId: hotelId }, { autor, instante: agora });
     }),
   );
 }

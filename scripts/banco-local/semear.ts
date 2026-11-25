@@ -100,6 +100,9 @@ export async function semear({ sql: db, drizzle }: Banco): Promise<void> {
     }
   }
 
+  // SDC de teste para o "Entrar como": gente de fora, só na lista do Eventos (nada em core.usuario). E-mail fictício.
+  await db.query(`INSERT INTO eventos.acesso_sdc (email, nome, criado_por) VALUES ('atendimento.sdc@exemplo.test', 'SDC (teste)', $1)`, [USUARIO_TESTE_ID]);
+
   // Link do formulário de custos usado na copy de escalação (doc 07 §11.1). Só no banco local.
   await db.query(
     `INSERT INTO eventos.configuracao (chave, valor, atualizado_por) VALUES ('link_custos', 'https://exemplo.test/custos', $1)`,

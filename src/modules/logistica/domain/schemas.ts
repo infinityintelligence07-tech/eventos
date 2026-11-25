@@ -260,6 +260,59 @@ export const salvarAvisoDeVoosSchema = z.object({
 });
 export type SalvarAvisoDeVoos = z.output<typeof salvarAvisoDeVoosSchema>;
 
+/** "Aprovar pagamento": a caixa "Confirmo que usamos e que este valor pode ser pago" é obrigatória; a observação, não. */
+export const aprovarPagamentoSchema = z.object({
+  pedidoId: id,
+  confirmo: z.stringbool({ error: "Marque a confirmação para aprovar." }).refine((valor) => valor, "Marque a confirmação para aprovar."),
+  observacao: textoOpcional(500),
+});
+export type AprovarPagamento = z.output<typeof aprovarPagamentoSchema>;
+export const desfazerAprovacaoSchema = z.object({ pedidoId: id });
+
+// ---- Área da SDC (docs/09 §15). A SDC identifica o pedido pela referência (SDC-000123), nunca por id interno, e só
+// registra ou corrige a compra de pedidos que já existem.
+
+const referenciaDoPedido = z.string().regex(/^SDC-\d{6,12}$/, "Pedido inválido. Recarregue a página.");
+
+export const registrarCompraDeVooPelaSdcSchema = z.object({
+  referencia: referenciaDoPedido,
+  valorCentavos: dinheiro,
+  observacaoSdc: textoOpcional(500),
+  trechos: z
+    .array(trechoEmitidoSchema)
+    .min(1, "Informe pelo menos um trecho.")
+    .max(2)
+    .refine((trechos) => new Set(trechos.map((trecho) => trecho.sentido)).size === trechos.length, "Cada sentido aparece uma vez só."),
+});
+export type RegistrarCompraDeVooPelaSdc = z.output<typeof registrarCompraDeVooPelaSdcSchema>;
+
+/** A SDC informa o hotel pelo nome, cidade e UF (não vê a lista de locais do time). */
+export const registrarReservaPelaSdcSchema = z.object({
+  referencia: referenciaDoPedido,
+  hotel: novoHotelSchema,
+  valorCentavos: dinheiro,
+  numeroReserva: z.string().trim().min(1, "Informe o número da reserva.").max(60, "Use até 60 caracteres."),
+  formaPagamento: z.string().trim().min(2, "Informe a forma de pagamento (ex.: Faturado SDC).").max(60, "Use até 60 caracteres."),
+  observacaoSdc: textoOpcional(500),
+});
+export type RegistrarReservaPelaSdc = z.output<typeof registrarReservaPelaSdcSchema>;
+
+// ---- Configurações › Acesso da SDC: a lista de e-mails da agência, mantida pela líder.
+
+export const incluirAcessoDaSdcSchema = z.object({
+  email: z
+    .string({ error: "Informe o e-mail." })
+    .trim()
+    .toLowerCase()
+    .max(254, "E-mail longo demais.")
+    .pipe(z.email("Informe um e-mail válido.")),
+  nome: z.string({ error: "Informe o nome." }).trim().min(2, "Informe o nome da pessoa.").max(120, "Use até 120 caracteres."),
+});
+export type IncluirAcessoDaSdc = z.output<typeof incluirAcessoDaSdcSchema>;
+
+export const definirAcessoDaSdcSchema = z.object({ acessoSdcId: id, ativo: z.stringbool() });
+export type DefinirAcessoDaSdc = z.output<typeof definirAcessoDaSdcSchema>;
+
 export const ITENS_DISPENSAVEIS = ["VOO", "HOSPEDAGEM"] as const;
 export type ItemDispensavel = (typeof ITENS_DISPENSAVEIS)[number];
 

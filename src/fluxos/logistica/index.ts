@@ -9,6 +9,9 @@ export {
   type PedidoCarregado,
   registrarPedidoDeVoo,
   registrarRetornoDaSdc,
+  registrarRetornoDeVooPelaSdc,
+  aprovarPagamento,
+  desfazerAprovacao,
   type VoosCarregados,
 } from "./voos";
 export { dispensarLogisticaDoEvento } from "./dispensa";
@@ -24,6 +27,7 @@ export {
   porNoQuarto,
   registrarPedidoDeHospedagem,
   registrarRetornoDeHospedagem,
+  registrarRetornoDeHospedagemPelaSdc,
   removerHospedagem,
   removerQuarto,
   tirarDoQuarto,
