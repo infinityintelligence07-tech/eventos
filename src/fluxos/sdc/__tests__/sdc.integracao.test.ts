@@ -355,7 +355,7 @@ describe.skipIf(!TEST_DATABASE_URL)("a SDC no banco: lista de acesso, compra, ap
     const hospedagemId = await criarHospedagem({ eventoId, checkIn: "2026-12-14", checkOut: "2026-12-18" }, ator(), agora);
     await adicionarQuarto({ hospedagemId, nome: "Quarto 1", capacidade: 2 }, ator(), agora);
     const quartoId = (await carregarHospedagem(eventoId, agora)).hospedagens[0]!.quartos[0]!.id;
-    await porNoQuarto({ quartoId, convocacaoId: caio.convocacaoId }, ator(), agora);
+    await porNoQuarto({ quartoId, pessoaId: caio.pessoaId }, ator(), agora);
     const { id: pedidoId, referencia } = await registrarPedidoDeHospedagem({ hospedagemId, observacaoTime: "Perto do evento" }, ator(), agora);
 
     const reserva = registrarReservaPelaSdcSchema.parse({

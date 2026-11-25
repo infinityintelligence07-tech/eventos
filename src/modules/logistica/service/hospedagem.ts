@@ -1,10 +1,13 @@
 import { ErroDaLogistica, LogisticaMudouError } from "../domain/erros";
+import { dataEmSaoPaulo } from "../domain/datas";
+import { type OrigemDoHotel, podeTirarOrigem } from "../domain/hotel";
 import { mensagemDaRecusa, type Periodo, periodoProprio, podeOcupar, podeTrocar, type QuartoDoRooming, type Sexo, sugerirRooming, textoDoPeriodo } from "../domain/rooming";
 import type { AdicionarQuarto, AlterarHospedagem, CriarHospedagem, DefinirPeriodoDoOcupante, PorNoQuarto, TrocarDeQuarto } from "../domain/schemas";
 import type { ContextoDaAcao } from "./pedidos";
 
-// Hospedagem e rooming list (docs/07 §5.3): ocupantes < capacidade, sexo do quarto, convocação ativa do mesmo
-// evento e marcada para hotel na escala. O quarto é travado (FOR UPDATE) antes de contar as camas.
+// Hospedagem e rooming list (docs/07 §5.3): ocupantes < capacidade, sexo do quarto e pessoa na lista de quem precisa
+// de hotel no evento (domain/hotel.ts: escala, pedido de voo ou acrescentada aqui). O ocupante é a PESSOA no evento;
+// a escala não é exigida. O quarto é travado (FOR UPDATE) antes de contar as camas.
 // O time monta os quartos; quem escolhe e reserva o hotel é a SDC. Por isso a hospedagem nasce sem hotel (local vazio)
 // e ele entra no retorno do pedido (service/pedidos.ts). Apartamento da IAM é o caminho sem SDC.
 
@@ -17,6 +20,26 @@ export type RegistroDaHospedagem = {
   comentario?: string | null;
   dados?: Record<string, unknown>;
 };
+
+export type PessoaTravada = {
+  pessoaId: string;
+  nome: string;
+  sexo: Sexo | null;
+  staffAtivo: boolean;
+  origens: OrigemDoHotel[];
+  quartoId: string | null;
+  convocacaoId: string | null;
+};
+
+export const MENSAGEM_FORA_DA_LISTA_DE_HOTEL =
+  "Esta pessoa não está na lista de quem precisa de hotel neste evento. Acrescente-a na Hospedagem, marque \"Hotel\" na escala ou \"Também precisa de hotel\" no pedido de voo.";
+
+async function pessoaDaLista(repo: RepositorioHospedagem, eventoId: string, pessoaId: string): Promise<PessoaTravada> {
+  const pessoa = await repo.travarPessoaNoEvento(eventoId, pessoaId);
+  if (!pessoa) throw new ErroDaLogistica("Pessoa não encontrada no cadastro de staff.");
+  if (pessoa.origens.length === 0) throw new ErroDaLogistica(MENSAGEM_FORA_DA_LISTA_DE_HOTEL);
+  return pessoa;
+}
 
 export type RepositorioHospedagem = {
   eventoExiste(eventoId: string): Promise<boolean>;
@@ -34,16 +57,25 @@ export type RepositorioHospedagem = {
   travarQuarto(quartoId: string): Promise<QuartoTravado | null>;
   travarQuartosDoEvento(eventoId: string): Promise<QuartoTravado[]>;
   removerQuarto(quartoId: string): Promise<void>;
-  travarConvocacao(
-    convocacaoId: string,
-  ): Promise<{ convocacaoId: string; eventoId: string; ativa: boolean; precisaHotel: boolean; sexo: Sexo | null; quartoId: string | null } | null>;
-  /** Marcadas para hotel na escala e ainda sem quarto. */
-  semQuartoDoEvento(eventoId: string): Promise<{ convocacaoId: string; sexo: Sexo | null }[]>;
-  /** Tira a convocação do quarto em que estiver e põe neste (uma cama por convocação). */
-  porOcupante(quartoId: string, convocacaoId: string): Promise<void>;
-  tirarOcupante(quartoId: string, convocacaoId: string): Promise<boolean>;
+  /** Evento para acrescentar gente à lista de hotel. Nulo = não existe ou foi apagado. `dataFim` no fuso de São Paulo. */
+  eventoParaHospedar(eventoId: string): Promise<{ id: string; dataFim: string; cancelado: boolean } | null>;
+  /**
+   * A pessoa no evento, travada: origens de "precisa de hotel", quarto em que está e a convocação principal ativa (se
+   * estiver na escala). Nulo = não é do cadastro de staff.
+   */
+  travarPessoaNoEvento(eventoId: string, pessoaId: string): Promise<PessoaTravada | null>;
+  /** Na lista de quem precisa de hotel e ainda sem quarto. */
+  semQuartoDoEvento(eventoId: string): Promise<{ pessoaId: string; sexo: Sexo | null }[]>;
+  /** Tira a pessoa do quarto em que estiver neste evento e põe neste (uma cama por pessoa no evento). */
+  porOcupante(quartoId: string, ocupante: { eventoId: string; pessoaId: string; convocacaoId: string | null }): Promise<void>;
+  tirarOcupante(quartoId: string, pessoaId: string): Promise<boolean>;
   /** null = volta ao período da hospedagem. false = a pessoa já não está neste quarto. */
-  definirPeriodoDoOcupante(quartoId: string, convocacaoId: string, periodo: Periodo | null): Promise<boolean>;
+  definirPeriodoDoOcupante(quartoId: string, pessoaId: string, periodo: Periodo | null): Promise<boolean>;
+  /** Acrescenta à lista pela Hospedagem. false = já estava acrescentada. */
+  incluirAvulsa(entrada: { eventoId: string; pessoaId: string; usuarioId: string; instante: Date }): Promise<boolean>;
+  removerAvulsa(eventoId: string, pessoaId: string): Promise<boolean>;
+  /** Registro do evento (a lista de hotel existe antes de haver hospedagem aberta). */
+  registrarDoEvento(registro: { eventoId: string; pessoaId: string; acao: string; dados?: Record<string, unknown>; usuarioId: string }): Promise<void>;
   registrar(registro: RegistroDaHospedagem & { usuarioId: string }): Promise<void>;
 };
 
@@ -127,29 +159,26 @@ export async function porNoQuarto(
 ): Promise<{ eventoId: string; mudou: boolean; nomeDoQuarto: string }> {
   const quarto = await repo.travarQuarto(entrada.quartoId);
   if (!quarto) throw new ErroDaLogistica("Quarto não encontrado. Recarregue a página.");
-  const convocacao = await repo.travarConvocacao(entrada.convocacaoId);
-  if (!convocacao || convocacao.eventoId !== quarto.eventoId) throw new ErroDaLogistica("Esta pessoa não está na escala deste evento.");
-  if (!convocacao.ativa) throw new ErroDaLogistica("A pessoa saiu da escala deste evento: não dá para pôr no quarto.");
-  if (!convocacao.precisaHotel) throw new ErroDaLogistica("Esta pessoa não está marcada para hotel. Marque \"Hotel\" na escala do evento antes de pôr no quarto.");
-  if (convocacao.quartoId === quarto.id) return { eventoId: quarto.eventoId, mudou: false, nomeDoQuarto: quarto.nome };
+  const pessoa = await pessoaDaLista(repo, quarto.eventoId, entrada.pessoaId);
+  if (pessoa.quartoId === quarto.id) return { eventoId: quarto.eventoId, mudou: false, nomeDoQuarto: quarto.nome };
 
-  const verificacao = podeOcupar(quarto, convocacao);
+  const verificacao = podeOcupar(quarto, pessoa);
   if (!verificacao.ok) throw new ErroDaLogistica(mensagemDaRecusa(verificacao.motivo, quarto.nome));
 
-  await repo.porOcupante(quarto.id, convocacao.convocacaoId);
+  await repo.porOcupante(quarto.id, { eventoId: quarto.eventoId, pessoaId: pessoa.pessoaId, convocacaoId: pessoa.convocacaoId });
   await repo.registrar({
     hospedagemId: quarto.hospedagemId,
     eventoId: quarto.eventoId,
-    acao: convocacao.quartoId ? "OCUPANTE_MOVIDO" : "OCUPANTE_INCLUIDO",
+    acao: pessoa.quartoId ? "OCUPANTE_MOVIDO" : "OCUPANTE_INCLUIDO",
     usuarioId,
-    dados: { convocacaoId: convocacao.convocacaoId, quartoId: quarto.id, deQuartoId: convocacao.quartoId },
+    dados: { pessoaId: pessoa.pessoaId, convocacaoId: pessoa.convocacaoId, quartoId: quarto.id, deQuartoId: pessoa.quartoId },
   });
   return { eventoId: quarto.eventoId, mudou: true, nomeDoQuarto: quarto.nome };
 }
 
 /**
  * Duas pessoas de quartos diferentes trocam de lugar em um passo (sem passar por "sem quarto"), mesmo com os dois
- * quartos cheios. Vale o mesmo que em porNoQuarto: escala ativa do evento, marcadas para hotel e sexo do quarto.
+ * quartos cheios. Vale o mesmo que em porNoQuarto: as duas na lista de quem precisa de hotel no evento e o sexo do quarto.
  */
 export async function trocarDeQuarto(
   repo: RepositorioHospedagem,
@@ -157,7 +186,7 @@ export async function trocarDeQuarto(
   { usuarioId }: ContextoDaAcao,
 ): Promise<{ eventoId: string; nomeDoQuarto: string; nomeDoOutroQuarto: string }> {
   if (entrada.quartoId === entrada.comQuartoId) throw new ErroDaLogistica("As duas pessoas já estão no mesmo quarto.");
-  if (entrada.convocacaoId === entrada.comConvocacaoId) throw new ErroDaLogistica("Escolha outra pessoa para trocar de lugar.");
+  if (entrada.pessoaId === entrada.comPessoaId) throw new ErroDaLogistica("Escolha outra pessoa para trocar de lugar.");
 
   // Sempre na mesma ordem (id), para duas trocas cruzadas não ficarem esperando uma pela outra.
   const travados = new Map<string, QuartoTravado | null>();
@@ -167,24 +196,22 @@ export async function trocarDeQuarto(
   if (!quarto || !outroQuarto) throw new ErroDaLogistica("Quarto não encontrado. Recarregue a página.");
   if (quarto.eventoId !== outroQuarto.eventoId) throw new ErroDaLogistica("Os dois quartos precisam ser do mesmo evento.");
 
-  const convocacoes = new Map<string, Awaited<ReturnType<RepositorioHospedagem["travarConvocacao"]>>>();
-  for (const convocacaoId of [entrada.convocacaoId, entrada.comConvocacaoId].sort()) convocacoes.set(convocacaoId, await repo.travarConvocacao(convocacaoId));
-  const pessoa = convocacoes.get(entrada.convocacaoId);
-  const outraPessoa = convocacoes.get(entrada.comConvocacaoId);
+  const pessoas = new Map<string, PessoaTravada | null>();
+  for (const pessoaId of [entrada.pessoaId, entrada.comPessoaId].sort()) pessoas.set(pessoaId, await repo.travarPessoaNoEvento(quarto.eventoId, pessoaId));
+  const pessoa = pessoas.get(entrada.pessoaId);
+  const outraPessoa = pessoas.get(entrada.comPessoaId);
   // Alguém saiu do quarto (ou mudou de quarto) depois que a tela foi aberta.
   if (pessoa?.quartoId !== quarto.id || outraPessoa?.quartoId !== outroQuarto.id) throw new LogisticaMudouError("a pessoa já não estava no quarto");
-  for (const convocacao of [pessoa, outraPessoa]) {
-    if (convocacao.eventoId !== quarto.eventoId) throw new ErroDaLogistica("Esta pessoa não está na escala deste evento.");
-    if (!convocacao.ativa) throw new ErroDaLogistica("Uma das pessoas saiu da escala deste evento: tire-a do quarto em vez de trocar.");
-    if (!convocacao.precisaHotel) throw new ErroDaLogistica("Uma das pessoas não está marcada para hotel. Marque \"Hotel\" na escala do evento antes de trocar.");
+  for (const daTroca of [pessoa, outraPessoa]) {
+    if (daTroca.origens.length === 0) throw new ErroDaLogistica("Uma das pessoas saiu da lista de quem precisa de hotel: tire-a do quarto em vez de trocar.");
   }
 
   const verificacao = podeTrocar({ quarto, pessoa }, { quarto: outroQuarto, pessoa: outraPessoa });
   if (!verificacao.ok) throw new ErroDaLogistica(mensagemDaRecusa(verificacao.motivo, verificacao.quartoId === quarto.id ? quarto.nome : outroQuarto.nome));
 
-  await repo.porOcupante(outroQuarto.id, pessoa.convocacaoId);
-  await repo.porOcupante(quarto.id, outraPessoa.convocacaoId);
-  const dados = { convocacaoId: pessoa.convocacaoId, quartoId: outroQuarto.id, comConvocacaoId: outraPessoa.convocacaoId, comQuartoId: quarto.id };
+  await repo.porOcupante(outroQuarto.id, { eventoId: quarto.eventoId, pessoaId: pessoa.pessoaId, convocacaoId: pessoa.convocacaoId });
+  await repo.porOcupante(quarto.id, { eventoId: quarto.eventoId, pessoaId: outraPessoa.pessoaId, convocacaoId: outraPessoa.convocacaoId });
+  const dados = { pessoaId: pessoa.pessoaId, quartoId: outroQuarto.id, comPessoaId: outraPessoa.pessoaId, comQuartoId: quarto.id };
   for (const hospedagemId of new Set([quarto.hospedagemId, outroQuarto.hospedagemId])) {
     await repo.registrar({ hospedagemId, eventoId: quarto.eventoId, acao: "OCUPANTES_TROCADOS", usuarioId, dados });
   }
@@ -194,13 +221,13 @@ export async function trocarDeQuarto(
 export async function tirarDoQuarto(repo: RepositorioHospedagem, entrada: PorNoQuarto, { usuarioId }: ContextoDaAcao): Promise<string> {
   const quarto = await repo.travarQuarto(entrada.quartoId);
   if (!quarto) throw new ErroDaLogistica("Quarto não encontrado. Recarregue a página.");
-  if (!(await repo.tirarOcupante(quarto.id, entrada.convocacaoId))) throw new LogisticaMudouError("a pessoa já não estava no quarto");
+  if (!(await repo.tirarOcupante(quarto.id, entrada.pessoaId))) throw new LogisticaMudouError("a pessoa já não estava no quarto");
   await repo.registrar({
     hospedagemId: quarto.hospedagemId,
     eventoId: quarto.eventoId,
     acao: "OCUPANTE_RETIRADO",
     usuarioId,
-    dados: { convocacaoId: entrada.convocacaoId, quartoId: quarto.id },
+    dados: { pessoaId: entrada.pessoaId, quartoId: quarto.id },
   });
   return quarto.eventoId;
 }
@@ -221,13 +248,13 @@ export async function definirPeriodoDoOcupante(
   if (!resultado.ok) {
     throw new ErroDaLogistica(`O período da pessoa precisa ficar dentro da hospedagem (${textoDoPeriodo(hospedagem)}). Para mais dias, mude antes as datas da hospedagem.`);
   }
-  if (!(await repo.definirPeriodoDoOcupante(quarto.id, entrada.convocacaoId, resultado.periodo))) throw new LogisticaMudouError("a pessoa já não estava no quarto");
+  if (!(await repo.definirPeriodoDoOcupante(quarto.id, entrada.pessoaId, resultado.periodo))) throw new LogisticaMudouError("a pessoa já não estava no quarto");
   await repo.registrar({
     hospedagemId: quarto.hospedagemId,
     eventoId: quarto.eventoId,
     acao: "PERIODO_DO_OCUPANTE_DEFINIDO",
     usuarioId,
-    dados: { convocacaoId: entrada.convocacaoId, quartoId: quarto.id, checkIn: resultado.periodo?.checkIn ?? null, checkOut: resultado.periodo?.checkOut ?? null },
+    dados: { pessoaId: entrada.pessoaId, quartoId: quarto.id, checkIn: resultado.periodo?.checkIn ?? null, checkOut: resultado.periodo?.checkOut ?? null },
   });
   return { eventoId: quarto.eventoId, periodo: resultado.periodo };
 }
@@ -242,7 +269,8 @@ export async function aplicarRoomingSugerido(
   if (quartos.length === 0) throw new ErroDaLogistica("Crie os quartos antes de sugerir o rooming.");
   const sugestao = sugerirRooming(await repo.semQuartoDoEvento(eventoId), quartos);
   for (const alocacao of sugestao.alocacoes) {
-    await repo.porOcupante(alocacao.quartoId, alocacao.convocacaoId);
+    const pessoa = await repo.travarPessoaNoEvento(eventoId, alocacao.pessoaId);
+    await repo.porOcupante(alocacao.quartoId, { eventoId, pessoaId: alocacao.pessoaId, convocacaoId: pessoa?.convocacaoId ?? null });
   }
   const hospedagens = [...new Set(quartos.filter((quarto) => sugestao.alocacoes.some((alocacao) => alocacao.quartoId === quarto.id)).map((quarto) => quarto.hospedagemId))];
   for (const hospedagemId of hospedagens) {
@@ -255,4 +283,42 @@ export async function aplicarRoomingSugerido(
     });
   }
   return { alocadas: sugestao.alocacoes.length, semLugar: sugestao.semLugar.length };
+}
+
+/**
+ * Acrescenta alguém à lista de quem precisa de hotel direto na Hospedagem, sem escala nem pedido de voo. Mesma regra
+ * do pedido de voo: qualquer pessoa ativa do cadastro de staff, qualquer evento futuro não cancelado.
+ */
+export async function acrescentarHospede(
+  repo: RepositorioHospedagem,
+  entrada: { eventoId: string; pessoaId: string },
+  { usuarioId, instante }: ContextoDaAcao,
+): Promise<{ nome: string; mudou: boolean }> {
+  const evento = await repo.eventoParaHospedar(entrada.eventoId);
+  if (!evento) throw new ErroDaLogistica("Evento não encontrado. Recarregue a página.");
+  if (evento.cancelado) throw new ErroDaLogistica("Este evento foi cancelado: não dá para pedir hotel para ele.");
+  if (evento.dataFim < dataEmSaoPaulo(instante)) throw new ErroDaLogistica("Este evento já terminou: não dá para pedir hotel para ele.");
+  const pessoa = await repo.travarPessoaNoEvento(evento.id, entrada.pessoaId);
+  if (!pessoa || !pessoa.staffAtivo) throw new ErroDaLogistica("Esta pessoa não está ativa no cadastro de staff. Confira em Pessoas.");
+  if (!(await repo.incluirAvulsa({ eventoId: evento.id, pessoaId: pessoa.pessoaId, usuarioId, instante }))) return { nome: pessoa.nome, mudou: false };
+  await repo.registrarDoEvento({ eventoId: evento.id, pessoaId: pessoa.pessoaId, acao: "HOSPEDE_ACRESCENTADO", usuarioId, dados: { origens: pessoa.origens } });
+  return { nome: pessoa.nome, mudou: true };
+}
+
+/**
+ * Tira da lista quem foi acrescentado pela Hospedagem. Se a pessoa também está na lista pela escala ou por um pedido
+ * de voo, continua nela (e no quarto). Se esta era a única origem e ela está num quarto, é recusado.
+ */
+export async function tirarHospede(repo: RepositorioHospedagem, entrada: { eventoId: string; pessoaId: string }, { usuarioId }: ContextoDaAcao): Promise<{ nome: string; continuaNaLista: boolean }> {
+  const pessoa = await repo.travarPessoaNoEvento(entrada.eventoId, entrada.pessoaId);
+  if (!pessoa) throw new ErroDaLogistica("Pessoa não encontrada no cadastro de staff.");
+  const verificacao = podeTirarOrigem({ origens: pessoa.origens, noQuarto: pessoa.quartoId !== null }, "AVULSA");
+  if (!verificacao.ok) {
+    throw verificacao.motivo === "NO_QUARTO"
+      ? new ErroDaLogistica(`${pessoa.nome} está num quarto. Tire a pessoa do quarto antes de tirá-la da lista.`)
+      : new LogisticaMudouError("a pessoa já não estava acrescentada");
+  }
+  if (!(await repo.removerAvulsa(entrada.eventoId, pessoa.pessoaId))) throw new LogisticaMudouError("a pessoa já não estava acrescentada");
+  await repo.registrarDoEvento({ eventoId: entrada.eventoId, pessoaId: pessoa.pessoaId, acao: "HOSPEDE_RETIRADO", usuarioId });
+  return { nome: pessoa.nome, continuaNaLista: pessoa.origens.some((origem) => origem !== "AVULSA") };
 }

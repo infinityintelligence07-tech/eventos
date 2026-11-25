@@ -7,6 +7,7 @@ import {
   type CancelarPedido,
   criarRepositorioPedidos,
   dataEmSaoPaulo,
+  type DefinirHotelDoVoo,
   diasDoAtraso,
   type EventoDaLogistica,
   type EventoSemPedidoDeVoo,
@@ -15,6 +16,7 @@ import {
   type GrupoDoMes,
   type JanelaDeCompra,
   janelaDeCompra,
+  manterNoQuartoSemOrigem,
   type PedidoDaSdc,
   pedidoAtivo,
   type RegistrarPedidoDeVoo,
@@ -66,6 +68,11 @@ export type VoosCarregados = {
   avisoDeCompra: AvisoDeVoosPorEvento;
   /** Eventos que o time marcou como "não precisa de voo" (para desfazer). */
   semVoo: EventoDaLogistica[];
+  /**
+   * Eventos com gente que precisa de hotel pelo pedido de voo e ainda está sem quarto: o atalho para montar os quartos
+   * na Hospedagem (o hotel é pedido junto com o voo, antes da escala).
+   */
+  hotelSemQuarto: { evento: EventoDaLogistica; pessoas: number }[];
   /** Quem pode receber um pedido: pessoas ativas do cadastro de staff. */
   staff: { pessoaId: string; nome: string }[];
   /** Pedidos ativos, para o formulário avisar antes de registrar outro da mesma pessoa no mesmo evento. */
@@ -119,7 +126,7 @@ export async function carregarVoos(filtro: FiltroDeVoos, agora: Date): Promise<V
   const hoje = dataEmSaoPaulo(agora);
   const db = await bancoParaLeitura();
   const repo = criarRepositorioPedidos(db);
-  const [futuros, passageiros, doPeriodo, esperandoAprovacao, naEscala, staff, diasDoAviso] = await Promise.all([
+  const [futuros, passageiros, doPeriodo, esperandoAprovacao, naEscala, staff, diasDoAviso, semQuartoPeloVoo] = await Promise.all([
     repo.eventosFuturos({ desde: hoje }),
     repo.passageirosDeVoo({ desde: hoje, eventoId: filtro.eventoId }),
     repo.pedidos({ desde: hoje, eventoId: filtro.eventoId, tipo: "VOO" }),
@@ -129,6 +136,7 @@ export async function carregarVoos(filtro: FiltroDeVoos, agora: Date): Promise<V
     repo.naEscala({ desde: hoje, eventoId: filtro.eventoId }),
     repo.staffAtivoPorNome(),
     diasDoAvisoDeVoos(db),
+    repo.comHotelPeloVooSemQuarto({ desde: hoje, eventoId: filtro.eventoId }),
   ]);
   const jaListados = new Set(doPeriodo.map((pedido) => pedido.id));
   const pedidos = [...esperandoAprovacao.filter((pedido) => !jaListados.has(pedido.id)), ...doPeriodo];
@@ -176,6 +184,10 @@ export async function carregarVoos(filtro: FiltroDeVoos, agora: Date): Promise<V
     totais: totaisDoPagamento(pedidos),
     avisoDeCompra: montarAviso({ futuros, pedidos, passageiros, diasDoAviso, hoje, eventoId: filtro.eventoId }),
     semVoo: futuros.filter((evento) => evento.semVoo && (!filtro.eventoId || evento.id === filtro.eventoId)),
+    hotelSemQuarto: semQuartoPeloVoo.flatMap(({ eventoId, pessoas }) => {
+      const evento = futuros.find((item) => item.id === eventoId);
+      return evento ? [{ evento, pessoas }] : [];
+    }),
     staff,
     pedidosAtivos: [...ativos].sort((a, b) => a.referencia.localeCompare(b.referencia)).flatMap((pedido) =>
       pedido.pessoaId
@@ -223,8 +235,26 @@ export function alterarPedido(entrada: AlterarPedido, ator: AtorDaEscrita, agora
   return traduzirErros(() => transacao(ator, (tx) => servicoDePedidos.alterarPedido(criarRepositorioPedidos(tx), entrada, { usuarioId: ator.usuarioId, instante: agora })));
 }
 
+/** "Também precisa de hotel" num pedido de voo que já existe (marcar ou desmarcar). */
+export function definirHotelDoVoo(entrada: DefinirHotelDoVoo, ator: AtorDaEscrita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDePedidos.definirHotelDoVoo(criarRepositorioPedidos(tx), entrada, { usuarioId: ator.usuarioId, instante: agora })));
+}
+
+/**
+ * Cancela o pedido. Se era um voo com "também precisa de hotel" e a pessoa já está num quarto sem outra origem, ela não
+ * sai do quarto: fica como acrescentada na Hospedagem (`mantidaNoQuarto`), e o time decide lá.
+ */
 export function cancelarPedido(entrada: CancelarPedido, ator: AtorDaEscrita, agora: Date) {
-  return traduzirErros(() => transacao(ator, (tx) => servicoDePedidos.cancelarPedido(criarRepositorioPedidos(tx), entrada, { usuarioId: ator.usuarioId, instante: agora })));
+  return traduzirErros(() =>
+    transacao(ator, async (tx) => {
+      const pedido = await servicoDePedidos.cancelarPedido(criarRepositorioPedidos(tx), entrada, { usuarioId: ator.usuarioId, instante: agora });
+      const mantidaNoQuarto =
+        pedido.tipo === "VOO" && pedido.pessoaId !== null && pedido.precisaHotel
+          ? await manterNoQuartoSemOrigem(tx, { eventoId: pedido.eventoId, pessoaId: pedido.pessoaId, usuarioId: ator.usuarioId, instante: agora, motivo: "VOO_CANCELADO" })
+          : false;
+      return { ...pedido, mantidaNoQuarto };
+    }),
+  );
 }
 
 /** "Registrar voo" em nome da SDC. */

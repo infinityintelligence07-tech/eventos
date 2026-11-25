@@ -85,8 +85,18 @@ export const registrarPedidoDeVooSchema = z.object({
   trechos: trechosDesejadosSchema,
   observacaoTime: textoOpcional(500),
   outraCompra: z.stringbool().optional(),
+  /** "Também precisa de hotel": põe a pessoa na lista de quem precisa de hotel neste evento (caixa desmarcada = não vem). */
+  precisaHotel: z.stringbool().optional(),
 });
 export type RegistrarPedidoDeVoo = z.output<typeof registrarPedidoDeVooSchema>;
+
+/** Marca ou desmarca "Também precisa de hotel" num pedido de voo que já existe. */
+export const definirHotelDoVooSchema = z.object({ pedidoId: id, precisaHotel: z.stringbool() });
+export type DefinirHotelDoVoo = z.output<typeof definirHotelDoVooSchema>;
+
+/** Hospedagem: acrescentar à lista de quem precisa de hotel (ou tirar quem foi acrescentado), sem escala nem voo. */
+export const hospedeDoEventoSchema = z.object({ eventoId: id, pessoaId: id });
+export type HospedeDoEvento = z.output<typeof hospedeDoEventoSchema>;
 
 export const alterarPedidoSchema = z.object({
   pedidoId: id,
@@ -212,11 +222,11 @@ export type AdicionarQuarto = z.output<typeof adicionarQuartoSchema>;
 
 export const removerHospedagemSchema = z.object({ hospedagemId: id });
 export const removerQuartoSchema = z.object({ quartoId: id });
-export const porNoQuartoSchema = z.object({ quartoId: id, convocacaoId: id });
+export const porNoQuartoSchema = z.object({ quartoId: id, pessoaId: id });
 export type PorNoQuarto = z.output<typeof porNoQuartoSchema>;
-export const tirarDoQuartoSchema = z.object({ quartoId: id, convocacaoId: id });
-/** Duas pessoas trocam de lugar: `quartoId` é o quarto atual de `convocacaoId`; `com…` são a outra pessoa e o quarto dela. */
-export const trocarDeQuartoSchema = z.object({ quartoId: id, convocacaoId: id, comQuartoId: id, comConvocacaoId: id });
+export const tirarDoQuartoSchema = z.object({ quartoId: id, pessoaId: id });
+/** Duas pessoas trocam de lugar: `quartoId` é o quarto atual de `pessoaId`; `com…` são a outra pessoa e o quarto dela. */
+export const trocarDeQuartoSchema = z.object({ quartoId: id, pessoaId: id, comQuartoId: id, comPessoaId: id });
 export type TrocarDeQuarto = z.output<typeof trocarDeQuartoSchema>;
 
 const UUID = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
@@ -224,24 +234,24 @@ const DESTINO_DO_OCUPANTE = new RegExp(`^(?:quarto:(${UUID})|troca:(${UUID}):(${
 
 /** Valor do seletor "Mover para…": um quarto com vaga, ou a pessoa (e o quarto dela) com quem trocar de lugar. */
 export const destinoNoQuarto = (quartoId: string) => `quarto:${quartoId}`;
-export const destinoDaTroca = (quartoId: string, convocacaoId: string) => `troca:${quartoId}:${convocacaoId}`;
+export const destinoDaTroca = (quartoId: string, pessoaId: string) => `troca:${quartoId}:${pessoaId}`;
 
 /**
  * "Mover para…" de quem já está num quarto: ir para outro quarto com vaga ou trocar de lugar com alguém de outro
  * quarto, as duas coisas em um passo.
  */
 export const moverDeQuartoSchema = z
-  .object({ quartoId: id, convocacaoId: id, destino: z.string().regex(DESTINO_DO_OCUPANTE, "Escolha uma opção da lista.") })
-  .transform(({ quartoId, convocacaoId, destino }): { mover: PorNoQuarto } | { trocar: TrocarDeQuarto } => {
-    const [, paraQuartoId, comQuartoId, comConvocacaoId] = DESTINO_DO_OCUPANTE.exec(destino)!;
+  .object({ quartoId: id, pessoaId: id, destino: z.string().regex(DESTINO_DO_OCUPANTE, "Escolha uma opção da lista.") })
+  .transform(({ quartoId, pessoaId, destino }): { mover: PorNoQuarto } | { trocar: TrocarDeQuarto } => {
+    const [, paraQuartoId, comQuartoId, comPessoaId] = DESTINO_DO_OCUPANTE.exec(destino)!;
     return paraQuartoId
-      ? { mover: { quartoId: paraQuartoId.toLowerCase(), convocacaoId } }
-      : { trocar: { quartoId, convocacaoId, comQuartoId: comQuartoId!.toLowerCase(), comConvocacaoId: comConvocacaoId!.toLowerCase() } };
+      ? { mover: { quartoId: paraQuartoId.toLowerCase(), pessoaId } }
+      : { trocar: { quartoId, pessoaId, comQuartoId: comQuartoId!.toLowerCase(), comPessoaId: comPessoaId!.toLowerCase() } };
   });
 export type MoverDeQuarto = z.output<typeof moverDeQuartoSchema>;
 /** Sem datas = volta a acompanhar o período da hospedagem. */
 export const definirPeriodoDoOcupanteSchema = z
-  .object({ quartoId: id, convocacaoId: id, checkIn: data.optional(), checkOut: data.optional() })
+  .object({ quartoId: id, pessoaId: id, checkIn: data.optional(), checkOut: data.optional() })
   .refine((periodo) => (periodo.checkIn === undefined) === (periodo.checkOut === undefined), { path: ["checkOut"], message: "Informe o check-in e o check-out, ou deixe os dois em branco." })
   .refine((periodo) => !periodo.checkIn || !periodo.checkOut || periodo.checkOut > periodo.checkIn, periodoValido);
 export type DefinirPeriodoDoOcupante = z.output<typeof definirPeriodoDoOcupanteSchema>;

@@ -2,7 +2,7 @@ import { Hotel, Sparkles } from "lucide-react";
 import Link from "next/link";
 
 import type { HospedagemDoEventoCarregada } from "@/fluxos/logistica";
-import { destinoDaTroca, destinoNoQuarto, diasEntre, rotuloDaCapacidade, rotuloDoSexoDoQuarto, situacaoDoPagamento, somarDias, textoDoPeriodo } from "@/modules/logistica";
+import { destinoDaTroca, destinoNoQuarto, diasEntre, type OrigemDoHotel, rotuloDaCapacidade, rotuloDaOrigemDoHotel, rotuloDoSexoDoQuarto, situacaoDoPagamento, somarDias, textoDoPeriodo } from "@/modules/logistica";
 import { BotaoCopiar, FormularioDeAcao } from "@/app/(time)/_componentes/ui";
 
 import { Aviso, FaixaSomenteLeitura } from "../../_componentes/ui/aviso";
@@ -16,6 +16,7 @@ import {
   adicionarQuartoAcao,
   alterarHospedagemAcao,
   aplicarRoomingSugeridoAcao,
+  acrescentarHospedeAcao,
   aprovarPagamentoAcao,
   cancelarPedidoAcao,
   desfazerAprovacaoAcao,
@@ -29,6 +30,7 @@ import {
   removerHospedagemAcao,
   removerQuartoAcao,
   tirarDoQuartoAcao,
+  tirarHospedeAcao,
 } from "../acoes";
 import { BotaoDefinirHospedagem, BotaoPeriodoDoOcupante, BotaoRegistrarReserva, FormularioNovoQuarto } from "./formularios-de-hospedagem";
 import { BotaoAprovarPagamento, BotaoCancelarPedido, BotaoDesfazerAprovacao } from "./formularios-de-voo";
@@ -37,6 +39,8 @@ import { ChipDoVoo, paraCampoDeDinheiro } from "./situacoes";
 
 // Hospedagem do evento: nós montamos os quartos (quem divide com quem), a SDC escolhe e reserva o hotel. A tela começa
 // pelos quartos; com eles montados o time pede a hospedagem à SDC e, no retorno, registra o hotel, a reserva e o valor.
+// Quem precisa de hotel não depende da escala (o hotel é pedido junto com o voo, antes dela): a lista é a união de quem
+// está marcado na escala, de quem tem pedido de voo com "também precisa de hotel" e de quem foi acrescentado aqui.
 // Apartamento da IAM é o caminho sem SDC. "Sem hospedagem" tira o evento dos pendentes (como na planilha).
 
 const HOTEL_A_DEFINIR = "Hotel a definir pela SDC";
@@ -57,22 +61,64 @@ function BotaoSemHospedagem({ eventoId, dispensar, rotulo }: { eventoId: string;
 
 type OpcaoDeQuarto = { id: string; rotulo: string; cheio: boolean };
 /** Quem já está num quarto e pode trocar de lugar com outra pessoa. */
-type OpcaoDeTroca = { convocacaoId: string; quartoId: string; rotulo: string };
+type OpcaoDeTroca = { pessoaId: string; quartoId: string; rotulo: string };
 
 const diarias = (noites: number) => (noites === 1 ? "1 diária" : `${noites} diárias`);
 const primeiroNome = (nome: string) => nome.trim().split(/\s+/)[0] ?? nome;
 const pessoas = (quantidade: number) => (quantidade === 1 ? "1 pessoa" : `${quantidade} pessoas`);
 
+/** "da escala · do pedido de voo": de onde veio a necessidade de hotel da pessoa. */
+const textoDasOrigens = (origens: OrigemDoHotel[]) => (origens.length === 0 ? "sem origem: confira" : origens.map(rotuloDaOrigemDoHotel).join(" · "));
+
+/** Acrescenta à lista de quem precisa de hotel alguém do cadastro de staff, sem passar pela escala nem pelo voo. */
+function AcrescentarPessoa({ eventoId, staff }: { eventoId: string; staff: { pessoaId: string; nome: string }[] }) {
+  if (staff.length === 0) return null;
+  return (
+    <FormularioDeAcao acao={acrescentarHospedeAcao} className="flex flex-wrap items-center gap-2" aria-label="Acrescentar pessoa à lista de quem precisa de hotel">
+      <input type="hidden" name="eventoId" value={eventoId} />
+      <label htmlFor="acrescentar-hospede" className="text-[13px] font-medium">
+        Acrescentar pessoa
+      </label>
+      <select id="acrescentar-hospede" name="pessoaId" required defaultValue="" className={`${CAMPO} h-9 w-auto max-w-[280px] pl-2 pr-7 text-[14px]`}>
+        <option value="" disabled>
+          Escolha pelo nome…
+        </option>
+        {staff.map((pessoa) => (
+          <option key={pessoa.pessoaId} value={pessoa.pessoaId}>
+            {pessoa.nome}
+          </option>
+        ))}
+      </select>
+      <BotaoDeEnvio tamanho="pequeno" variante="secundario">
+        Acrescentar
+      </BotaoDeEnvio>
+    </FormularioDeAcao>
+  );
+}
+
+/** Tira da lista quem foi acrescentado aqui. Quem também veio da escala ou do voo continua na lista por essas origens. */
+function TirarDaLista({ eventoId, pessoaId, nome }: { eventoId: string; pessoaId: string; nome: string }) {
+  return (
+    <FormularioDeAcao acao={tirarHospedeAcao} aria-label={`Tirar ${nome} da lista de quem precisa de hotel`}>
+      <input type="hidden" name="eventoId" value={eventoId} />
+      <input type="hidden" name="pessoaId" value={pessoaId} />
+      <BotaoDeEnvio tamanho="pequeno" variante="texto" aria-label={`Tirar ${nome} da lista`}>
+        Tirar da lista
+      </BotaoDeEnvio>
+    </FormularioDeAcao>
+  );
+}
+
 const CLASSE_DO_SELETOR = `${CAMPO} h-8 w-auto max-w-[220px] pl-2 pr-7 text-[13px]`;
 
 /** "Colocar no quarto…" de quem está sem quarto (alternativa a arrastar, WCAG 2.5.7). */
-function ColocarNoQuarto({ convocacaoId, nome, quartos }: { convocacaoId: string; nome: string; quartos: OpcaoDeQuarto[] }) {
+function ColocarNoQuarto({ pessoaId, nome, quartos }: { pessoaId: string; nome: string; quartos: OpcaoDeQuarto[] }) {
   if (quartos.length === 0) return null;
-  const id = `colocar-${convocacaoId}`;
+  const id = `colocar-${pessoaId}`;
   const descricao = `Colocar ${nome} num quarto`;
   return (
     <FormularioDeAcao acao={porNoQuartoAcao} className="flex items-center gap-1" aria-label={descricao}>
-      <input type="hidden" name="convocacaoId" value={convocacaoId} />
+      <input type="hidden" name="pessoaId" value={pessoaId} />
       <label htmlFor={id} className="sr-only">
         {descricao}
       </label>
@@ -98,16 +144,16 @@ function ColocarNoQuarto({ convocacaoId, nome, quartos }: { convocacaoId: string
  * "Mover para…" de quem já está num quarto, em um passo: outro quarto com vaga ou trocar de lugar com alguém de outro
  * quarto (a troca funciona mesmo com os dois quartos cheios).
  */
-function MoverDeQuarto({ convocacaoId, nome, quartoAtual, quartos, trocas }: { convocacaoId: string; nome: string; quartoAtual: string; quartos: OpcaoDeQuarto[]; trocas: OpcaoDeTroca[] }) {
+function MoverDeQuarto({ pessoaId, nome, quartoAtual, quartos, trocas }: { pessoaId: string; nome: string; quartoAtual: string; quartos: OpcaoDeQuarto[]; trocas: OpcaoDeTroca[] }) {
   const destinos = quartos.filter((quarto) => quarto.id !== quartoAtual);
   const comQuem = trocas.filter((troca) => troca.quartoId !== quartoAtual);
   if (destinos.length === 0) return null;
-  const id = `mover-${convocacaoId}`;
+  const id = `mover-${pessoaId}`;
   const descricao = `Mover ${nome} para outro quarto ou trocar de lugar com alguém`;
   return (
     <FormularioDeAcao acao={moverDeQuartoAcao} className="flex items-center gap-1" aria-label={descricao}>
       <input type="hidden" name="quartoId" value={quartoAtual} />
-      <input type="hidden" name="convocacaoId" value={convocacaoId} />
+      <input type="hidden" name="pessoaId" value={pessoaId} />
       <label htmlFor={id} className="sr-only">
         {descricao}
       </label>
@@ -126,7 +172,7 @@ function MoverDeQuarto({ convocacaoId, nome, quartoAtual, quartos, trocas }: { c
         {comQuem.length > 0 && (
           <optgroup label="Trocar de lugar com">
             {comQuem.map((troca) => (
-              <option key={troca.convocacaoId} value={destinoDaTroca(troca.quartoId, troca.convocacaoId)}>
+              <option key={troca.pessoaId} value={destinoDaTroca(troca.quartoId, troca.pessoaId)}>
                 {troca.rotulo}
               </option>
             ))}
@@ -161,8 +207,8 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
           Hospedagem
         </h2>
         <Cartao espacamento="nenhum">
-          <EstadoVazio icone={<Hotel size={32} aria-hidden />} titulo="Nenhum evento com equipe nos próximos dias.">
-            Os quartos são montados por evento, com quem foi marcado para hotel na escala.
+          <EstadoVazio icone={<Hotel size={32} aria-hidden />} titulo="Nenhum evento nos próximos dias.">
+            Os quartos são montados por evento, com quem precisa de hotel: marcado na escala, com pedido de voo ou acrescentado aqui.
           </EstadoVazio>
         </Cartao>
       </section>
@@ -191,7 +237,7 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
   const trocas: OpcaoDeTroca[] = dados.hospedagens.flatMap((hospedagem) =>
     hospedagem.quartos.flatMap((quarto) =>
       quarto.ocupantes.map((ocupante) => ({
-        convocacaoId: ocupante.convocacaoId,
+        pessoaId: ocupante.pessoaId,
         quartoId: quarto.id,
         rotulo: `${ocupante.nome} (${quarto.nome}${variosHoteis ? ` · ${nomeDaHospedagem(hospedagem)}` : ""})`,
       })),
@@ -200,6 +246,8 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
   const totalDeQuartos = quartos.length;
   const comQuarto = dados.equipe.length - dados.semQuarto.length;
   const escalaHref = `/eventos/${evento.id}/escala`;
+  const origensDe = new Map(dados.equipe.map((pessoa) => [pessoa.pessoaId, pessoa.origens]));
+  const acrescentar = escrita && dados.podeAcrescentar ? <AcrescentarPessoa eventoId={evento.id} staff={dados.staffParaAcrescentar} /> : null;
 
   // O time marcou que este evento não tem hospedagem (o "Sem hospedagem" da planilha): nada para montar, só o desfazer.
   if (evento.semHospedagem && dados.hospedagens.length === 0) {
@@ -218,7 +266,7 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
           <p>O time marcou que este evento não tem hospedagem: não há quartos a montar nem pedido à SDC. Dá para desfazer a qualquer momento.</p>
           {dados.equipe.length > 0 && (
             <p className="mt-1 text-[13px] text-[var(--ds-label-2)]">
-              {dados.equipe.length === 1 ? "1 pessoa está marcada" : `${dados.equipe.length} pessoas estão marcadas`} para hotel na escala deste evento.{" "}
+              {dados.equipe.length === 1 ? "1 pessoa está" : `${dados.equipe.length} pessoas estão`} na lista de quem precisa de hotel neste evento.{" "}
               <Link href={escalaHref} className="font-medium text-[var(--ds-tint-text)] hover:underline">
                 Abrir a escala
               </Link>
@@ -242,40 +290,41 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
       {!escrita && comSeletorDeEvento && <FaixaSomenteLeitura />}
       {seletor}
 
-      {/* De onde a tela parte: quem o time marcou para hotel na escala, e quantos já têm quarto. */}
+      {/* De onde a tela parte: quem precisa de hotel (escala, pedido de voo ou acrescentado aqui), e quantos já têm quarto. */}
       <Aviso
         tom={dados.equipe.length === 0 ? "informacao" : dados.semQuarto.length > 0 ? "atencao" : "sucesso"}
         className="mb-4"
         titulo={
           dados.equipe.length === 0
-            ? `Ninguém marcado para hotel na escala de ${evento.codigo ?? evento.nome}`
-            : `${dados.equipe.length === 1 ? "1 pessoa marcada" : `${dados.equipe.length} pessoas marcadas`} para hotel na escala de ${evento.codigo ?? evento.nome}`
+            ? `Ninguém na lista de hotel de ${evento.codigo ?? evento.nome}`
+            : `${dados.equipe.length === 1 ? "1 pessoa precisa" : `${dados.equipe.length} pessoas precisam`} de hotel em ${evento.codigo ?? evento.nome}`
         }
         acao={
           <Link href={escalaHref} className="font-medium text-[var(--ds-tint-text)] hover:underline">
-            {dados.equipe.length === 0 ? "Marcar na escala" : "Abrir a escala"}
+            Abrir a escala
           </Link>
         }
       >
         <p>
           {dados.equipe.length === 0
-            ? "Só entra em quarto quem está marcado com Hotel na escala do evento. Marque lá quem vai hospedar e volte para montar os quartos."
+            ? "Entra em quarto quem precisa de hotel neste evento. A lista não depende da escala: acrescente a pessoa aqui, marque \"Também precisa de hotel\" no pedido de voo ou marque Hotel na escala."
             : dados.semQuarto.length === 0
               ? "Todo mundo tem quarto. Em cada quarto abaixo dá para ver quem divide com quem."
               : `${comQuarto} com quarto e ${dados.semQuarto.length} sem quarto. Coloque cada pessoa num quarto para definir quem divide com quem.`}
         </p>
         {dados.naEscalaSemHotel > 0 && (
           <p className="mt-1 text-[13px] text-[var(--ds-label-2)]">
-            {dados.naEscalaSemHotel === 1 ? "1 pessoa da escala não está marcada" : `${dados.naEscalaSemHotel} pessoas da escala não estão marcadas`} para hotel. Se falta alguém aqui, marque Hotel na escala.
+            {dados.naEscalaSemHotel === 1 ? "1 pessoa da escala não está" : `${dados.naEscalaSemHotel} pessoas da escala não estão`} na lista de hotel. Se falta alguém, marque Hotel na escala ou acrescente aqui.
           </p>
         )}
+        {acrescentar && <div className="mt-3">{acrescentar}</div>}
       </Aviso>
 
       {dados.semQuarto.length > 0 && (
         <Cartao
           id="sem-quarto"
           titulo={`Sem quarto · ${dados.semQuarto.length}`}
-          explicacao={`Marcadas para hotel na escala de ${evento.codigo ?? evento.nome} (${periodo(evento.dataInicio, evento.dataFim)}) que ainda não têm quarto.`}
+          explicacao={`Quem precisa de hotel em ${evento.codigo ?? evento.nome} (${periodo(evento.dataInicio, evento.dataFim)}) e ainda não tem quarto. Ao lado do nome, de onde veio: da escala, do pedido de voo ou acrescentada aqui.`}
           className="mb-4"
           acoes={
             escrita &&
@@ -296,14 +345,23 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
           )}
           <ul className="flex flex-col gap-2 text-[14px]">
             {dados.semQuarto.map((pessoa) => (
-              <li key={pessoa.convocacaoId} className="flex flex-wrap items-center justify-between gap-2">
+              <li key={pessoa.pessoaId} className="flex flex-wrap items-center justify-between gap-2">
                 <span>
                   {pessoa.nome}
                   <span className="ml-1 text-[12px] text-[var(--ds-label-2)]">
                     {[pessoa.funcao, pessoa.sexo === "F" ? "feminino" : pessoa.sexo === "M" ? "masculino" : "sem sexo no cadastro"].filter(Boolean).join(" · ")}
                   </span>
+                  <span className="block text-[12px] text-[var(--ds-label-2)]">
+                    {textoDasOrigens(pessoa.origens)}
+                    {!pessoa.naEscala && " · fora da escala"}
+                  </span>
                 </span>
-                {escrita && <ColocarNoQuarto convocacaoId={pessoa.convocacaoId} nome={pessoa.nome} quartos={quartos} />}
+                {escrita && (
+                  <span className="flex flex-wrap items-center gap-1">
+                    <ColocarNoQuarto pessoaId={pessoa.pessoaId} nome={pessoa.nome} quartos={quartos} />
+                    {pessoa.origens.includes("AVULSA") && <TirarDaLista eventoId={evento.id} pessoaId={pessoa.pessoaId} nome={pessoa.nome} />}
+                  </span>
+                )}
               </li>
             ))}
           </ul>
@@ -515,10 +573,11 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
                     ) : (
                       <ul className="flex flex-col gap-2 text-[14px]">
                         {quarto.ocupantes.map((ocupante) => (
-                          <li key={ocupante.convocacaoId} className="flex flex-wrap items-center justify-between gap-2">
+                          <li key={ocupante.pessoaId} className="flex flex-wrap items-center justify-between gap-2">
                             <span>
                               {ocupante.nome}
                               {ocupante.sexo === null && <span className="ml-1 text-[12px] text-[var(--ds-orange-deep)]">(sem sexo no cadastro)</span>}
+                              <span className="block text-[12px] text-[var(--ds-label-2)]">{textoDasOrigens(origensDe.get(ocupante.pessoaId) ?? [])}</span>
                               {ocupante.checkIn && ocupante.checkOut && (
                                 <span className="block text-[12px] text-[var(--ds-label-2)]">
                                   {textoDoPeriodo({ checkIn: ocupante.checkIn, checkOut: ocupante.checkOut })} · {diarias(diasEntre(ocupante.checkIn, ocupante.checkOut))}
@@ -530,15 +589,15 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
                                 <BotaoPeriodoDoOcupante
                                   acao={definirPeriodoDoOcupanteAcao}
                                   quartoId={quarto.id}
-                                  convocacaoId={ocupante.convocacaoId}
+                                  pessoaId={ocupante.pessoaId}
                                   nome={ocupante.nome}
                                   hospedagem={{ checkIn: hospedagem.checkIn, checkOut: hospedagem.checkOut }}
                                   proprio={ocupante.checkIn && ocupante.checkOut ? { checkIn: ocupante.checkIn, checkOut: ocupante.checkOut } : null}
                                 />
-                                <MoverDeQuarto convocacaoId={ocupante.convocacaoId} nome={ocupante.nome} quartoAtual={quarto.id} quartos={quartos} trocas={trocas} />
+                                <MoverDeQuarto pessoaId={ocupante.pessoaId} nome={ocupante.nome} quartoAtual={quarto.id} quartos={quartos} trocas={trocas} />
                                 <FormularioDeAcao acao={tirarDoQuartoAcao} aria-label={`Tirar ${ocupante.nome} do quarto`}>
                                   <input type="hidden" name="quartoId" value={quarto.id} />
-                                  <input type="hidden" name="convocacaoId" value={ocupante.convocacaoId} />
+                                  <input type="hidden" name="pessoaId" value={ocupante.pessoaId} />
                                   <BotaoDeEnvio tamanho="pequeno" variante="texto" aria-label={`Tirar ${ocupante.nome} do ${quarto.nome}`}>
                                     Tirar
                                   </BotaoDeEnvio>

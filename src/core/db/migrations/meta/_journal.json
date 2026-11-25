@@ -120,6 +120,13 @@
       "when": 1795628589948,
       "tag": "0016_acesso-da-sdc",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1795634623478,
+      "tag": "0017_hotel-sem-escala",
+      "breakpoints": true
     }
   ]
 }

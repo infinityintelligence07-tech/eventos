@@ -136,7 +136,8 @@ export function criarRepositorioComunicacao(executor: Executor): RepositorioComu
       if (convocacaoIds.length === 0) return resultado;
       const camas = await executor
         .select({
-          convocacaoId: quartoOcupante.convocacaoId,
+          convocacaoId: convocacao.id,
+          pessoaId: convocacao.pessoaId,
           quartoId: quarto.id,
           capacidade: quarto.capacidade,
           hotel: local.nome,
@@ -146,26 +147,30 @@ export function criarRepositorioComunicacao(executor: Executor): RepositorioComu
           cidade: local.cidade,
           uf: local.uf,
         })
-        .from(quartoOcupante)
+        // O quarto é da pessoa no evento (ela pode ter entrado no quarto antes de entrar na escala): casa pela pessoa
+        // e pelo evento da convocação, não pelo vínculo opcional quarto_ocupante.convocacao_id.
+        .from(convocacao)
+        .innerJoin(escala, eq(escala.id, convocacao.escalaId))
+        .innerJoin(quartoOcupante, and(eq(quartoOcupante.eventoId, escala.eventoId), eq(quartoOcupante.pessoaId, convocacao.pessoaId)))
         .innerJoin(quarto, eq(quarto.id, quartoOcupante.quartoId))
         .innerJoin(hospedagem, eq(hospedagem.id, quarto.hospedagemId))
         .innerJoin(local, eq(local.id, hospedagem.localId))
-        .where(inArray(quartoOcupante.convocacaoId, convocacaoIds));
+        .where(inArray(convocacao.id, convocacaoIds));
       if (camas.length === 0) return resultado;
 
       const ocupantes = await executor
-        .select({ quartoId: quartoOcupante.quartoId, convocacaoId: quartoOcupante.convocacaoId, nome: nomeDaPessoa })
+        // Quem divide o quarto: todos os ocupantes, estejam ou não na escala.
+        .select({ quartoId: quartoOcupante.quartoId, pessoaId: quartoOcupante.pessoaId, nome: nomeDaPessoa })
         .from(quartoOcupante)
-        .innerJoin(convocacao, eq(convocacao.id, quartoOcupante.convocacaoId))
-        .innerJoin(pessoa, eq(pessoa.id, convocacao.pessoaId))
-        .where(and(inArray(quartoOcupante.quartoId, [...new Set(camas.map((cama) => cama.quartoId))]), inArray(convocacao.status, ATIVAS)))
+        .innerJoin(pessoa, eq(pessoa.id, quartoOcupante.pessoaId))
+        .where(inArray(quartoOcupante.quartoId, [...new Set(camas.map((cama) => cama.quartoId))]))
         .orderBy(asc(nomeDaPessoa));
 
-      for (const { convocacaoId, quartoId, capacidade, ...hotel } of camas) {
+      for (const { convocacaoId, pessoaId, quartoId, capacidade, ...hotel } of camas) {
         resultado.set(convocacaoId, {
           ...hotel,
           capacidadeDoQuarto: capacidade,
-          colegas: ocupantes.filter((o) => o.quartoId === quartoId && o.convocacaoId !== convocacaoId).map((o) => o.nome),
+          colegas: ocupantes.filter((o) => o.quartoId === quartoId && o.pessoaId !== pessoaId).map((o) => o.nome),
         });
       }
       return resultado;

@@ -3,17 +3,18 @@ import { and, asc, count, eq, inArray, isNull, lt, gt, or, sql } from "drizzle-o
 import { pessoa } from "@/core/db/schema/core";
 import type { Executor } from "@/core/db/database";
 import { registrarAcao } from "@/core/db/registro-acao";
-import { convocacao, escala, evento, funcao, hospedagem, local, pedidoSdc, pessoaEvento, quarto, quartoOcupante } from "@/core/db/schema/eventos";
+import { evento, hospedagem, hospedagemPessoa, local, pedidoSdc, pessoaEvento, quarto, quartoOcupante } from "@/core/db/schema/eventos";
 
+import { type OrigemDoHotel, ordenarOrigens, precisaManterComoAvulsa } from "../domain/hotel";
 import type { Sexo } from "../domain/rooming";
 import type { SituacaoDoPedido } from "../domain/pedido";
 import type { QuartoTravado, RepositorioHospedagem } from "../service/hospedagem";
-import { CONVOCACAO_ATIVA, convocacaoPrincipal, mesmaVersao, nomeDaPessoa, travarLinha } from "./comum";
+import { fimDoEvento, mesmaVersao, nomeDaPessoa } from "./comum";
 
 export type LocalDeHospedagem = { id: string; nome: string; tipo: "HOTEL" | "APARTAMENTO"; cidade: string; uf: string };
 
 /** checkIn/checkOut só vêm preenchidos quando a pessoa tem período próprio (nulo = o da hospedagem). */
-export type OcupanteDoQuarto = { convocacaoId: string; pessoaId: string; nome: string; sexo: Sexo | null; checkIn: string | null; checkOut: string | null };
+export type OcupanteDoQuarto = { pessoaId: string; nome: string; sexo: Sexo | null; checkIn: string | null; checkOut: string | null };
 
 export type QuartoDaHospedagem = {
   id: string;
@@ -48,27 +49,101 @@ export type HospedagemDoEvento = {
   quartos: QuartoDaHospedagem[];
 };
 
-export type PessoaDaEquipe = {
-  convocacaoId: string;
+/** Uma pessoa da lista de quem precisa de hotel no evento (a união das origens), com o quarto em que já está. */
+export type PessoaParaHospedar = {
   pessoaId: string;
   nome: string;
   sexo: Sexo | null;
+  /** De onde veio a necessidade de hotel, na ordem escala, voo, acrescentada. Vazio só em dado antigo fora da regra. */
+  origens: OrigemDoHotel[];
+  /** Está na escala do evento (convocação principal ativa)? Função e deslocamento vêm de lá. */
+  naEscala: boolean;
   funcao: string | null;
   deslocamento: string | null;
   quartoId: string | null;
 };
 
-const ativaNaEscala = and(isNull(escala.deletedAt), inArray(convocacao.status, CONVOCACAO_ATIVA), convocacaoPrincipal);
-/** Quem vai hospedar: o time marca "precisa de hotel" na escala do evento (convocacao.precisa_hotel). */
-const marcadaParaHotel = and(ativaNaEscala, eq(convocacao.precisaHotel, true));
+// As três origens de "precisa de hotel" (domain/hotel.ts), em SQL. `e` e `p` são o evento e a pessoa.
+const ATIVAS = sql`('SUGERIDA', 'CONVIDADA', 'ACEITA')`;
+const daEscala = (e: unknown, p: unknown) => sql`exists (
+  select 1 from eventos.convocacao c join eventos.escala es on es.id = c.escala_id
+   where es.evento_id = ${e} and es.deleted_at is null and c.pessoa_id = ${p} and c.principal and c.precisa_hotel and c.status in ${ATIVAS})`;
+const doVoo = (e: unknown, p: unknown) => sql`exists (
+  select 1 from eventos.pedido_sdc v
+   where v.evento_id = ${e} and v.pessoa_id = ${p} and v.tipo = 'VOO' and v.situacao <> 'CANCELADO' and v.precisa_hotel)`;
+const avulsa = (e: unknown, p: unknown) => sql`exists (select 1 from eventos.hospedagem_pessoa hp where hp.evento_id = ${e} and hp.pessoa_id = ${p})`;
+
+function origensDe(linha: { da_escala: boolean; do_voo: boolean; avulsa: boolean }): OrigemDoHotel[] {
+  return ordenarOrigens([...(linha.da_escala ? (["ESCALA"] as const) : []), ...(linha.do_voo ? (["VOO"] as const) : []), ...(linha.avulsa ? (["AVULSA"] as const) : [])]);
+}
+
+/**
+ * Origens de "precisa de hotel" da pessoa no evento, lidas agora. Usado também pelos fluxos da escala e do voo, na
+ * mesma transação, para decidir o que acontece quando uma origem sai.
+ */
+export async function origensDoHotel(executor: Executor, { eventoId, pessoaId }: { eventoId: string; pessoaId: string }): Promise<OrigemDoHotel[]> {
+  const linhas = await executor.execute<{ da_escala: boolean; do_voo: boolean; avulsa: boolean }>(
+    sql`select ${daEscala(sql`${eventoId}::uuid`, sql`${pessoaId}::uuid`)} as da_escala, ${doVoo(sql`${eventoId}::uuid`, sql`${pessoaId}::uuid`)} as do_voo, ${avulsa(sql`${eventoId}::uuid`, sql`${pessoaId}::uuid`)} as avulsa`,
+  );
+  return origensDe(linhas.rows[0]!);
+}
+
+/**
+ * A pessoa entrou na escala do evento (ou a principal dela mudou): o quarto que ela já tinha se liga à convocação
+ * principal e, se ela já estava na lista de hotel por outra origem (voo ou acrescentada), a caixa "Hotel" da escala
+ * nasce marcada, para a escala mostrar o que já vale. Chamado pelo fluxo da escala, na mesma transação.
+ */
+export async function vincularHotelDaPessoa(executor: Executor, { eventoId, pessoaId, instante }: { eventoId: string; pessoaId: string; instante: Date }): Promise<void> {
+  const principal = await executor.execute<{ id: string; precisa_hotel: boolean }>(sql`
+    select c.id, c.precisa_hotel from eventos.convocacao c join eventos.escala es on es.id = c.escala_id
+     where es.evento_id = ${eventoId} and es.deleted_at is null and c.pessoa_id = ${pessoaId} and c.principal and c.status in ${ATIVAS}
+     limit 1`);
+  const convocacao = principal.rows[0];
+  if (!convocacao) return;
+  await executor.update(quartoOcupante).set({ convocacaoId: convocacao.id }).where(and(eq(quartoOcupante.eventoId, eventoId), eq(quartoOcupante.pessoaId, pessoaId)));
+  if (convocacao.precisa_hotel) return;
+  const [ocupante] = await executor.select({ quartoId: quartoOcupante.quartoId }).from(quartoOcupante).where(and(eq(quartoOcupante.eventoId, eventoId), eq(quartoOcupante.pessoaId, pessoaId)));
+  const origens = await origensDoHotel(executor, { eventoId, pessoaId });
+  if (origens.length === 0 && !ocupante) return;
+  await executor.execute(sql`update eventos.convocacao set precisa_hotel = true, atualizado_em = ${instante.toISOString()}::timestamptz where id = ${convocacao.id}`);
+}
+
+/**
+ * Uma origem de "precisa de hotel" saiu por consequência de outra ação (a pessoa saiu da escala, o pedido de voo foi
+ * cancelado). Ninguém é arrancado do quarto por isso: quem está num quarto e ficou sem nenhuma origem passa a constar
+ * como acrescentada na Hospedagem (com registro), e o time decide lá se tira. O vínculo com a convocação acompanha a
+ * escala (vazio se a pessoa não está mais nela). Devolve true se a pessoa foi mantida assim.
+ */
+export async function manterNoQuartoSemOrigem(
+  executor: Executor,
+  { eventoId, pessoaId, usuarioId, instante, motivo }: { eventoId: string; pessoaId: string; usuarioId: string; instante: Date; motivo: "SAIU_DA_ESCALA" | "VOO_CANCELADO" },
+): Promise<boolean> {
+  const [ocupante] = await executor.select({ quartoId: quartoOcupante.quartoId }).from(quartoOcupante).where(and(eq(quartoOcupante.eventoId, eventoId), eq(quartoOcupante.pessoaId, pessoaId)));
+  if (!ocupante) return false;
+  const principal = await executor.execute<{ id: string }>(sql`
+    select c.id from eventos.convocacao c join eventos.escala es on es.id = c.escala_id
+     where es.evento_id = ${eventoId} and es.deleted_at is null and c.pessoa_id = ${pessoaId} and c.principal and c.status in ${ATIVAS}
+     limit 1`);
+  await executor
+    .update(quartoOcupante)
+    .set({ convocacaoId: principal.rows[0]?.id ?? null })
+    .where(and(eq(quartoOcupante.eventoId, eventoId), eq(quartoOcupante.pessoaId, pessoaId)));
+  const origens = await origensDoHotel(executor, { eventoId, pessoaId });
+  if (!precisaManterComoAvulsa({ origens, noQuarto: true })) return false;
+  await executor.insert(hospedagemPessoa).values({ eventoId, pessoaId, criadoPor: usuarioId, criadoEm: instante }).onConflictDoNothing();
+  await registrarAcao(executor, { entidade: "EVENTO", entidadeId: eventoId, eventoId, acao: "HOSPEDE_MANTIDO_NO_QUARTO", usuarioId, emNomeDePessoaId: pessoaId, dados: { motivo, quartoId: ocupante.quartoId } });
+  return true;
+}
 
 export function criarRepositorioHospedagem(executor: Executor): RepositorioHospedagem & {
   locaisDeHospedagem(): Promise<LocalDeHospedagem[]>;
   hospedagensDoEvento(eventoId: string): Promise<HospedagemDoEvento[]>;
-  /** Quem está na escala do evento marcada para hotel, com o quarto em que já está (se houver). */
-  equipeDoEvento(eventoId: string): Promise<PessoaDaEquipe[]>;
-  /** Quantas pessoas ativas na escala do evento não estão marcadas para hotel (o lembrete "falta marcar alguém?"). */
+  /** A lista de quem precisa de hotel no evento: a união das origens (escala, voo, acrescentada), uma linha por pessoa. */
+  precisamDeHotel(eventoId: string): Promise<PessoaParaHospedar[]>;
+  /** Quantas pessoas ativas na escala do evento não estão na lista de quem precisa de hotel (o lembrete "falta alguém?"). */
   naEscalaSemHotel(eventoId: string): Promise<number>;
+  /** Eventos (de `desde` em diante) que já têm hospedagem aberta ou gente na lista de hotel pelo voo ou acrescentada. */
+  eventosComHotel(filtro: { desde: string }): Promise<string[]>;
   /** Quantas hospedagens o evento tem (com ou sem hotel definido). */
   hospedagensDoEventoQuantas(eventoId: string): Promise<number>;
 } {
@@ -83,10 +158,9 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
       .for("update");
     if (quartos.length === 0) return [];
     const ocupantes = await executor
-      .select({ quartoId: quartoOcupante.quartoId, convocacaoId: quartoOcupante.convocacaoId, sexo: pessoaEvento.sexo })
+      .select({ quartoId: quartoOcupante.quartoId, pessoaId: quartoOcupante.pessoaId, sexo: pessoaEvento.sexo })
       .from(quartoOcupante)
-      .innerJoin(convocacao, eq(convocacao.id, quartoOcupante.convocacaoId))
-      .leftJoin(pessoaEvento, eq(pessoaEvento.pessoaId, convocacao.pessoaId))
+      .leftJoin(pessoaEvento, eq(pessoaEvento.pessoaId, quartoOcupante.pessoaId))
       .where(
         inArray(
           quartoOcupante.quartoId,
@@ -97,7 +171,7 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
       ...item,
       // sexo tem CHECK no banco (F, M ou nulo).
       sexo: item.sexo as Sexo | null,
-      ocupantes: ocupantes.filter((ocupante) => ocupante.quartoId === item.id).map((ocupante) => ({ convocacaoId: ocupante.convocacaoId, sexo: ocupante.sexo as Sexo | null })),
+      ocupantes: ocupantes.filter((ocupante) => ocupante.quartoId === item.id).map((ocupante) => ({ pessoaId: ocupante.pessoaId, sexo: ocupante.sexo as Sexo | null })),
     }));
   }
 
@@ -157,7 +231,6 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
         ? await executor
             .select({
               quartoId: quartoOcupante.quartoId,
-              convocacaoId: convocacao.id,
               pessoaId: pessoa.id,
               nome: nomeDaPessoa,
               sexo: pessoaEvento.sexo,
@@ -165,8 +238,7 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
               checkOut: quartoOcupante.checkOut,
             })
             .from(quartoOcupante)
-            .innerJoin(convocacao, eq(convocacao.id, quartoOcupante.convocacaoId))
-            .innerJoin(pessoa, eq(pessoa.id, convocacao.pessoaId))
+            .innerJoin(pessoa, eq(pessoa.id, quartoOcupante.pessoaId))
             .leftJoin(pessoaEvento, eq(pessoaEvento.pessoaId, pessoa.id))
             .where(
               inArray(
@@ -213,7 +285,6 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
             ocupantes: ocupantes
               .filter((ocupante) => ocupante.quartoId === item.id)
               .map((ocupante) => ({
-                convocacaoId: ocupante.convocacaoId,
                 pessoaId: ocupante.pessoaId,
                 nome: ocupante.nome,
                 sexo: ocupante.sexo as Sexo | null,
@@ -224,35 +295,81 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
       }));
     },
 
-    async equipeDoEvento(eventoId) {
-      const linhas = await executor
-        .select({
-          convocacaoId: convocacao.id,
-          pessoaId: convocacao.pessoaId,
-          nome: nomeDaPessoa,
-          sexo: pessoaEvento.sexo,
-          funcao: funcao.nome,
-          deslocamento: convocacao.deslocamento,
-          quartoId: quartoOcupante.quartoId,
-        })
-        .from(convocacao)
-        .innerJoin(escala, eq(escala.id, convocacao.escalaId))
-        .innerJoin(pessoa, eq(pessoa.id, convocacao.pessoaId))
-        .leftJoin(pessoaEvento, eq(pessoaEvento.pessoaId, convocacao.pessoaId))
-        .leftJoin(funcao, eq(funcao.id, escala.funcaoId))
-        .leftJoin(quartoOcupante, eq(quartoOcupante.convocacaoId, convocacao.id))
-        .where(and(eq(escala.eventoId, eventoId), marcadaParaHotel))
-        .orderBy(asc(nomeDaPessoa));
-      return linhas.map((linha) => ({ ...linha, sexo: linha.sexo as Sexo | null }));
+    async precisamDeHotel(eventoId) {
+      // Quem já está num quarto do evento entra na lista mesmo sem origem (não some da tela por dado fora da regra).
+      const linhas = await executor.execute<{
+        pessoa_id: string;
+        nome: string;
+        sexo: string | null;
+        da_escala: boolean;
+        do_voo: boolean;
+        avulsa: boolean;
+        na_escala: boolean;
+        funcao: string | null;
+        deslocamento: string | null;
+        quarto_id: string | null;
+      }>(sql`
+        with lista as (
+          select c.pessoa_id from eventos.convocacao c join eventos.escala es on es.id = c.escala_id
+           where es.evento_id = ${eventoId} and es.deleted_at is null and c.principal and c.precisa_hotel and c.status in ${ATIVAS}
+          union
+          select v.pessoa_id from eventos.pedido_sdc v
+           where v.evento_id = ${eventoId} and v.tipo = 'VOO' and v.situacao <> 'CANCELADO' and v.precisa_hotel and v.pessoa_id is not null
+          union
+          select hp.pessoa_id from eventos.hospedagem_pessoa hp where hp.evento_id = ${eventoId}
+          union
+          select o.pessoa_id from eventos.quarto_ocupante o where o.evento_id = ${eventoId}
+        )
+        select p.id as pessoa_id, coalesce(p.nome_social, p.nome_completo) as nome, pe.sexo,
+               ${daEscala(sql`${eventoId}::uuid`, sql`p.id`)} as da_escala,
+               ${doVoo(sql`${eventoId}::uuid`, sql`p.id`)} as do_voo,
+               ${avulsa(sql`${eventoId}::uuid`, sql`p.id`)} as avulsa,
+               principal.id is not null as na_escala, principal.funcao, principal.deslocamento,
+               o.quarto_id
+          from lista
+          join core.pessoa p on p.id = lista.pessoa_id
+          left join eventos.pessoa_evento pe on pe.pessoa_id = p.id
+          left join eventos.quarto_ocupante o on o.evento_id = ${eventoId} and o.pessoa_id = p.id
+          left join lateral (
+            select c.id, f.nome as funcao, c.deslocamento
+              from eventos.convocacao c
+              join eventos.escala es on es.id = c.escala_id
+              left join eventos.funcao f on f.id = es.funcao_id
+             where es.evento_id = ${eventoId} and es.deleted_at is null and c.pessoa_id = p.id and c.principal and c.status in ${ATIVAS}
+             limit 1
+          ) principal on true
+         order by coalesce(p.nome_social, p.nome_completo), p.id`);
+      return linhas.rows.map((linha) => ({
+        pessoaId: linha.pessoa_id,
+        nome: linha.nome,
+        // sexo tem CHECK no banco (F, M ou nulo).
+        sexo: linha.sexo as Sexo | null,
+        origens: origensDe(linha),
+        naEscala: linha.na_escala,
+        funcao: linha.funcao,
+        deslocamento: linha.deslocamento,
+        quartoId: linha.quarto_id,
+      }));
     },
 
     async naEscalaSemHotel(eventoId) {
-      const linhas = await executor
-        .select({ convocacaoId: convocacao.id })
-        .from(convocacao)
-        .innerJoin(escala, eq(escala.id, convocacao.escalaId))
-        .where(and(eq(escala.eventoId, eventoId), ativaNaEscala, eq(convocacao.precisaHotel, false)));
-      return linhas.length;
+      const linhas = await executor.execute<{ total: number }>(sql`
+        select count(*)::int as total
+          from eventos.convocacao c join eventos.escala es on es.id = c.escala_id
+         where es.evento_id = ${eventoId} and es.deleted_at is null and c.principal and c.status in ${ATIVAS} and not c.precisa_hotel
+           and not ${doVoo(sql`${eventoId}::uuid`, sql`c.pessoa_id`)} and not ${avulsa(sql`${eventoId}::uuid`, sql`c.pessoa_id`)}`);
+      return linhas.rows[0]?.total ?? 0;
+    },
+
+    async eventosComHotel({ desde }) {
+      const linhas = await executor.execute<{ id: string }>(sql`
+        select ev.id
+          from eventos.evento ev
+         where ev.deleted_at is null and (ev.fim at time zone 'America/Sao_Paulo')::date >= ${desde}::date
+           and (exists (select 1 from eventos.hospedagem h where h.evento_id = ev.id)
+             or exists (select 1 from eventos.hospedagem_pessoa hp where hp.evento_id = ev.id)
+             or exists (select 1 from eventos.pedido_sdc v where v.evento_id = ev.id and v.tipo = 'VOO' and v.situacao <> 'CANCELADO' and v.precisa_hotel))`);
+      return linhas.rows.map((linha) => linha.id);
     },
 
     async hospedagensDoEventoQuantas(eventoId) {
@@ -297,7 +414,7 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
 
     async periodosForaDe(hospedagemId, { checkIn, checkOut }) {
       const linhas = await executor
-        .select({ convocacaoId: quartoOcupante.convocacaoId })
+        .select({ pessoaId: quartoOcupante.pessoaId })
         .from(quartoOcupante)
         .innerJoin(quarto, eq(quarto.id, quartoOcupante.quartoId))
         .where(and(eq(quarto.hospedagemId, hospedagemId), or(lt(quartoOcupante.checkIn, checkIn), gt(quartoOcupante.checkOut, checkOut))));
@@ -351,75 +468,94 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
       await executor.delete(quarto).where(eq(quarto.id, quartoId));
     },
 
-    async travarConvocacao(convocacaoId) {
-      if (!(await travarLinha(executor, convocacao, convocacaoId))) return null;
+    async eventoParaHospedar(eventoId) {
       const [linha] = await executor
-        .select({
-          convocacaoId: convocacao.id,
-          eventoId: escala.eventoId,
-          status: convocacao.status,
-          principal: convocacao.principal,
-          precisaHotel: convocacao.precisaHotel,
-          escalaApagada: escala.deletedAt,
-          sexo: pessoaEvento.sexo,
-        })
-        .from(convocacao)
-        .innerJoin(escala, eq(escala.id, convocacao.escalaId))
-        .leftJoin(pessoaEvento, eq(pessoaEvento.pessoaId, convocacao.pessoaId))
-        .where(eq(convocacao.id, convocacaoId));
-      if (!linha) return null;
-      const [ocupante] = await executor.select({ quartoId: quartoOcupante.quartoId }).from(quartoOcupante).where(eq(quartoOcupante.convocacaoId, convocacaoId));
+        .select({ id: evento.id, dataFim: fimDoEvento, status: evento.status })
+        .from(evento)
+        .where(and(eq(evento.id, eventoId), isNull(evento.deletedAt)));
+      return linha ? { id: linha.id, dataFim: linha.dataFim, cancelado: linha.status === "CANCELADO" } : null;
+    },
+
+    async travarPessoaNoEvento(eventoId, pessoaId) {
+      // A linha de pessoa_evento serializa o que muda o hotel desta pessoa (quarto e origens).
+      const [travada] = await executor.select({ pessoaId: pessoaEvento.pessoaId, sexo: pessoaEvento.sexo }).from(pessoaEvento).where(eq(pessoaEvento.pessoaId, pessoaId)).for("update");
+      if (!travada) return null;
+      const [dados] = await executor.select({ nome: nomeDaPessoa, ativo: pessoa.ativo, apagada: pessoa.deletedAt }).from(pessoa).where(eq(pessoa.id, pessoaId));
+      if (!dados) return null;
+      const [ocupante] = await executor
+        .select({ quartoId: quartoOcupante.quartoId })
+        .from(quartoOcupante)
+        .where(and(eq(quartoOcupante.eventoId, eventoId), eq(quartoOcupante.pessoaId, pessoaId)));
+      const principal = await executor.execute<{ id: string }>(sql`
+        select c.id from eventos.convocacao c join eventos.escala es on es.id = c.escala_id
+         where es.evento_id = ${eventoId} and es.deleted_at is null and c.pessoa_id = ${pessoaId} and c.principal and c.status in ${ATIVAS}
+         limit 1`);
       return {
-        convocacaoId: linha.convocacaoId,
-        eventoId: linha.eventoId,
-        ativa: linha.escalaApagada === null && CONVOCACAO_ATIVA.includes(linha.status) && linha.principal,
-        precisaHotel: linha.precisaHotel,
-        sexo: linha.sexo as Sexo | null,
+        pessoaId,
+        nome: dados.nome,
+        sexo: travada.sexo as Sexo | null,
+        staffAtivo: dados.ativo === true && dados.apagada === null,
+        origens: await origensDoHotel(executor, { eventoId, pessoaId }),
         quartoId: ocupante?.quartoId ?? null,
+        convocacaoId: principal.rows[0]?.id ?? null,
       };
     },
 
     async semQuartoDoEvento(eventoId) {
-      const linhas = await executor
-        .select({ convocacaoId: convocacao.id, sexo: pessoaEvento.sexo })
-        .from(convocacao)
-        .innerJoin(escala, eq(escala.id, convocacao.escalaId))
-        .innerJoin(pessoa, eq(pessoa.id, convocacao.pessoaId))
-        .leftJoin(pessoaEvento, eq(pessoaEvento.pessoaId, convocacao.pessoaId))
-        .leftJoin(quartoOcupante, eq(quartoOcupante.convocacaoId, convocacao.id))
-        .where(and(eq(escala.eventoId, eventoId), marcadaParaHotel, isNull(quartoOcupante.quartoId)))
-        .orderBy(asc(nomeDaPessoa));
-      return linhas.map((linha) => ({ convocacaoId: linha.convocacaoId, sexo: linha.sexo as Sexo | null }));
+      const lista = await this.precisamDeHotel(eventoId);
+      return lista.filter((item) => item.quartoId === null && item.origens.length > 0).map((item) => ({ pessoaId: item.pessoaId, sexo: item.sexo }));
     },
 
-    async porOcupante(quartoId, convocacaoId) {
+    async porOcupante(quartoId, { eventoId, pessoaId, convocacaoId }) {
       // Mudar de quarto na mesma hospedagem mantém o período próprio da pessoa; em outra hospedagem ele não vale mais.
       const [anterior] = await executor
         .select({ checkIn: quartoOcupante.checkIn, checkOut: quartoOcupante.checkOut, hospedagemId: quarto.hospedagemId })
         .from(quartoOcupante)
         .innerJoin(quarto, eq(quarto.id, quartoOcupante.quartoId))
-        .where(eq(quartoOcupante.convocacaoId, convocacaoId));
+        .where(and(eq(quartoOcupante.eventoId, eventoId), eq(quartoOcupante.pessoaId, pessoaId)));
       const [destino] = await executor.select({ hospedagemId: quarto.hospedagemId }).from(quarto).where(eq(quarto.id, quartoId));
       const mantem = anterior !== undefined && destino !== undefined && anterior.hospedagemId === destino.hospedagemId;
-      await executor.delete(quartoOcupante).where(eq(quartoOcupante.convocacaoId, convocacaoId));
-      await executor.insert(quartoOcupante).values({ quartoId, convocacaoId, checkIn: mantem ? anterior.checkIn : null, checkOut: mantem ? anterior.checkOut : null });
+      await executor.delete(quartoOcupante).where(and(eq(quartoOcupante.eventoId, eventoId), eq(quartoOcupante.pessoaId, pessoaId)));
+      await executor.insert(quartoOcupante).values({ quartoId, eventoId, pessoaId, convocacaoId, checkIn: mantem ? anterior.checkIn : null, checkOut: mantem ? anterior.checkOut : null });
     },
 
-    async definirPeriodoDoOcupante(quartoId, convocacaoId, periodo) {
+    async definirPeriodoDoOcupante(quartoId, pessoaId, periodo) {
       const alterados = await executor
         .update(quartoOcupante)
         .set({ checkIn: periodo?.checkIn ?? null, checkOut: periodo?.checkOut ?? null })
-        .where(and(eq(quartoOcupante.quartoId, quartoId), eq(quartoOcupante.convocacaoId, convocacaoId)))
-        .returning({ convocacaoId: quartoOcupante.convocacaoId });
+        .where(and(eq(quartoOcupante.quartoId, quartoId), eq(quartoOcupante.pessoaId, pessoaId)))
+        .returning({ pessoaId: quartoOcupante.pessoaId });
       return alterados.length === 1;
     },
 
-    async tirarOcupante(quartoId, convocacaoId) {
+    async tirarOcupante(quartoId, pessoaId) {
       const removidos = await executor
         .delete(quartoOcupante)
-        .where(and(eq(quartoOcupante.quartoId, quartoId), eq(quartoOcupante.convocacaoId, convocacaoId)))
-        .returning({ convocacaoId: quartoOcupante.convocacaoId });
+        .where(and(eq(quartoOcupante.quartoId, quartoId), eq(quartoOcupante.pessoaId, pessoaId)))
+        .returning({ pessoaId: quartoOcupante.pessoaId });
       return removidos.length === 1;
+    },
+
+    async incluirAvulsa({ eventoId, pessoaId, usuarioId, instante }) {
+      const incluidas = await executor
+        .insert(hospedagemPessoa)
+        .values({ eventoId, pessoaId, criadoPor: usuarioId, criadoEm: instante })
+        .onConflictDoNothing()
+        .returning({ pessoaId: hospedagemPessoa.pessoaId });
+      return incluidas.length === 1;
+    },
+
+    async removerAvulsa(eventoId, pessoaId) {
+      const removidas = await executor
+        .delete(hospedagemPessoa)
+        .where(and(eq(hospedagemPessoa.eventoId, eventoId), eq(hospedagemPessoa.pessoaId, pessoaId)))
+        .returning({ pessoaId: hospedagemPessoa.pessoaId });
+      return removidas.length === 1;
+    },
+
+    async registrarDoEvento({ eventoId, pessoaId, acao, dados, usuarioId }) {
+      // Sem hospedagem aberta ainda: o registro é do evento, com a pessoa em `emNomeDePessoaId`.
+      await registrarAcao(executor, { entidade: "EVENTO", entidadeId: eventoId, eventoId, acao, usuarioId, emNomeDePessoaId: pessoaId, dados });
     },
 
     async registrar({ hospedagemId, eventoId, acao, comentario, dados, usuarioId }) {

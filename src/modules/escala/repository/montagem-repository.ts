@@ -3,7 +3,7 @@ import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { pessoa } from "@/core/db/schema/core";
 import type { Executor } from "@/core/db/database";
 import { registrarAcao } from "@/core/db/registro-acao";
-import { convocacao, escala, evento, funcao, mensagem, pessoaEvento, quartoOcupante, tipoEvento } from "@/core/db/schema/eventos";
+import { convocacao, escala, evento, funcao, mensagem, pessoaEvento, tipoEvento } from "@/core/db/schema/eventos";
 
 import type { StatusConvocacao, StatusEscala } from "../domain/convite";
 import type { LinhaTravada, RepositorioMontagem } from "../service/portas";
@@ -332,9 +332,18 @@ export function criarRepositorioMontagem(executor: Executor): RepositorioMontage
         .where(eq(convocacao.id, convocacaoId));
     },
 
-    async temQuarto(convocacaoId) {
-      const [linha] = await executor.select({ quartoId: quartoOcupante.quartoId }).from(quartoOcupante).where(eq(quartoOcupante.convocacaoId, convocacaoId)).limit(1);
-      return linha !== undefined;
+    async noQuartoSoPelaEscala(convocacaoId) {
+      const linhas = await executor.execute(sql`
+        select 1
+          from eventos.convocacao c
+          join eventos.escala es on es.id = c.escala_id
+          join eventos.quarto_ocupante o on o.evento_id = es.evento_id and o.pessoa_id = c.pessoa_id
+         where c.id = ${convocacaoId}
+           and not exists (select 1 from eventos.pedido_sdc v
+                            where v.evento_id = es.evento_id and v.pessoa_id = c.pessoa_id and v.tipo = 'VOO' and v.situacao <> 'CANCELADO' and v.precisa_hotel)
+           and not exists (select 1 from eventos.hospedagem_pessoa hp where hp.evento_id = es.evento_id and hp.pessoa_id = c.pessoa_id)
+         limit 1`);
+      return linhas.rows.length > 0;
     },
 
     async mudarStatusDaEscala(eventoId, { de, para, instante, aprovadoPor, limparAprovacao }) {

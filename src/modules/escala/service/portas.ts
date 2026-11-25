@@ -112,8 +112,11 @@ export type RepositorioMontagem = {
     campos: { deslocamento?: Deslocamento | null; montagem?: boolean; precisaHotel?: boolean },
     instante: Date,
   ): Promise<void>;
-  /** A convocação já ocupa um quarto na Hospedagem (só leitura: o quarto é da logística). */
-  temQuarto(convocacaoId: string): Promise<boolean>;
+  /**
+   * A pessoa desta convocação ocupa um quarto no evento e a escala é a ÚNICA origem do hotel dela (sem pedido de voo
+   * "também precisa de hotel" nem acréscimo direto na Hospedagem). Só leitura: o quarto é da logística.
+   */
+  noQuartoSoPelaEscala(convocacaoId: string): Promise<boolean>;
   /** Compare-and-set do status. `aprovadoPor` grava aprovado_por/em; `limparAprovacao` zera os dois. */
   mudarStatusDaEscala(
     eventoId: string,

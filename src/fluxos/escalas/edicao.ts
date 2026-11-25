@@ -2,7 +2,7 @@ import type { Executor } from "@/core/db/database";
 import type { AtorDaEscrita } from "@/fluxos/_base";
 import { transferirSolicitacaoDaConvocacao } from "@/modules/custos";
 import * as escala from "@/modules/escala";
-import { transferirLogisticaDaConvocacao, vincularPedidosDeVooDaPessoa } from "@/modules/logistica";
+import { manterNoQuartoSemOrigem, transferirLogisticaDaConvocacao, vincularHotelDaPessoa, vincularPedidosDeVooDaPessoa } from "@/modules/logistica";
 
 import { escrever } from "./comum";
 
@@ -45,12 +45,19 @@ export function porNaVaga(entrada: { eventoId: string; escalaId: string; pessoaI
     const resultado = await escala.porNaVaga(montagem(tx), { ...entrada, sugestaoScore: entrada.sugestaoScore ?? null, usuarioId: ator.usuarioId, instante: agora });
     // O voo costuma ser pedido antes da escala: quem entra agora leva os pedidos de voo que já tinha neste evento.
     await vincularPedidosDeVooDaPessoa(tx, { eventoId: entrada.eventoId, pessoaId: entrada.pessoaId });
+    // O hotel também: o quarto que ela já tinha se liga à convocação e a caixa "Hotel" nasce marcada se ela já estava na lista.
+    await vincularHotelDaPessoa(tx, { eventoId: entrada.eventoId, pessoaId: entrada.pessoaId, instante: agora });
     return resultado;
   });
 }
 
 export function tirarDaVaga(entrada: { eventoId: string; convocacaoId: string }, { ator, agora }: Quem) {
-  return escrever(ator, (tx) => escala.tirarDaVaga(montagem(tx), { ...entrada, usuarioId: ator.usuarioId, instante: agora, aoTrocarPrincipal: levarVinculos(tx) }));
+  return escrever(ator, async (tx) => {
+    const resultado = await escala.tirarDaVaga(montagem(tx), { ...entrada, usuarioId: ator.usuarioId, instante: agora, aoTrocarPrincipal: levarVinculos(tx) });
+    // Sair da escala não tira ninguém do quarto: se a escala era a única origem do hotel, a pessoa fica como acrescentada na Hospedagem.
+    const mantidaNoQuarto = await manterNoQuartoSemOrigem(tx, { eventoId: entrada.eventoId, pessoaId: resultado.pessoaId, usuarioId: ator.usuarioId, instante: agora, motivo: "SAIU_DA_ESCALA" });
+    return { ...resultado, mantidaNoQuarto };
+  });
 }
 
 export function atualizarConvocacao(entrada: { eventoId: string; convocacaoId: string; mudanca: escala.MudancaDaConvocacao }, { ator, agora }: Quem) {
@@ -61,15 +68,19 @@ export function registrarRespostaDoStaff(
   entrada: { eventoId: string; convocacaoId: string; resposta: "ACEITA" | "RECUSADA"; motivoRecusa?: string },
   { ator, agora }: Quem,
 ) {
-  return escrever(ator, (tx) =>
-    escala.registrarRespostaDoStaff(montagem(tx), {
+  return escrever(ator, async (tx) => {
+    const resultado = await escala.registrarRespostaDoStaff(montagem(tx), {
       ...entrada,
       motivoRecusa: entrada.motivoRecusa ?? null,
       usuarioId: ator.usuarioId,
       instante: agora,
       aoTrocarPrincipal: levarVinculos(tx),
-    }),
-  );
+    });
+    if (entrada.resposta === "RECUSADA") {
+      await manterNoQuartoSemOrigem(tx, { eventoId: entrada.eventoId, pessoaId: resultado.pessoaId, usuarioId: ator.usuarioId, instante: agora, motivo: "SAIU_DA_ESCALA" });
+    }
+    return resultado;
+  });
 }
 
 export function enviarParaAprovacao(entrada: { eventoId: string; statusEsperado: "RASCUNHO" | "DEVOLVIDA" }, { ator, agora }: Quem) {

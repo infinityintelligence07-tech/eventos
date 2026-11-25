@@ -5,10 +5,11 @@ import type { Executor } from "@/core/db/database";
 import { autoriaDe, registrarAcao } from "@/core/db/registro-acao";
 import { alias } from "drizzle-orm/pg-core";
 
-import { acessoSdc, convocacao, escala, evento, hospedagem, local, pedidoSdc, pessoaEvento, quarto, tipoEvento, trechoVoo } from "@/core/db/schema/eventos";
+import { acessoSdc, convocacao, escala, evento, hospedagem, local, pedidoSdc, pessoaEvento, quarto, quartoOcupante, tipoEvento, trechoVoo } from "@/core/db/schema/eventos";
 
 import type { PreferenciaDeHorario, Sentido, SituacaoDoPedido, TipoDoPedido } from "../domain/pedido";
 import type { RepositorioPedidos } from "../service/pedidos";
+import { origensDoHotel } from "./hospedagem-repository";
 import { CONVOCACAO_ATIVA, convocacaoPrincipal, eventoTerminaDesde, fimDoEvento, inicioDoEvento, mesmaVersao, nomeDaPessoa, travarLinha } from "./comum";
 
 export type EventoDaLogistica = {
@@ -61,6 +62,8 @@ export type PedidoDaSdc = {
   pessoaId: string | null;
   pessoaNome: string | null;
   convocacaoId: string | null;
+  /** Só no voo: "também precisa de hotel" (uma das origens da lista de hotel do evento). */
+  precisaHotel: boolean;
   valorCentavos: number | null;
   formaPagamento: string | null;
   observacaoTime: string | null;
@@ -105,6 +108,8 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
   passageirosDeVoo(filtro: { desde: string; eventoId?: string }): Promise<PassageiroDeVoo[]>;
   /** Pares evento|pessoa de quem está na escala (convocação principal ativa), para a coluna "Escala" dos pedidos. */
   naEscala(filtro: { desde: string; eventoId?: string }): Promise<Set<string>>;
+  /** Por evento (de `desde` em diante): quantas pessoas com voo pedido "também precisa de hotel" ainda estão sem quarto. */
+  comHotelPeloVooSemQuarto(filtro: { desde: string; eventoId?: string }): Promise<{ eventoId: string; pessoas: number }[]>;
   /** Pessoas ativas do cadastro de staff, por nome: quem pode receber um pedido de voo. */
   staffAtivoPorNome(): Promise<{ pessoaId: string; nome: string }[]>;
   temPedidoDeVooAtivo(eventoId: string): Promise<boolean>;
@@ -204,6 +209,27 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
       return linha !== undefined;
     },
 
+    async comHotelPeloVooSemQuarto({ desde, eventoId }) {
+      const linhas = await executor
+        .select({ eventoId: pedidoSdc.eventoId, pessoas: sql<number>`count(distinct ${pedidoSdc.pessoaId})::int` })
+        .from(pedidoSdc)
+        .innerJoin(evento, eq(evento.id, pedidoSdc.eventoId))
+        .where(
+          and(
+            eq(pedidoSdc.tipo, "VOO"),
+            ne(pedidoSdc.situacao, "CANCELADO"),
+            eq(pedidoSdc.precisaHotel, true),
+            isNotNull(pedidoSdc.pessoaId),
+            isNull(evento.deletedAt),
+            eventoTerminaDesde(desde),
+            eventoId ? eq(pedidoSdc.eventoId, eventoId) : undefined,
+            sql`not exists (select 1 from ${quartoOcupante} o where o.evento_id = ${pedidoSdc.eventoId} and o.pessoa_id = ${pedidoSdc.pessoaId})`,
+          ),
+        )
+        .groupBy(pedidoSdc.eventoId);
+      return linhas;
+    },
+
     async staffAtivoPorNome() {
       return executor
         .select({ pessoaId: pessoa.id, nome: nomeDaPessoa })
@@ -261,6 +287,7 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
           pessoaId: pedidoSdc.pessoaId,
           pessoaNome: sql<string | null>`case when ${pessoa.id} is null then null else ${nomeDaPessoa} end`,
           convocacaoId: pedidoSdc.convocacaoId,
+          precisaHotel: pedidoSdc.precisaHotel,
           valorCentavos: pedidoSdc.valorCentavos,
           formaPagamento: pedidoSdc.formaPagamento,
           observacaoTime: pedidoSdc.observacaoTime,
@@ -341,6 +368,7 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
           eventoId: pedido.eventoId,
           pessoaId: pedido.pessoaId,
           convocacaoId: pedido.convocacaoId,
+          precisaHotel: pedido.tipo === "VOO" && pedido.precisaHotel === true,
           observacaoTime: pedido.observacaoTime,
           solicitadoPor: pedido.usuarioId,
           solicitadoEm: pedido.instante,
@@ -349,6 +377,18 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
         })
         .returning({ id: pedidoSdc.id, referencia: pedidoSdc.referencia });
       return linha!;
+    },
+
+    async definirPrecisaHotel(pedidoId, precisaHotel, instante) {
+      await executor.update(pedidoSdc).set({ precisaHotel, atualizadoEm: instante }).where(eq(pedidoSdc.id, pedidoId));
+    },
+
+    async hotelDaPessoaNoEvento(eventoId, pessoaId) {
+      const [ocupante] = await executor
+        .select({ quartoId: quartoOcupante.quartoId })
+        .from(quartoOcupante)
+        .where(and(eq(quartoOcupante.eventoId, eventoId), eq(quartoOcupante.pessoaId, pessoaId)));
+      return { origens: await origensDoHotel(executor, { eventoId, pessoaId }), noQuarto: ocupante !== undefined };
     },
 
     async substituirTrechosDesejados(pedidoId, trechos, instante) {
@@ -378,6 +418,7 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
           situacao: pedidoSdc.situacao,
           eventoId: pedidoSdc.eventoId,
           pessoaId: pedidoSdc.pessoaId,
+          precisaHotel: pedidoSdc.precisaHotel,
           valorCentavos: pedidoSdc.valorCentavos,
           aprovadoEm: pedidoSdc.aprovadoEm,
           atualizadoEm: pedidoSdc.atualizadoEm,

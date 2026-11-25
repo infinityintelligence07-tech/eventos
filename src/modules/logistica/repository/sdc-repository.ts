@@ -3,7 +3,7 @@ import { alias } from "drizzle-orm/pg-core";
 
 import { pessoa } from "@/core/db/schema/core";
 import type { Executor } from "@/core/db/database";
-import { convocacao, evento, hospedagem, local, pedidoSdc, quarto, quartoOcupante, trechoVoo } from "@/core/db/schema/eventos";
+import { evento, hospedagem, local, pedidoSdc, quarto, quartoOcupante, trechoVoo } from "@/core/db/schema/eventos";
 
 import type { PreferenciaDeHorario, Sentido, SituacaoDoPedido, TipoDoPedido } from "../domain/pedido";
 import { fimDoEvento, inicioDoEvento, nomeDaPessoa } from "./comum";
@@ -235,8 +235,7 @@ export function criarRepositorioDaSdc(executor: Executor) {
         ? await executor
             .select({ quartoId: quartoOcupante.quartoId, nome: nomeDaPessoa })
             .from(quartoOcupante)
-            .innerJoin(convocacao, eq(convocacao.id, quartoOcupante.convocacaoId))
-            .innerJoin(pessoa, eq(pessoa.id, convocacao.pessoaId))
+            .innerJoin(pessoa, eq(pessoa.id, quartoOcupante.pessoaId))
             .where(
               inArray(
                 quartoOcupante.quartoId,

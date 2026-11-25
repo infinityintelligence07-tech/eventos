@@ -225,7 +225,7 @@ export async function tirarDaVaga(
     instante,
     aoTrocarPrincipal,
   }: { eventoId: string; convocacaoId: string; usuarioId: string; instante: Date; aoTrocarPrincipal?: AoTrocarPrincipal },
-): Promise<{ nome: string; jaAvisada: boolean }> {
+): Promise<{ nome: string; jaAvisada: boolean; pessoaId: string }> {
   await travarEventoEditavel(repo, eventoId, instante);
   const convocacao = await repo.travarConvocacao(convocacaoId);
   if (!convocacao || convocacao.eventoId !== eventoId) throw new NaoEncontradoError("A pessoa não está mais nesta escala.");
@@ -237,7 +237,7 @@ export async function tirarDaVaga(
   if ("apagar" in transicao) {
     if (!(await repo.apagarConvocacao(convocacaoId, convocacao.status))) throw new EscalaMudouError("a convocação mudou");
     await repo.registrar({ entidade: "CONVOCACAO", entidadeId: convocacaoId, eventoId, acao: "CONVOCACAO_REMOVIDA", statusDe: convocacao.status, usuarioId });
-    return { nome: convocacao.nome, jaAvisada: false };
+    return { nome: convocacao.nome, jaAvisada: false, pessoaId: convocacao.pessoaId };
   }
   if (!(await repo.mudarConvocacao(convocacaoId, { de: convocacao.status, para: transicao.para, instante }))) {
     throw new EscalaMudouError("a convocação mudou");
@@ -251,7 +251,7 @@ export async function tirarDaVaga(
     statusPara: transicao.para,
     usuarioId,
   });
-  return { nome: convocacao.nome, jaAvisada: true };
+  return { nome: convocacao.nome, jaAvisada: true, pessoaId: convocacao.pessoaId };
 }
 
 /**
@@ -280,7 +280,9 @@ export async function atualizarConvocacao(
   // O deslocamento e o hotel são da pessoa no evento: mesmo pedidos pela linha da segunda função, vão para a principal.
   const daPessoaNoEvento = campo === "deslocamento" || campo === "hotel";
   const alvo = daPessoaNoEvento && !convocacao.principal ? ((await repo.principalDaPessoa(eventoId, convocacao.pessoaId)) ?? convocacaoId) : convocacaoId;
-  if (mudanca.campo === "hotel" && !mudanca.precisaHotel && (await repo.temQuarto(alvo))) {
+  // Desmarcar à mão com a pessoa num quarto só é recusado se a escala for a única origem do hotel dela: com pedido de
+  // voo "também precisa de hotel" ou acrescentada na Hospedagem, ela continua na lista e no quarto.
+  if (mudanca.campo === "hotel" && !mudanca.precisaHotel && (await repo.noQuartoSoPelaEscala(alvo))) {
     throw new TransicaoInvalidaError(`${convocacao.nome} já está num quarto. Tire a pessoa do quarto em Hospedagem antes de desmarcar o hotel.`);
   }
   await repo.atualizarConvocacao(alvo, valor, instante);

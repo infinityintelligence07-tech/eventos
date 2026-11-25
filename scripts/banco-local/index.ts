@@ -23,7 +23,7 @@ const TABELAS_RESUMO = [
   "eventos.enquete", "eventos.enquete_evento", "eventos.disponibilidade", "eventos.convocacao",
   "eventos.carona", "eventos.mensagem", "eventos.solicitacao_custo", "eventos.deslocamento", "eventos.custo_item",
   "eventos.registro_acao", "eventos.pedido_sdc", "eventos.trecho_voo", "eventos.hospedagem", "eventos.quarto",
-  "eventos.quarto_ocupante", "eventos.configuracao",
+  "eventos.quarto_ocupante", "eventos.hospedagem_pessoa", "eventos.configuracao",
 ];
 
 const RESUMOS: { titulo: string; sql: string }[] = [

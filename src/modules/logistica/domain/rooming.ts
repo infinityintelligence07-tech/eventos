@@ -2,13 +2,13 @@
 
 export type Sexo = "F" | "M";
 
-export type QuartoDoRooming = { id: string; capacidade: number; sexo: Sexo | null; ocupantes: { convocacaoId: string; sexo: Sexo | null }[] };
+export type QuartoDoRooming = { id: string; capacidade: number; sexo: Sexo | null; ocupantes: { pessoaId: string; sexo: Sexo | null }[] };
 
 export type RecusaDoQuarto = "QUARTO_CHEIO" | "SEXO_DIFERENTE" | "SEM_SEXO_NO_CADASTRO";
 
 /** Pode pôr a pessoa no quarto? Quem já está nele não ocupa uma segunda cama. */
-export function podeOcupar(quarto: QuartoDoRooming, pessoa: { convocacaoId: string; sexo: Sexo | null }): { ok: true } | { ok: false; motivo: RecusaDoQuarto } {
-  const outros = quarto.ocupantes.filter((ocupante) => ocupante.convocacaoId !== pessoa.convocacaoId);
+export function podeOcupar(quarto: QuartoDoRooming, pessoa: { pessoaId: string; sexo: Sexo | null }): { ok: true } | { ok: false; motivo: RecusaDoQuarto } {
+  const outros = quarto.ocupantes.filter((ocupante) => ocupante.pessoaId !== pessoa.pessoaId);
   if (outros.length >= quarto.capacidade) return { ok: false, motivo: "QUARTO_CHEIO" };
   if (quarto.sexo !== null) {
     if (pessoa.sexo === null) return { ok: false, motivo: "SEM_SEXO_NO_CADASTRO" };
@@ -17,7 +17,7 @@ export function podeOcupar(quarto: QuartoDoRooming, pessoa: { convocacaoId: stri
   return { ok: true };
 }
 
-type PessoaDoRooming = { convocacaoId: string; sexo: Sexo | null };
+type PessoaDoRooming = { pessoaId: string; sexo: Sexo | null };
 
 /**
  * Trocar duas pessoas de lugar (cada uma vai para o quarto da outra, num passo só, mesmo com os dois quartos cheios).
@@ -27,10 +27,10 @@ export function podeTrocar(
   a: { quarto: QuartoDoRooming; pessoa: PessoaDoRooming },
   b: { quarto: QuartoDoRooming; pessoa: PessoaDoRooming },
 ): { ok: true } | { ok: false; motivo: RecusaDoQuarto; quartoId: string } {
-  const sem = (quarto: QuartoDoRooming, convocacaoId: string) => ({ ...quarto, ocupantes: quarto.ocupantes.filter((ocupante) => ocupante.convocacaoId !== convocacaoId) });
-  const aNoQuartoDeB = podeOcupar(sem(b.quarto, b.pessoa.convocacaoId), a.pessoa);
+  const sem = (quarto: QuartoDoRooming, pessoaId: string) => ({ ...quarto, ocupantes: quarto.ocupantes.filter((ocupante) => ocupante.pessoaId !== pessoaId) });
+  const aNoQuartoDeB = podeOcupar(sem(b.quarto, b.pessoa.pessoaId), a.pessoa);
   if (!aNoQuartoDeB.ok) return { ...aNoQuartoDeB, quartoId: b.quarto.id };
-  const bNoQuartoDeA = podeOcupar(sem(a.quarto, a.pessoa.convocacaoId), b.pessoa);
+  const bNoQuartoDeA = podeOcupar(sem(a.quarto, a.pessoa.pessoaId), b.pessoa);
   if (!bNoQuartoDeA.ok) return { ...bNoQuartoDeA, quartoId: a.quarto.id };
   return { ok: true };
 }
@@ -55,7 +55,7 @@ export function misturaSexos(ocupantes: { sexo: Sexo | null }[]): boolean {
   return new Set(ocupantes.map((ocupante) => ocupante.sexo).filter((sexo) => sexo !== null)).size > 1;
 }
 
-export type Alocacao = { convocacaoId: string; quartoId: string };
+export type Alocacao = { pessoaId: string; quartoId: string };
 
 /**
  * Sugestão de rooming por sexo (pura). Cada pessoa sem quarto vai, nesta ordem, para: o quarto do mesmo sexo
@@ -63,7 +63,7 @@ export type Alocacao = { convocacaoId: string; quartoId: string };
  * Sem sexo no cadastro só entra em quarto misto vazio ou só com gente sem sexo. Quem não couber fica de fora.
  */
 export function sugerirRooming(
-  semQuarto: { convocacaoId: string; sexo: Sexo | null }[],
+  semQuarto: { pessoaId: string; sexo: Sexo | null }[],
   quartos: QuartoDoRooming[],
 ): { alocacoes: Alocacao[]; semLugar: string[] } {
   const estado = quartos.map((quarto) => ({ ...quarto, ocupantes: [...quarto.ocupantes] }));
@@ -81,11 +81,11 @@ export function sugerirRooming(
     const mistoVazio = livres.filter((quarto) => quarto.sexo === null && quarto.ocupantes.length === 0);
     const escolhido = mesmoSexo[0] ?? mistoCompativel[0] ?? mistoVazio[0];
     if (!escolhido) {
-      semLugar.push(pessoa.convocacaoId);
+      semLugar.push(pessoa.pessoaId);
       continue;
     }
     escolhido.ocupantes.push(pessoa);
-    alocacoes.push({ convocacaoId: pessoa.convocacaoId, quartoId: escolhido.id });
+    alocacoes.push({ pessoaId: pessoa.pessoaId, quartoId: escolhido.id });
   }
   return { alocacoes, semLugar };
 }

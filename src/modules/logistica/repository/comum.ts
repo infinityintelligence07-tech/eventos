@@ -19,7 +19,7 @@ export const convocacaoPrincipal = eq(convocacao.principal, true);
  * seguem a pessoa. Chamado pelo fluxo da escala, na mesma transação, antes de a convocação antiga sair.
  */
 export async function transferirLogisticaDaConvocacao(executor: Executor, { de, para }: { de: string; para: string }): Promise<void> {
-  await executor.delete(quartoOcupante).where(eq(quartoOcupante.convocacaoId, para));
+  // O quarto é da pessoa no evento (uma cama por pessoa): só o vínculo com a convocação muda.
   await executor.update(quartoOcupante).set({ convocacaoId: para }).where(eq(quartoOcupante.convocacaoId, de));
   await executor.update(pedidoSdc).set({ convocacaoId: para }).where(eq(pedidoSdc.convocacaoId, de));
 }

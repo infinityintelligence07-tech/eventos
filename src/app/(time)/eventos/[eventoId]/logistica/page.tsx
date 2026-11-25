@@ -29,6 +29,7 @@ export default async function PaginaLogisticaDoEvento({ params, searchParams }: 
     novo: parametro(busca.novo),
     pessoa: z.uuid().safeParse(parametro(busca.pessoa)).data,
     registrado: parametro(busca.registrado),
+    hotel: parametro(busca.hotel),
   };
   const agora = new Date();
   const [voos, pedido, hospedagem, caronas, escrita] = await Promise.all([
