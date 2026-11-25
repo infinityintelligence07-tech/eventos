@@ -423,20 +423,55 @@ a[class*="situacao-"]:hover {
 .cadastro-form { display: grid; gap: 18px; text-align: left; }
 .cadastro-form fieldset { display: grid; gap: 12px; margin: 0; padding: 0; border: 0; }
 .cadastro-form legend { margin-bottom: 4px; font-size: 15px; font-weight: 700; color: #ffffff; }
-.login-campo select {
+/* Seletor do sistema (ui/seletor.tsx) na moldura escura da entrada: o campo tem a cara dos outros campos daqui. */
+.seletor-da-entrada {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
   min-height: 44px;
-  padding: 0 12px;
+  padding: 6px 12px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.06);
   color: #ffffff;
   font-size: 15px;
+  font-weight: 400;
+  line-height: 1.35;
+  text-align: left;
 }
-.login-campo select option { color: #1d1d1f; }
+button.seletor-da-entrada:focus-visible,
+button.seletor-da-entrada[data-open="true"] { border-color: #9fbcff; outline: none; }
+.seletor-da-entrada:disabled { opacity: 0.6; cursor: not-allowed; }
+.seletor-da-entrada[aria-invalid="true"] { border-color: #ffb4ad; }
+.seletor-da-entrada [data-marcador],
+.seletor-da-entrada svg { color: rgba(235, 235, 245, 0.6); }
+/* A lista usa os tokens do tema escuro (data-ds-scheme="dark" nela); só a superfície e o destaque seguem a moldura. */
+.seletor-camada-da-entrada {
+  --ds-surface: #0d111f;
+  --ds-separator: rgba(255, 255, 255, 0.14);
+  --ds-tint: #9fbcff;
+  --ds-tint-text: #9fbcff;
+  --ds-tint-soft: rgba(159, 188, 255, 0.16);
+}
+/* O campo de busca da lista não é um campo do formulário: sem a moldura que `.login-campo input` daria a ele. */
+.seletor-camada-da-entrada input,
+.seletor-camada-da-entrada input:focus {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 15px;
+  font-weight: 400;
+}
 /* minmax(0, 1fr) e min-width: 0: sem isso o campo não encolhe e o cartão vaza da tela no celular. */
 .cadastro-form, .cadastro-form fieldset, .cadastro-form .login-campo { min-width: 0; }
-.cadastro-form .login-campo input:not([type="radio"]):not([type="checkbox"]),
-.cadastro-form .login-campo select { width: 100%; min-width: 0; box-sizing: border-box; }
+.cadastro-form .login-campo input:not([type="radio"]):not([type="checkbox"]) { width: 100%; min-width: 0; box-sizing: border-box; }
 .cadastro-duas-colunas { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
 .cadastro-opcoes, .cadastro-funcoes { display: grid; gap: 8px; }
 .cadastro-funcoes { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
