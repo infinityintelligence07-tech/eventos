@@ -193,7 +193,7 @@ export function FormularioDeSolicitacao({
               <fieldset key={linha.chave} className="mb-3 grid items-end gap-3 rounded-[var(--ds-radius-md)] border border-[var(--ds-separator)] p-4 md:grid-cols-[160px_1fr_100px_140px_auto]">
                 <legend className="sr-only">Item {indice + 1}</legend>
                 {linha.regraCustoId && <input type="hidden" name={nome("regraCustoId")} value={linha.regraCustoId} />}
-                <CampoDeSelecao nome={nome("categoria")} rotulo="Categoria" value={linha.categoria} onChange={(evento) => mudarItem(linha.chave, { categoria: evento.target.value })} opcoes={categorias} erros={erro("categoria")} />
+                <CampoDeSelecao nome={nome("categoria")} rotulo="Categoria" valor={linha.categoria} aoMudar={(categoria) => mudarItem(linha.chave, { categoria })} opcoes={categorias} erros={erro("categoria")} />
                 <CampoDeTexto
                   nome={nome("descricao")}
                   rotulo={

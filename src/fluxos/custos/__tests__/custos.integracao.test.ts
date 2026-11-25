@@ -294,4 +294,43 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos de custos no banco", () => {
     const outroEmail = await solicitacao("Outro E-mail", "outra@exemplo.test");
     await expect(aprovar(outroEmail, semPessoa("sem.pessoa@exemplo.test"))).resolves.toMatchObject({ situacao: { auditoria: "APROVADO" } });
   });
+
+  it("mensagem de aprovado: o link do WhatsApp só sai para quem audita, só nas aprovadas, e o telefone não fica em nenhum outro lugar", async () => {
+    const pessoaId = await pessoaNaEscala("Lia Telefone");
+    await teste.sql(`update core.pessoa set telefone = '(11) 99999-0000' where id = $1`, [pessoaId]);
+    const { id, protocolo } = await registrarSolicitacao({ eventoId, pessoaId, deslocamentos: [deslocamento(12)], itens: [] }, ator(), agora);
+
+    // Pendente: não há mensagem (nem o telefone é lido).
+    const pendente = await carregarSolicitacao(protocolo, {}, { comLinkDoWhatsApp: true });
+    expect(pendente?.mensagemDeAprovado).toBeNull();
+
+    await aprovarSolicitacao({ solicitacaoId: id, atualizadoEm: pendente!.atualizadoEm }, auditor(), agora);
+    const aprovada = (await carregarSolicitacao(protocolo, {}, { comLinkDoWhatsApp: true }))!;
+    const { texto, linkDoWhatsApp, semTelefone } = aprovada.mensagemDeAprovado!;
+    expect(texto.split("\n")[0]).toBe("Olá, Lia!");
+    expect(texto).toContain(`Protocolo: ${protocolo}`);
+    expect(semTelefone).toBe(false);
+    const link = new URL(linkDoWhatsApp!);
+    expect(`${link.origin}${link.pathname}`).toBe("https://wa.me/5511999990000");
+    expect(link.searchParams.get("text")).toBe(texto);
+
+    // O telefone existe só dentro do link: nenhum outro campo do que a tela recebe o carrega.
+    const semOLink = JSON.stringify({ ...aprovada, mensagemDeAprovado: { ...aprovada.mensagemDeAprovado, linkDoWhatsApp: null } });
+    expect(semOLink).not.toMatch(/99999-?0000/);
+    // Abrir a solicitação e montar o link não grava nada: o histórico segue só com o registro e a aprovação.
+    const historico = (await teste.sql(`select acao, dados::text as dados, comentario from eventos.registro_acao where entidade_id = $1 order by criado_em`, [id])) as { acao: string; dados: string | null }[];
+    expect(historico.map((linha) => linha.acao)).toEqual(["SOLICITACAO_REGISTRADA", "AUDITORIA_APROVADA"]);
+    expect(JSON.stringify(historico)).not.toMatch(/99999|wa\.me/);
+
+    // Sem pedir o link (o padrão: quem não audita, a demo, a tela do staff), o telefone não é nem procurado.
+    const semPermissao = (await carregarSolicitacao(protocolo))!;
+    expect(semPermissao.mensagemDeAprovado).toEqual({ texto, linkDoWhatsApp: null, semTelefone: false });
+    expect(JSON.stringify(semPermissao)).not.toMatch(/99999-?0000/);
+
+    // Telefone que não dá para confiar, ou vazio: sem link, e a tela avisa para usar o contato de sempre.
+    for (const telefone of ["99999-0000", null]) {
+      await teste.sql(`update core.pessoa set telefone = $1 where id = $2`, [telefone, pessoaId]);
+      expect((await carregarSolicitacao(protocolo, {}, { comLinkDoWhatsApp: true }))!.mensagemDeAprovado).toEqual({ texto, linkDoWhatsApp: null, semTelefone: true });
+    }
+  });
 });

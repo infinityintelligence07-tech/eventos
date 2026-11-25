@@ -16,6 +16,8 @@ export type TurmaIamControl = {
   treinamento: { nome: string | null; sigla: string | null; tipo_palestra: boolean };
   polo: { sigla: string; nome: string; cidade: string; estado: string } | null;
   local: {
+    id?: number | null;
+    capacidade?: number | null;
     nome: string | null;
     logradouro: string | null;
     numero: string | null;
@@ -39,6 +41,12 @@ export type LocalDaTurma = {
   cidade: string;
   uf: string;
   cep: string | null;
+  /** id do local no IAM Control (endereco_eventos). Nulo enquanto a rota de turmas não manda, ou sem local cadastrado. */
+  iamControlEnderecoId: number | null;
+  /** Local cadastrado no IAM Control (tem nome ou id). Falso = endereço digitado na turma, ou só a cidade do polo. */
+  cadastrado: boolean;
+  /** Lugares: os do local, se o IAM Control mandar; senão a capacidade da turma. Só para local cadastrado. */
+  capacidade: number | null;
 };
 
 export type EventoDaTurma = {
@@ -152,8 +160,12 @@ function localDaTurma(turma: TurmaIamControl): LocalDaTurma | null {
   if (!cidade || !uf) return null;
 
   const logradouro = textoOuNulo(turma.local.logradouro);
+  const nome = textoOuNulo(turma.local.nome);
+  const enderecoId = turma.local.id ?? null;
+  const cadastrado = nome !== null || enderecoId !== null;
+  const lugares = turma.local.capacidade ?? turma.capacidade;
   return {
-    nome: textoOuNulo(turma.local.nome) ?? (logradouro ? `${logradouro}, ${cidade}` : `Local a definir — ${cidade}`),
+    nome: nome ?? (logradouro ? `${logradouro}, ${cidade}` : `Local a definir — ${cidade}`),
     logradouro,
     numero: textoOuNulo(turma.local.numero),
     complemento: textoOuNulo(turma.local.complemento),
@@ -161,6 +173,9 @@ function localDaTurma(turma: TurmaIamControl): LocalDaTurma | null {
     cidade,
     uf,
     cep: textoOuNulo(turma.local.cep)?.replace(/\D/g, "") || null,
+    iamControlEnderecoId: enderecoId,
+    cadastrado,
+    capacidade: cadastrado && lugares && lugares > 0 ? lugares : null,
   };
 }
 

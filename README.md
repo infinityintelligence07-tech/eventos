@@ -59,6 +59,7 @@ npm run dev:local             # next dev com esse banco (EVENTOS_MODO=local); ou
 - **Modo local (`dev:local`):** sem Google. Sem sessão vai para `/entrar-local` ("Entrar como"), que lista os usuários
   do banco local e só existe com as três travas do banco local abertas. "Sair" no cabeçalho.
 - O `middleware.ts` só renova a sessão e manda para `/login`; quem decide o acesso é o layout do `(time)` e as actions.
+  A sessão é conferida no Supabase Auth uma vez por requisição, no servidor (docs/09 §2.3.1).
 - Variáveis (opcionais fora de produção, **obrigatórias em produção**): `NEXT_PUBLIC_SUPABASE_URL`,
   `NEXT_PUBLIC_SUPABASE_ANON_KEY` (chave pública; o Eventos não usa `service_role`) e `EVENTOS_URL_PUBLICA`
   (endereço público do Eventos, usado no retorno do Google e no destino do callback; nunca o `Host` da requisição).

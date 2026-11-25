@@ -59,7 +59,7 @@ export function AdicionarFuncao({
             nome="data"
             rotulo="Dia"
             obrigatorio
-            defaultValue={dias[0]}
+            valorInicial={dias[0]}
             opcoes={dias.map((dia) => ({ valor: dia, rotulo: dataCurta(dia) }))}
             erros={erros("data")}
             ajuda="Em eventos de vários dias, adicione uma linha por dia quando o número mudar."

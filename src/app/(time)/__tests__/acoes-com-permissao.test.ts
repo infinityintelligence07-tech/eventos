@@ -74,7 +74,7 @@ const ESPERADO: Record<string, Record<string, Permissao>> = {
   },
   "configuracoes/acesso/acoes.ts": { definirAcessoAcao: "config.acesso_do_time" },
   "configuracoes/acesso-da-sdc/acoes.ts": { incluirAcessoDaSdcAcao: "config.acesso_da_sdc", definirAcessoDaSdcAcao: "config.acesso_da_sdc" },
-  "configuracoes/locais/acoes.ts": { salvarLocalAcao: "config.locais", arquivarLocalAcao: "config.locais" },
+  "configuracoes/locais/acoes.ts": { salvarLocalAcao: "config.locais", ajustarLocalDoIamControlAcao: "config.locais", arquivarLocalAcao: "config.locais" },
   "configuracoes/modelos-de-copy/acoes.ts": {
     salvarModeloAcao: "config.modelos_copy",
     definirModeloAtivoAcao: "config.modelos_copy",
@@ -114,7 +114,7 @@ describe("server actions com permissão (docs/09 §4.3)", () => {
     for (const permissao of Object.values(encontradas)) expect(PERMISSOES).toContain(permissao);
   });
 
-  it("70 actions no total", () => {
-    expect(Object.values(ESPERADO).flatMap(Object.keys)).toHaveLength(70);
+  it("71 actions no total", () => {
+    expect(Object.values(ESPERADO).flatMap(Object.keys)).toHaveLength(71);
   });
 });

@@ -2,7 +2,7 @@ import { Hotel, Sparkles } from "lucide-react";
 import Link from "next/link";
 
 import type { HospedagemDoEventoCarregada } from "@/fluxos/logistica";
-import { destinoDaTroca, destinoNoQuarto, diasEntre, type OrigemDoHotel, rotuloDaCapacidade, rotuloDaOrigemDoHotel, rotuloDoSexoDoQuarto, situacaoDoPagamento, somarDias, textoDoPeriodo } from "@/modules/logistica";
+import { destinoDaTroca, destinoNoQuarto, diasEntre, localDaPalestra, type OrigemDoHotel, rotuloDaCapacidade, rotuloDaOrigemDoHotel, rotuloDoSexoDoQuarto, situacaoDoPagamento, somarDias, textoDoPeriodo } from "@/modules/logistica";
 import { BotaoCopiar, FormularioDeAcao } from "@/app/(time)/_componentes/ui";
 
 import { Aviso, FaixaSomenteLeitura } from "../../_componentes/ui/aviso";
@@ -12,6 +12,7 @@ import { Cartao } from "../../_componentes/ui/cartao";
 import { CAMPO, TITULO_DE_SECAO } from "../../_componentes/ui/classes";
 import { EstadoVazio } from "../../_componentes/ui/estados";
 import { dataCurta, dinheiro, periodo, quantidadeDe } from "../../_componentes/ui/formatos";
+import { Seletor } from "../../_componentes/ui/seletor";
 import {
   adicionarQuartoAcao,
   alterarHospedagemAcao,
@@ -33,6 +34,7 @@ import {
   tirarHospedeAcao,
 } from "../acoes";
 import { BotaoDefinirHospedagem, BotaoPeriodoDoOcupante, BotaoRegistrarReserva, FormularioNovoQuarto } from "./formularios-de-hospedagem";
+import { AtalhosDoRecorte } from "./recorte";
 import { BotaoAprovarPagamento, BotaoCancelarPedido, BotaoDesfazerAprovacao } from "./formularios-de-voo";
 import { ChipDoPagamento } from "./pagamento";
 import { ChipDoVoo, paraCampoDeDinheiro } from "./situacoes";
@@ -79,16 +81,16 @@ function AcrescentarPessoa({ eventoId, staff }: { eventoId: string; staff: { pes
       <label htmlFor="acrescentar-hospede" className="text-[13px] font-medium">
         Acrescentar pessoa
       </label>
-      <select id="acrescentar-hospede" name="pessoaId" required defaultValue="" className={`${CAMPO} h-9 w-auto max-w-[280px] pl-2 pr-7 text-[14px]`}>
-        <option value="" disabled>
-          Escolha pelo nome…
-        </option>
-        {staff.map((pessoa) => (
-          <option key={pessoa.pessoaId} value={pessoa.pessoaId}>
-            {pessoa.nome}
-          </option>
-        ))}
-      </select>
+      <Seletor
+        id="acrescentar-hospede"
+        nome="pessoaId"
+        rotulo="Acrescentar pessoa"
+        marcador="Escolha pelo nome…"
+        opcoes={staff.map((pessoa) => ({ valor: pessoa.pessoaId, rotulo: pessoa.nome }))}
+        busca
+        obrigatorio
+        className="w-auto min-w-[200px] max-w-[280px]"
+      />
       <BotaoDeEnvio tamanho="pequeno" variante="secundario">
         Acrescentar
       </BotaoDeEnvio>
@@ -109,7 +111,7 @@ function TirarDaLista({ eventoId, pessoaId, nome }: { eventoId: string; pessoaId
   );
 }
 
-const CLASSE_DO_SELETOR = `${CAMPO} h-8 w-auto max-w-[220px] pl-2 pr-7 text-[13px]`;
+const CLASSE_DO_SELETOR = "w-auto min-w-[150px] max-w-[220px]";
 
 /** "Colocar no quarto…" de quem está sem quarto (alternativa a arrastar, WCAG 2.5.7). */
 function ColocarNoQuarto({ pessoaId, nome, quartos }: { pessoaId: string; nome: string; quartos: OpcaoDeQuarto[] }) {
@@ -122,17 +124,16 @@ function ColocarNoQuarto({ pessoaId, nome, quartos }: { pessoaId: string; nome: 
       <label htmlFor={id} className="sr-only">
         {descricao}
       </label>
-      <select id={id} name="quartoId" required defaultValue="" className={CLASSE_DO_SELETOR}>
-        <option value="" disabled>
-          Colocar no quarto…
-        </option>
-        {quartos.map((quarto) => (
-          <option key={quarto.id} value={quarto.id} disabled={quarto.cheio}>
-            {quarto.rotulo}
-            {quarto.cheio ? " (cheio)" : ""}
-          </option>
-        ))}
-      </select>
+      <Seletor
+        id={id}
+        nome="quartoId"
+        rotulo={descricao}
+        marcador="Colocar no quarto…"
+        opcoes={quartos.map((quarto) => ({ valor: quarto.id, rotulo: `${quarto.rotulo}${quarto.cheio ? " (cheio)" : ""}`, desabilitada: quarto.cheio }))}
+        obrigatorio
+        tamanho="pequeno"
+        className={CLASSE_DO_SELETOR}
+      />
       <BotaoDeEnvio tamanho="pequeno" variante="secundario">
         Colocar
       </BotaoDeEnvio>
@@ -157,28 +158,21 @@ function MoverDeQuarto({ pessoaId, nome, quartoAtual, quartos, trocas }: { pesso
       <label htmlFor={id} className="sr-only">
         {descricao}
       </label>
-      <select id={id} name="destino" required defaultValue="" className={CLASSE_DO_SELETOR}>
-        <option value="" disabled>
-          Mover para…
-        </option>
-        <optgroup label="Outro quarto">
-          {destinos.map((quarto) => (
-            <option key={quarto.id} value={destinoNoQuarto(quarto.id)} disabled={quarto.cheio}>
-              {quarto.rotulo}
-              {quarto.cheio ? " (cheio)" : ""}
-            </option>
-          ))}
-        </optgroup>
-        {comQuem.length > 0 && (
-          <optgroup label="Trocar de lugar com">
-            {comQuem.map((troca) => (
-              <option key={troca.pessoaId} value={destinoDaTroca(troca.quartoId, troca.pessoaId)}>
-                {troca.rotulo}
-              </option>
-            ))}
-          </optgroup>
-        )}
-      </select>
+      {/* Os dois grupos de antes: outro quarto com vaga ou trocar de lugar com um ocupante (lista de pessoas: com busca). */}
+      <Seletor
+        id={id}
+        nome="destino"
+        rotulo={descricao}
+        marcador="Mover para…"
+        opcoes={[
+          ...destinos.map((quarto) => ({ valor: destinoNoQuarto(quarto.id), rotulo: `${quarto.rotulo}${quarto.cheio ? " (cheio)" : ""}`, desabilitada: quarto.cheio, grupo: "Outro quarto" })),
+          ...comQuem.map((troca) => ({ valor: destinoDaTroca(troca.quartoId, troca.pessoaId), rotulo: troca.rotulo, grupo: "Trocar de lugar com" })),
+        ]}
+        busca={comQuem.length > 0 ? true : undefined}
+        obrigatorio
+        tamanho="pequeno"
+        className={CLASSE_DO_SELETOR}
+      />
       <BotaoDeEnvio tamanho="pequeno" variante="secundario">
         Mover
       </BotaoDeEnvio>
@@ -188,16 +182,26 @@ function MoverDeQuarto({ pessoaId, nome, quartoAtual, quartos, trocas }: { pesso
 
 export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dados: HospedagemDoEventoCarregada; escrita: boolean; comSeletorDeEvento: boolean }) {
   const { evento } = dados;
+  const masterclass = dados.recorte === "MASTERCLASS";
   const seletor = comSeletorDeEvento && (
-    <BarraDeFiltros>
-      <SeletorDeFiltro
-        nome="evento"
-        rotulo="Evento"
-        todos="Próximo evento"
-        valor={evento?.id ?? null}
-        opcoes={dados.eventos.map((item) => ({ valor: item.id, rotulo: `${item.codigo ?? item.nome} · ${dataCurta(item.dataInicio)}${item.semHospedagem ? " · sem hospedagem" : ""}` }))}
-      />
-    </BarraDeFiltros>
+    <>
+      {/* Eventos | Masterclass, como as abas da planilha. Trocar de recorte tira o evento escolhido (é do outro lado). */}
+      <AtalhosDoRecorte recorte={dados.recorte} href={(recorte) => (recorte === "MASTERCLASS" ? "/logistica/hospedagem?recorte=masterclass" : "/logistica/hospedagem")} />
+      <BarraDeFiltros>
+        <SeletorDeFiltro
+          nome="evento"
+          rotulo={masterclass ? "Palestra" : "Evento"}
+          todos={masterclass ? "Próxima palestra" : "Próximo evento"}
+          busca
+          valor={evento?.id ?? null}
+          opcoes={[...(evento && !dados.eventos.some((item) => item.id === evento.id) ? [evento] : []), ...dados.eventos].map((item) => ({
+            valor: item.id,
+            // Na Masterclass (são centenas), a data vem primeiro e depois onde é a palestra.
+            rotulo: `${masterclass ? `${dataCurta(item.dataInicio)} · ${localDaPalestra(item)}` : `${item.codigo ?? item.nome} · ${dataCurta(item.dataInicio)}`}${item.semHospedagem ? " · sem hospedagem" : ""}`,
+          }))}
+        />
+      </BarraDeFiltros>
+    </>
   );
 
   if (!evento) {
@@ -206,8 +210,9 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
         <h2 id="titulo-hospedagem" className={`${TITULO_DE_SECAO} mb-3`}>
           Hospedagem
         </h2>
+        {seletor}
         <Cartao espacamento="nenhum">
-          <EstadoVazio icone={<Hotel size={32} aria-hidden />} titulo="Nenhum evento nos próximos dias.">
+          <EstadoVazio icone={<Hotel size={32} aria-hidden />} titulo={masterclass ? "Nenhuma Masterclass nos próximos dias." : "Nenhum evento nos próximos dias."}>
             Os quartos são montados por evento, com quem precisa de hotel: marcado na escala, com pedido de voo ou acrescentado aqui.
           </EstadoVazio>
         </Cartao>
@@ -456,6 +461,10 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
                         <>
                           <span className="[font-family:var(--ds-font-mono)] text-[13px]">{pedido.referencia}</span>
                           <ChipDoVoo situacao={pedido.situacao} />
+                          <span className="text-[12px] tabular-nums text-[var(--ds-label-2)]">
+                            pedido em {dataCurta(pedido.dataSolicitacao)}
+                            {pedido.situacao === "EMITIDO" && pedido.dataCompra ? ` · reservado em ${dataCurta(pedido.dataCompra)}` : ""}
+                          </span>
                           {escrita && aguardando && (
                             <BotaoRegistrarReserva
                               acao={registrarRetornoDeHospedagemAcao}
@@ -468,6 +477,9 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
                                 numeroReserva: hospedagem.numeroReserva,
                                 valor: paraCampoDeDinheiro(pedido.valorCentavos),
                                 formaPagamento: pedido.formaPagamento,
+                                dataCompra: pedido.situacao === "EMITIDO" && pedido.dataCompra ? pedido.dataCompra : dados.hoje,
+                                dataSolicitacao: pedido.dataSolicitacao,
+                                hoje: dados.hoje,
                               }}
                             />
                           )}
@@ -486,8 +498,13 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
                       ) : hospedagem.quartos.length === 0 ? (
                         <span className="text-[var(--ds-label-2)]">Monte os quartos para pedir a hospedagem à SDC.</span>
                       ) : (
-                        <FormularioDeAcao acao={registrarPedidoDeHospedagemAcao} aria-label="Pedir hospedagem à SDC">
+                        <FormularioDeAcao acao={registrarPedidoDeHospedagemAcao} className="flex flex-wrap items-center gap-2" aria-label="Pedir hospedagem à SDC">
                           <input type="hidden" name="hospedagemId" value={hospedagem.id} />
+                          {/* Data real do pedido: hoje, ou o dia em que ele foi feito (pedido antigo, da planilha). */}
+                          <label className="flex items-center gap-1 text-[12px] text-[var(--ds-label-2)]">
+                            Pedido em
+                            <input type="date" name="dataSolicitacao" defaultValue={dados.hoje} max={dados.hoje} className={`${CAMPO} h-8 w-auto px-2 text-[13px]`} />
+                          </label>
                           <BotaoDeEnvio tamanho="pequeno" variante="primario">
                             Pedir hospedagem à SDC
                           </BotaoDeEnvio>

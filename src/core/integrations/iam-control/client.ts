@@ -28,6 +28,9 @@ const turmaSchema = z.object({
     .object({ id: z.number().int(), sigla: z.string(), nome: z.string(), cidade: z.string(), estado: z.string() })
     .nullable(),
   local: z.object({
+    // id e capacidade do local cadastrado (endereco_eventos). Opcionais: a rota ainda não manda (pedido ao time do IAM Control).
+    id: z.number().int().positive().nullish(),
+    capacidade: z.number().int().nullish(),
     nome: texto,
     logradouro: texto,
     numero: texto,

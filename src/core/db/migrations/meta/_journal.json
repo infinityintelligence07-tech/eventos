@@ -127,6 +127,20 @@
       "when": 1795634623478,
       "tag": "0017_hotel-sem-escala",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1795638511152,
+      "tag": "0018_locais-do-iam-control",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1795639593353,
+      "tag": "0019_masterclass-e-data-real",
+      "breakpoints": true
     }
   ]
 }

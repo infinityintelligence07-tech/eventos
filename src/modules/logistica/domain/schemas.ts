@@ -29,6 +29,47 @@ const dataEHora = z
 
 const textoOpcional = (maximo: number) => z.string().trim().max(maximo, `Use até ${maximo} caracteres.`).optional();
 
+const MENSAGEM_SEM_LINK = "Não use links nem endereços de site neste campo.";
+const MENSAGEM_SEM_QUEBRA = "Use uma linha só, sem quebras nem caracteres especiais de controle.";
+const TEM_LINK = /:\/\/|www\./i;
+// Caracteres de controle (inclui quebra de linha e tabulação): é exatamente o que se quer recusar.
+const TEM_CONTROLE = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
+// Idem, menos quebra de linha e tabulação (texto de várias linhas).
+const TEM_CONTROLE_FORA_QUEBRA = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u2028\u2029]/;
+
+/**
+ * Texto que a SDC digita e que o time repassa (copys para o staff, Locais e hotéis): uma linha só, sem link e sem
+ * caractere de controle. Espaços repetidos viram um.
+ */
+const textoDaSdc = (minimo: number, maximo: number, mensagemDoMinimo: string) =>
+  z
+    .string()
+    .max(maximo * 2, `Use até ${maximo} caracteres.`)
+    .refine((texto) => !TEM_CONTROLE.test(texto.trim()), MENSAGEM_SEM_QUEBRA)
+    .transform((texto) => texto.trim().replace(/ {2,}/g, " "))
+    .pipe(z.string().min(minimo, mensagemDoMinimo).max(maximo, `Use até ${maximo} caracteres.`).refine((texto) => !TEM_LINK.test(texto), MENSAGEM_SEM_LINK));
+
+const textoOpcionalDaSdc = (maximo: number) => z.preprocess((valor) => (typeof valor === "string" && valor.trim() === "" ? undefined : valor), textoDaSdc(1, maximo, "Informe o texto.").optional());
+
+/** Observação da SDC para o time: pode ter mais de uma linha, mas não link nem caractere de controle. */
+const observacaoDaSdc = z
+  .string()
+  .trim()
+  .max(500, "Use até 500 caracteres.")
+  .refine((texto) => !TEM_CONTROLE_FORA_QUEBRA.test(texto), "Use só texto, sem caracteres especiais de controle.")
+  .refine((texto) => !TEM_LINK.test(texto), MENSAGEM_SEM_LINK)
+  .optional();
+
+/** Forma de pagamento (ex.: "Faturado SDC"): uma linha, sem link. Vale para o time e para a SDC, no voo e na hospedagem. */
+const formaDePagamento = textoDaSdc(2, 60, "Informe a forma de pagamento (ex.: Faturado SDC).");
+
+/**
+ * Data real (AAAA-MM-DD) de um pedido ou de uma compra, quando não é o dia do lançamento: compra antiga da planilha ou
+ * feita fora do sistema. Ausente = hoje. Quem confere que não é futura (e que a compra não vem antes do pedido) é o
+ * serviço, que sabe que dia é hoje.
+ */
+const dataReal = data.optional();
+
 /** "1.234,56", "1234,56", "980" ou "980.5" → centavos inteiros (sem passar por ponto flutuante). */
 export function centavosDoTexto(texto: string): number | null {
   const limpo = texto.replace(/\s|R\$/g, "");
@@ -87,6 +128,13 @@ export const registrarPedidoDeVooSchema = z.object({
   outraCompra: z.stringbool().optional(),
   /** "Também precisa de hotel": põe a pessoa na lista de quem precisa de hotel neste evento (caixa desmarcada = não vem). */
   precisaHotel: z.stringbool().optional(),
+  /**
+   * Só na Masterclass (turnê de palestras): a última palestra, de onde a volta sai. `eventoId` é a primeira, onde a
+   * ida chega. Ausente (ou a mesma palestra) = ida e volta pelo mesmo evento.
+   */
+  eventoVoltaId: id.optional(),
+  /** Dia em que o pedido foi feito à SDC (ausente = hoje). */
+  dataSolicitacao: dataReal,
 });
 export type RegistrarPedidoDeVoo = z.output<typeof registrarPedidoDeVooSchema>;
 
@@ -140,6 +188,10 @@ const trechoEmitidoSchema = z
 export const registrarRetornoDeVooSchema = z.object({
   pedidoId: id,
   valorCentavos: dinheiro,
+  /** Como a planilha anota por voo ("Faturado SDC"). Opcional no voo. */
+  formaPagamento: formaDePagamento.optional(),
+  /** Dia em que a SDC comprou (ausente = hoje). */
+  dataCompra: dataReal,
   observacaoSdc: textoOpcional(500),
   trechos: z
     .array(trechoEmitidoSchema)
@@ -179,7 +231,9 @@ export const registrarRetornoDeHospedagemSchema = z
     novoHotel: novoHotelSchema.optional(),
     valorCentavos: dinheiro,
     numeroReserva: z.string().trim().min(1, "Informe o número da reserva.").max(60, "Use até 60 caracteres."),
-    formaPagamento: z.string().trim().min(2, "Informe a forma de pagamento (ex.: Faturado SDC).").max(60, "Use até 60 caracteres."),
+    formaPagamento: formaDePagamento,
+    /** Dia em que a SDC reservou (ausente = hoje). */
+    dataCompra: dataReal,
     observacaoSdc: textoOpcional(500),
   })
   .refine((retorno) => (retorno.localId === undefined) !== (retorno.novoHotel === undefined), {
@@ -208,7 +262,7 @@ export const alterarHospedagemSchema = z
   .refine((hospedagem) => hospedagem.checkOut > hospedagem.checkIn, periodoValido);
 export type AlterarHospedagem = z.output<typeof alterarHospedagemSchema>;
 
-export const registrarPedidoDeHospedagemSchema = z.object({ hospedagemId: id, observacaoTime: textoOpcional(500) });
+export const registrarPedidoDeHospedagemSchema = z.object({ hospedagemId: id, observacaoTime: textoOpcional(500), /** Dia em que o pedido foi feito à SDC (ausente = hoje). */ dataSolicitacao: dataReal });
 export type RegistrarPedidoDeHospedagem = z.output<typeof registrarPedidoDeHospedagemSchema>;
 
 export const adicionarQuartoSchema = z.object({
@@ -298,37 +352,6 @@ export function companhiaNoFormulario(companhia: string | null): { opcao: string
   return daLista ? { opcao: daLista, outra: "" } : { opcao: OUTRA_COMPANHIA, outra: companhia };
 }
 
-const MENSAGEM_SEM_LINK = "Não use links nem endereços de site neste campo.";
-const MENSAGEM_SEM_QUEBRA = "Use uma linha só, sem quebras nem caracteres especiais de controle.";
-const TEM_LINK = /:\/\/|www\./i;
-// Caracteres de controle (inclui quebra de linha e tabulação): é exatamente o que se quer recusar.
-const TEM_CONTROLE = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
-// Idem, menos quebra de linha e tabulação (texto de várias linhas).
-const TEM_CONTROLE_FORA_QUEBRA = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u2028\u2029]/;
-
-/**
- * Texto que a SDC digita e que o time repassa (copys para o staff, Locais e hotéis): uma linha só, sem link e sem
- * caractere de controle. Espaços repetidos viram um.
- */
-const textoDaSdc = (minimo: number, maximo: number, mensagemDoMinimo: string) =>
-  z
-    .string()
-    .max(maximo * 2, `Use até ${maximo} caracteres.`)
-    .refine((texto) => !TEM_CONTROLE.test(texto.trim()), MENSAGEM_SEM_QUEBRA)
-    .transform((texto) => texto.trim().replace(/ {2,}/g, " "))
-    .pipe(z.string().min(minimo, mensagemDoMinimo).max(maximo, `Use até ${maximo} caracteres.`).refine((texto) => !TEM_LINK.test(texto), MENSAGEM_SEM_LINK));
-
-const textoOpcionalDaSdc = (maximo: number) => z.preprocess((valor) => (typeof valor === "string" && valor.trim() === "" ? undefined : valor), textoDaSdc(1, maximo, "Informe o texto.").optional());
-
-/** Observação da SDC para o time: pode ter mais de uma linha, mas não link nem caractere de controle. */
-const observacaoDaSdc = z
-  .string()
-  .trim()
-  .max(500, "Use até 500 caracteres.")
-  .refine((texto) => !TEM_CONTROLE_FORA_QUEBRA.test(texto), "Use só texto, sem caracteres especiais de controle.")
-  .refine((texto) => !TEM_LINK.test(texto), MENSAGEM_SEM_LINK)
-  .optional();
-
 /**
  * O trecho que a SDC informa. Lista fechada: sentido, companhia, número do voo, localizador, partida e chegada.
  * NÃO tem o link do cartão de embarque (só o time põe link; o da SDC seria um link de terceiros na tela do time).
@@ -365,6 +388,9 @@ const trechoCompradoPelaSdcSchema = z
 export const registrarCompraDeVooPelaSdcSchema = z.object({
   referencia: referenciaDoPedido,
   valorCentavos: dinheiro,
+  formaPagamento: formaDePagamento.optional(),
+  /** A SDC informa só a data da compra (a da solicitação é do time). */
+  dataCompra: dataReal,
   observacaoSdc: observacaoDaSdc,
   trechos: z
     .array(trechoCompradoPelaSdcSchema)
@@ -393,7 +419,8 @@ export const registrarReservaPelaSdcSchema = z.object({
   hotel: hotelDaSdcSchema,
   valorCentavos: dinheiro,
   numeroReserva: textoDaSdc(1, 60, "Informe o número da reserva."),
-  formaPagamento: textoDaSdc(2, 60, "Informe a forma de pagamento (ex.: Faturado SDC)."),
+  formaPagamento: formaDePagamento,
+  dataCompra: dataReal,
   observacaoSdc: observacaoDaSdc,
 });
 export type RegistrarReservaPelaSdc = z.output<typeof registrarReservaPelaSdcSchema>;

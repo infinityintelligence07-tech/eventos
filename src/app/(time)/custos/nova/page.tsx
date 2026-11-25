@@ -61,6 +61,7 @@ export default async function PaginaNovaSolicitacao({ searchParams }: { searchPa
             nome="evento"
             rotulo="Evento"
             todos="Escolha o evento"
+            busca
             valor={evento?.id ?? null}
             opcoes={preparada.eventos.map((item) => ({ valor: item.id, rotulo: `${item.codigo ?? item.nome} · ${dataCurta(item.data)}` }))}
           />
@@ -69,6 +70,7 @@ export default async function PaginaNovaSolicitacao({ searchParams }: { searchPa
               nome="pessoa"
               rotulo="Pessoa"
               todos="Escolha a pessoa"
+              busca
               valor={pessoa?.pessoaId ?? null}
               opcoes={preparada.pessoas.map((item) => ({
                 valor: item.pessoaId,

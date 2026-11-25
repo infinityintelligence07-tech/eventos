@@ -15,7 +15,9 @@ import {
   nomeComPeriodo,
   type NovoHotel,
   type HospedeDoEvento,
+  noRecorte,
   type PessoaParaHospedar,
+  type RecorteDaLogistica,
   type PorNoQuarto,
   type RegistrarPedidoDeHospedagem,
   type RegistrarRetornoDeHospedagem,
@@ -40,6 +42,11 @@ export type HospedagemCarregada = HospedagemDoEvento & {
 };
 
 export type HospedagemDoEventoCarregada = {
+  /** Eventos (padrão) ou Masterclass, como as abas da planilha. Com um evento escolhido, vale o recorte dele. */
+  recorte: RecorteDaLogistica;
+  /** Hoje em São Paulo (AAAA-MM-DD): os campos de data real dos formulários não passam daqui. */
+  hoje: string;
+  /** Os eventos do recorte em vigor, para o seletor. */
   eventos: EventoDaLogistica[];
   evento: EventoDaLogistica | null;
   hospedagens: HospedagemCarregada[];
@@ -72,25 +79,27 @@ function localDoEvento(evento: EventoDaLogistica): string | null {
  * Hospedagem: rooming de um evento (o escolhido ou o próximo com equipe). Sem evento escolhido, pula os que o time
  * marcou como "sem hospedagem": eles saem dos pendentes, mas continuam no seletor.
  */
-export async function carregarHospedagem(eventoId: string | null, agora: Date): Promise<HospedagemDoEventoCarregada> {
+export async function carregarHospedagem(eventoId: string | null, agora: Date, recortePedido: RecorteDaLogistica = "EVENTOS"): Promise<HospedagemDoEventoCarregada> {
   const db = await bancoParaLeitura();
   const pedidos = criarRepositorioPedidos(db);
   const repo = criarRepositorioHospedagem(db);
   const hoje = dataEmSaoPaulo(agora);
   // O seletor traz todos os eventos de hoje em diante, com ou sem escala (o hotel é pedido antes dela). Sem evento
   // escolhido, abre o próximo que já tem o que montar: gente na escala ou na lista de hotel, ou hospedagem aberta.
-  const [eventos, comEquipe, comHotel, locais] = await Promise.all([
+  const [futuros, comEquipe, comHotel, locais] = await Promise.all([
     pedidos.eventosFuturos({ desde: hoje }),
     pedidos.eventosDaLogistica({ desde: hoje }),
     repo.eventosComHotel({ desde: hoje }),
     repo.locaisDeHospedagem(),
   ]);
+  const escolhido = eventoId ? (futuros.find((item) => item.id === eventoId) ?? (await pedidos.eventoPorId(eventoId))) : null;
+  // Com um evento escolhido, o recorte é o dele (a Masterclass aberta pelo link de um pedido cai no recorte certo).
+  const recorte: RecorteDaLogistica = escolhido ? (escolhido.masterclass ? "MASTERCLASS" : "EVENTOS") : recortePedido;
+  const eventos = futuros.filter((item) => noRecorte(recorte, item));
   const comTrabalho = new Set([...comEquipe.map((item) => item.id), ...comHotel]);
   const candidatos = eventos.filter((item) => comTrabalho.has(item.id));
-  const evento = eventoId
-    ? (eventos.find((item) => item.id === eventoId) ?? (await pedidos.eventoPorId(eventoId)))
-    : (candidatos.find((item) => !item.semHospedagem) ?? candidatos[0] ?? eventos[0] ?? null);
-  if (!evento) return { eventos, evento: null, hospedagens: [], locais, equipe: [], semQuarto: [], staffParaAcrescentar: [], podeAcrescentar: false, naEscalaSemHotel: 0, sugestaoAloca: 0 };
+  const evento = escolhido ?? candidatos.find((item) => !item.semHospedagem) ?? candidatos[0] ?? eventos[0] ?? null;
+  if (!evento) return { recorte, hoje, eventos, evento: null, hospedagens: [], locais, equipe: [], semQuarto: [], staffParaAcrescentar: [], podeAcrescentar: false, naEscalaSemHotel: 0, sugestaoAloca: 0 };
 
   const [hospedagens, equipe, naEscalaSemHotel, staff, situacao] = await Promise.all([
     repo.hospedagensDoEvento(evento.id),
@@ -105,6 +114,8 @@ export async function carregarHospedagem(eventoId: string | null, agora: Date): 
     hospedagem.quartos.map((quarto) => ({ id: quarto.id, capacidade: quarto.capacidade, sexo: quarto.sexo, ocupantes: quarto.ocupantes })),
   );
   return {
+    recorte,
+    hoje,
     eventos,
     evento,
     locais,
@@ -200,6 +211,15 @@ async function hotelDoRetorno(
   if (existente) {
     if (daSdc) return existente;
     throw new RegraDeNegocioError(`Já existe o hotel "${dados.nome}" em ${dados.cidade}/${dados.uf}. Escolha-o na lista em vez de cadastrar de novo.`);
+  }
+  // O hotel que o time informa já veio do IAM Control como local de evento (o evento é num hotel): usa esse cadastro,
+  // que passa a hotel, em vez de nascer outro com o mesmo nome. A SDC não altera cadastro que não é dela (docs/09
+  // §15.4): o hotel que ela informa nasce à parte e a sincronização o liga ao IAM Control na rodada seguinte.
+  const doIamControl = daSdc ? null : await locais.localDoIamControlComNome(dados);
+  if (doIamControl?.tipo === "EVENTO") {
+    if (!(await locais.marcarComoHotel(doIamControl.id, agora))) throw new RegraDeNegocioError("O local deste hotel mudou. Recarregue a página.");
+    await locais.registrar(doIamControl.id, { acao: "LOCAL_ALTERADO", ...autor, dados: { mudancas: { tipo: { de: "EVENTO", para: "HOTEL" } }, origem: "retorno da SDC" } });
+    return doIamControl.id;
   }
   // Correção da reserva pela SDC: o hotel que ela mesma cadastrou para este pedido é corrigido, em vez de nascer
   // outro registro em Locais e hotéis a cada nome diferente.

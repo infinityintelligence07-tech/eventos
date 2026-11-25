@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { CAMPO, CabecalhoDaPagina, Cartao, classesDoBotao, FaixaSomenteLeitura, Migalha } from "@/app/(time)/_componentes/ui";
+import { CAMPO, CabecalhoDaPagina, Cartao, classesDoBotao, FaixaSomenteLeitura, Migalha, Seletor } from "@/app/(time)/_componentes/ui";
 import { situacaoDaEscrita } from "@/fluxos/_base";
 import { carregarNovaEnquete } from "@/fluxos/disponibilidade";
 import { periodoCurto } from "@/modules/disponibilidade";
@@ -55,27 +55,29 @@ export default async function PaginaNovaEnquete({ searchParams }: { searchParams
             <label htmlFor="filtro-polo" className={ROTULO}>
               Polo
             </label>
-            <select id="filtro-polo" name="polo" defaultValue={nova.polo ?? ""} className={`${CAMPO} pr-8`}>
-              <option value="">Todos os polos</option>
-              {nova.opcoes.polos.map((polo) => (
-                <option key={polo.codigo} value={polo.codigo}>
-                  {polo.nome}
-                </option>
-              ))}
-            </select>
+            <Seletor
+              id="filtro-polo"
+              nome="polo"
+              rotulo="Polo"
+              className="w-auto min-w-[180px]"
+              vazio="Todos os polos"
+              valorInicial={nova.polo ?? ""}
+              opcoes={nova.opcoes.polos.map((polo) => ({ valor: polo.codigo, rotulo: polo.nome }))}
+            />
           </div>
           <div>
             <label htmlFor="filtro-tipo" className={ROTULO}>
               Tipo
             </label>
-            <select id="filtro-tipo" name="tipo" defaultValue={nova.tipo ?? ""} className={`${CAMPO} pr-8`}>
-              <option value="">Todos os tipos</option>
-              {nova.opcoes.tipos.map((tipo) => (
-                <option key={tipo.sigla} value={tipo.sigla}>
-                  {tipo.nome}
-                </option>
-              ))}
-            </select>
+            <Seletor
+              id="filtro-tipo"
+              nome="tipo"
+              rotulo="Tipo"
+              className="w-auto min-w-[180px]"
+              vazio="Todos os tipos"
+              valorInicial={nova.tipo ?? ""}
+              opcoes={nova.opcoes.tipos.map((tipo) => ({ valor: tipo.sigla, rotulo: tipo.nome }))}
+            />
           </div>
           <button type="submit" className={classesDoBotao()}>
             Mostrar eventos

@@ -7,9 +7,10 @@ import { EstadoVazio } from "@/app/(time)/_componentes/ui/estados";
 import { dataCurta, dinheiro, periodo } from "@/app/(time)/_componentes/ui/formatos";
 import { paraCampoDeDinheiro } from "@/app/(time)/logistica/_componentes/situacoes";
 import { carregarHospedagensDaSdc } from "@/fluxos/sdc";
-import { rotuloDoMes } from "@/modules/logistica";
+import { AtalhosDoRecorte } from "@/app/(time)/logistica/_componentes/recorte";
+import { dataEmSaoPaulo, recorteDaLogistica, rotuloDoMes } from "@/modules/logistica";
 
-import { FiltroDaSdc, Linha, SituacaoDoPedidoParaASdc, situacaoDoFiltroDaSdc, TituloDoEvento, TotaisDaSdc } from "../_componentes/comuns";
+import { enderecoDaSdc, FiltroDaSdc, Linha, SituacaoDoPedidoParaASdc, situacaoDoFiltroDaSdc, TituloDoEvento, TotaisDaSdc } from "../_componentes/comuns";
 import { BotaoRegistrarReserva } from "../_componentes/formularios";
 import { exigirAtorSdc } from "../_servidor/ator-sdc";
 import { registrarReservaAcao } from "../acoes";
@@ -22,8 +23,11 @@ const quantos = (quantidade: number, um: string, varios: string) => `${quantidad
 /** Hospedagens pedidas pelo time: datas, quartos e quem divide com quem. A SDC escolhe o hotel e registra a reserva. */
 export default async function PaginaHospedagemDaSdc({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await exigirAtorSdc();
-  const situacao = situacaoDoFiltroDaSdc((await searchParams).situacao);
-  const dados = await carregarHospedagensDaSdc({ situacao }, new Date());
+  const busca = await searchParams;
+  const situacao = situacaoDoFiltroDaSdc(busca.situacao);
+  const agora = new Date();
+  const hoje = dataEmSaoPaulo(agora);
+  const dados = await carregarHospedagensDaSdc({ situacao, recorte: recorteDaLogistica(typeof busca.recorte === "string" ? busca.recorte : undefined) }, agora);
 
   return (
     <>
@@ -31,8 +35,10 @@ export default async function PaginaHospedagemDaSdc({ searchParams }: { searchPa
       <p className="mb-4 text-[14px] text-[var(--ds-label-2)]">
         Hospedagens pedidas pelo time de eventos, com os quartos já montados. Registre o hotel reservado, a reserva e o valor; o time confere e aprova o pagamento.
       </p>
+      {/* Eventos | Masterclass, como as abas da planilha. */}
+      <AtalhosDoRecorte recorte={dados.recorte} quantidades={dados.pedidosPorRecorte} href={(recorte) => enderecoDaSdc("/sdc/hospedagem", recorte)} />
       <TotaisDaSdc totais={dados.totais} />
-      <FiltroDaSdc base="/sdc/hospedagem" atual={situacao} contagens={dados.contagens} />
+      <FiltroDaSdc base="/sdc/hospedagem" recorte={dados.recorte} atual={situacao} contagens={dados.contagens} />
 
       {dados.total === 0 ? (
         <Cartao espacamento="nenhum">
@@ -57,7 +63,7 @@ export default async function PaginaHospedagemDaSdc({ searchParams }: { searchPa
                           titulo={hospedagem.hotel && hospedagem.paraASdc !== "A_COMPRAR" ? hospedagem.hotel.nome : "Hospedagem a reservar"}
                           explicacao={
                             <>
-                              <span className="[font-family:var(--ds-font-mono)]">{hospedagem.referencia}</span> · pedido em {dataCurta(hospedagem.solicitadoEm)}
+                              <span className="[font-family:var(--ds-font-mono)]">{hospedagem.referencia}</span> · pedido em {dataCurta(hospedagem.dataSolicitacao)}
                             </>
                           }
                           acoes={
@@ -79,6 +85,7 @@ export default async function PaginaHospedagemDaSdc({ searchParams }: { searchPa
                                 valor={paraCampoDeDinheiro(corrigindo ? hospedagem.valorCentavos : null)}
                                 formaPagamento={hospedagem.formaPagamento ?? "Faturado SDC"}
                                 observacao={hospedagem.observacaoSdc ?? ""}
+                                datas={{ dataCompra: hospedagem.dataCompra ?? hoje, dataSolicitacao: hospedagem.dataSolicitacao, hoje }}
                               />
                             )
                           }
@@ -105,11 +112,11 @@ export default async function PaginaHospedagemDaSdc({ searchParams }: { searchPa
                                 {hospedagem.hotel.cidade} ({hospedagem.hotel.uf})
                               </Linha>
                             )}
-                            {hospedagem.compradoEm && hospedagem.numeroReserva && <Linha rotulo="Reserva">{hospedagem.numeroReserva}</Linha>}
-                            {hospedagem.compradoEm && hospedagem.valorCentavos !== null && (
+                            {hospedagem.dataCompra && hospedagem.numeroReserva && <Linha rotulo="Reserva">{hospedagem.numeroReserva}</Linha>}
+                            {hospedagem.dataCompra && hospedagem.valorCentavos !== null && (
                               <Linha rotulo="Valor">
                                 <span className="tabular-nums">{dinheiro(hospedagem.valorCentavos)}</span>
-                                {hospedagem.formaPagamento ? ` · ${hospedagem.formaPagamento}` : ""} · registrado em {dataCurta(hospedagem.compradoEm)}
+                                {hospedagem.formaPagamento ? ` · ${hospedagem.formaPagamento}` : ""} · reservado em {dataCurta(hospedagem.dataCompra)}
                               </Linha>
                             )}
                             {hospedagem.observacaoSdc && <Linha rotulo="Sua obs.">{hospedagem.observacaoSdc}</Linha>}

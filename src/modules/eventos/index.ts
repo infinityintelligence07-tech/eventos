@@ -46,6 +46,7 @@ export {
   type AcaoSincronizacao,
   criarRepositorioSincronizacao,
   type EventoSalvo,
+  type LocalSalvo,
   type RepositorioSincronizacao,
 } from "./repository/sincronizacao-repository";
 export {
@@ -59,14 +60,26 @@ export { type SalvarDadosDoEvento, salvarDadosDoEventoSchema } from "./domain/sc
 export { criarRepositorioEvento, type EventoDoResumo, type MarcadorDaLogistica, type RepositorioEvento } from "./repository/evento-repository";
 export { dadosEditados, SIGLA_CONFRONTO, usaFila } from "./domain/resumo";
 export {
+  type AjustarLocalDoIamControl,
+  ajustarLocalDoIamControlSchema,
   arquivarLocalSchema,
+  CAMPOS_DO_IAM_CONTROL,
+  chaveDoLocal,
+  correspondentesDoIamControl,
+  type LocalParaCorresponder,
   motivoParaNaoArquivar,
   mudancasDoLocal,
+  mudancasVindasDoIamControl,
+  type OrigemDoLocal,
+  ORIGENS_DO_LOCAL,
+  rotuloDaOrigemDoLocal,
   rotuloDoTipoDeLocal,
   type SalvarLocal,
   salvarLocalSchema,
+  textoParaComparar,
   type TipoDeLocal,
   TIPOS_DE_LOCAL,
+  TIPOS_DE_LOCAL_DO_IAM_CONTROL,
   type UsoDoLocal,
 } from "./domain/local";
 export { criarRepositorioLocal, type DadosDoLocal, type LocalCadastrado, type RepositorioLocal } from "./repository/local-repository";

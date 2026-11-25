@@ -265,7 +265,7 @@ Para listas com mais de ~6 itens e dados para comparar. Cartão vale para poucos
 ```
 Rótulo:  <label for="id" class="mb-1 block text-[13px] font-medium text-[var(--ds-label)]">Expectativa de público</label>
 Entrada: CAMPO = "h-10 w-full rounded-[10px] border border-[var(--ds-separator)] bg-[var(--ds-surface)] px-3 text-[14px] text-[var(--ds-label)]"
-Select:  CAMPO + "pl-3 pr-8" (é o CAMPO de filtros.tsx)
+Lista de escolha: o `Seletor` do sistema (3.6.1), nunca o select do navegador
 Texto longo: CAMPO sem h-10 + "min-h-[96px] py-2"
 Ajuda:   <p id="id-ajuda" class="mt-1 text-[12px] text-[var(--ds-label-2)]">Vem do IAM Control. Pode ser corrigida.</p>
 Erro:    <p id="id-erro" class="mt-1 flex items-center gap-1 text-[12px] font-medium text-[var(--ds-red-deep)]"><CircleAlert size={14}/> Informe um número maior que zero.</p>
@@ -279,11 +279,76 @@ Erro:    <p id="id-erro" class="mt-1 flex items-center gap-1 text-[12px] font-me
 - Foco: já tratado no `design-system.css` (borda azul + halo). Campo composto usa `data-ds-field` no invólucro.
 - Salvar em formulário pequeno de um campo (ex.: público e fila): salva ao sair do campo, com o indicador de salvamento (3.12).
 
+### 3.6.1 Lista de escolha — `Seletor`
+
+**Regra: nenhuma tela usa a lista nativa do sistema operacional.** Nada de `<select>`, `<option>`, `<optgroup>`,
+`<datalist>` nem `list=` em `src/app`: toda lista de escolha é o `Seletor` (`ui/seletor.tsx`), direto ou pelos
+componentes que o embrulham — `CampoDeSelecao` (rótulo + ajuda + erro, 3.6) e `SeletorDeFiltro` (filtro na URL, 3.7).
+O teste `src/app/__tests__/sem-lista-nativa.test.ts` falha se uma lista nativa voltar (a lista de exceções dele
+está vazia; uma exceção nova precisa do motivo escrito lá). Campos de data, hora, número e caixas de marcar
+continuam nativos: a regra é sobre listas.
+
+Uma peça, duas formas:
+
+| | Lista curta | Lista longa |
+|---|---|---|
+| Quando | até 8 opções (contando a vazia) | mais de 8 opções, ou `busca` ligada |
+| Abre | a lista, com o foco no próprio campo | a lista com um **campo de busca** em cima, já com o foco |
+| Digitar | pula para a opção que começa com o texto | filtra enquanto digita, sem diferenciar maiúsculas nem acentos; todas as palavras digitadas precisam aparecer (no rótulo, na descrição ou no grupo); quem começa pelo texto vem primeiro |
+| Sem resultado | — | "Nenhum resultado" |
+| Centenas de opções | — | desenha 50 por vez; o rodapé diz "Mostrando 50 de 320. Continue digitando ou role a lista para ver mais." e rolar (ou descer pelo teclado) mostra as seguintes |
+
+**Lista de pessoas, eventos, palestras, locais/hotéis, passageiros, motoristas e ocupantes: sempre com `busca`**,
+mesmo quando hoje tem poucas opções (a lista cresce). Nas outras, a busca aparece sozinha acima de 8 opções.
+
+Propriedades (`PropsDoSeletor`):
+
+| Propriedade | Para quê |
+|---|---|
+| `opcoes` | `{ valor, rotulo, descricao?, grupo?, desabilitada? }`. `descricao` é a segunda linha, menor; `grupo` é o título de um bloco de opções seguidas (o `optgroup` de antes) |
+| `nome` | `name` do campo oculto: a server action e o `FormData` recebem o mesmo nome e valor que o select mandava |
+| `vazio` | opção vazia que **pode** ser escolhida, com valor `""` ("Todos", "—", "Sem preferência") |
+| `marcador` | texto de quando nada foi escolhido e o vazio **não** é uma opção ("Escolha pelo nome…"). Vazio assim não é enviado no formulário |
+| `valor` + `aoMudar` | uso controlado (`aoMudar` recebe o valor, não o evento) |
+| `valorInicial` | uso não controlado. O campo volta a ele quando o formulário é limpo, inclusive pelo React depois de uma action |
+| `enviarAoEscolher` | envia o formulário logo depois da escolha (o deslocamento na escala) |
+| `obrigatorio` | sem escolha, o navegador segura o envio com a mensagem dele (o `required` nativo). No `CampoDeSelecao`, `obrigatorio` só marca o rótulo e o `aria-required`, como nos outros campos: quem recusa é o servidor |
+| `desabilitado` | o campo não abre e não é enviado |
+| `busca` | liga (ou desliga) o campo de busca, sem olhar a quantidade |
+| `rotulo` | nome do campo dito pelo leitor de tela dentro da lista |
+| `tamanho` | `normal` (40 px, 14 px) ou `pequeno` (32 px, 13 px), para linhas de tabela e cartões |
+| `moldura` | `sistema` (padrão) ou `entrada`: as telas escuras do staff (Meu cadastro, enquete, custo, login) |
+| `className` | só largura e posição do invólucro (`w-auto min-w-[160px] max-w-[280px]`); o padrão é a largura toda |
+
+Sem valor, sem `vazio` e sem `marcador`, vale a primeira opção que pode ser escolhida, como no select nativo.
+
+**Comportamento**
+
+- Teclado, no padrão ARIA de combobox + listbox: `↓` `↑` `Enter` e `Espaço` abrem; `Home`/`End` vão à primeira e à
+  última; `PageDown`/`PageUp` pulam dez; `Enter` escolhe; `Esc` fecha sem escolher (dentro de painel ou diálogo,
+  fecha só a lista); `Tab` fecha e segue para o próximo campo — na lista curta confirmando a opção ativa, na longa
+  sem escolher. Opção desabilitada é pulada. Na lista longa, digitar com o campo fechado já abre com a letra na busca.
+- Leitor de tela: o campo é um `combobox` com `aria-expanded`, `aria-controls` e `aria-activedescendant`, nomeado
+  pelo `<label for>` (ou `aria-label`); as opções são `option` com `aria-selected`; os grupos, `group` com título; a
+  quantidade de resultados da busca é anunciada (`aria-live`). Erro: `aria-invalid` + borda vermelha, e a mensagem
+  continua vindo do `Campo`.
+- A lista abre na camada de cima do navegador (`popover="manual"` + `position: fixed`): nenhum contêiner com rolagem
+  corta, e ela fica acima do painel lateral e dos diálogos. Abre para baixo; para cima quando não cabe embaixo e
+  há mais espaço em cima. Acompanha a rolagem e o redimensionamento. Clicar fora fecha.
+- Celular (menos de 640 px): a lista vira uma folha na largura da tela, com fundo escurecido — embaixo na lista
+  curta; em cima na longa, ocupando só o que sobra acima do teclado. Opções com 44 px de altura.
+- O texto das opções nunca fica em caixa alta (a lista leva `sem-caixa-alta`) e nunca é cortado: quebra a linha.
+- **Não pôr o `Seletor` dentro de um `<label>`**: use `<label htmlFor>` ao lado (ou `aria-label`).
+- As regras (filtro, teclado como máquina de estados, quanto desenhar, onde abrir) ficam em `ui/seletor-logica.ts`,
+  sem React, e são testadas em `ui/__tests__/seletor-logica.test.ts`.
+
 ### 3.7 Barra de filtros — `BarraDeFiltros`
 
 Mesmo padrão de `filtros.tsx`: filtros na URL (`searchParams`), para o link poder ser compartilhado e o "voltar" funcionar.
 
 - Ordem: busca (quando houver) → seletores → atalhos (chips) → "Limpar filtros" (link, só aparece com filtro ativo).
+- Seletores: `SeletorDeFiltro`, que é o `Seletor` (3.6.1) com a opção "Todos" e que **navega ao escolher** (a escolha
+  aparece no campo na hora; a URL e a lista chegam em seguida). Filtro de evento, palestra ou pessoa: com `busca`.
 - Busca: campo com ícone `Search`, rótulo `sr-only` ("Buscar por nome ou código"), aplica 300 ms depois de parar de digitar.
 - **Atalhos de situação** (segmentos tipo "Para auditar (12) | Aprovadas | Reprovadas | Todas"): `nav` com links,
   `aria-current="page"` no ativo. Ativo: `bg-[var(--ds-tint-soft)] text-[var(--ds-tint-text)] font-semibold`;
@@ -410,6 +475,7 @@ Acrescentar `scroll-padding-bottom` no `main` com a altura da barra, para o foco
 - **Contraste:** texto principal `--ds-label`, secundário `--ds-label-2` (≈ 5:1 no claro). **`--ds-label-3` não serve para texto que importa** (≈ 3:1); só para desabilitado ou decorativo.
 - **Alvos:** controles com no mínimo 24 × 24 px (WCAG 2.5.8); botões padrão já têm 40 px.
 - **Arrastar** nunca é a única forma (WCAG 2.5.7): quartos e caronas também têm um seletor "Mover para…".
+- **Listas de escolha** são sempre o `Seletor` do sistema (3.6.1), nunca a lista nativa do sistema operacional.
 - **Zoom 200%:** a tela deve continuar usável em 1280 px com zoom 200% (equivale a 640 px): o menu vira gaveta, tabelas rolam dentro do cartão, painel lateral ocupa a largura toda.
 - **Tema escuro:** testar cada tela. Atenção: as classes `.situacao-*` hoje têm só cores do tema claro (ver Handoffs).
 - **Movimento:** o `design-system.css` já zera animações com `prefers-reduced-motion`; não usar animação para chamar atenção além do destaque de 1,5 s do "ao vivo".
@@ -912,7 +978,12 @@ Vazio: "Nenhum pedido de voo nos próximos eventos." / "Peça as passagens por a
 Se a pessoa **já tem pedido ativo naquele evento**, o painel avisa ("[Staff 07] já tem pedido de voo neste evento: SDC-000012 (ida e volta). Registre outro só se for uma compra a mais, como um trecho extra.") e pede a caixa **"É outra compra para a mesma pessoa"**; sem ela o pedido é recusado com a mesma explicação (evita duplicar por engano).
 Depois: faixa de sucesso no painel "Pedido SDC-000013 registrado. A SDC ainda não tem portal: copie o pedido e envie pelo canal de sempre." + "Copiar pedido". Registrar um pedido num evento marcado como "não precisa de voo" desfaz a marca.
 
-**Painel "Registrar voo"** (em nome da SDC): faixa neutra "Você está registrando o voo informado pela SDC." Formulário por trecho: Companhia, Número do voo, Localizador, Partida (data e hora), Chegada (data e hora), link do cartão de embarque (opcional); e o Valor (R$). Primário "Registrar voo".
+**Eventos | Masterclass (25/11/2026).** Acima dos avisos, o atalho segmentado **"Eventos (N) | Masterclass (N)"** separa os voos como as abas da planilha (`?recorte=masterclass`; trocar de lado tira o evento escolhido). O seletor "Evento" vira "Palestra" e lista só as Masterclasses, com a data primeiro ("12/03/2027 · Hotel Central — Belém (PA) · MC_PA_BELEM"). O aviso de voos por evento não aparece no recorte de Masterclass (ele nunca as trouxe).
+No recorte de **Masterclass** a viagem é uma **turnê** (ida para a primeira palestra, volta da última): uma tabela por mês, pela data da primeira palestra, com as colunas da aba VOOS MASTERCLASS — Passageiro | Solicitação | Ida/volta | **Local 1ª palestra** | Ida | **Local última palestra** | Volta | Situação | Compra | Companhia | Reserva | Preço | **Pagamento** | Ações. Vazio: "Nenhum pedido de voo de Masterclass nas próximas palestras."
+No **Novo pedido**, o primeiro campo é **"Viagem para"**: Evento ou Masterclass (palestras) — começa no recorte da tela. Em Masterclass o evento vira **"Primeira palestra (a ida chega aqui)"** e aparece **"Última palestra (a volta sai daqui)"**, com as palestras do mesmo dia em diante e a opção "A mesma palestra (ida e volta)"; as datas sugeridas são a véspera da primeira e o dia da última. O painel do pedido mostra "1ª palestra" e "Última palestra" no lugar de "Evento", e o texto de "Copiar pedido" diz as duas.
+**Data real.** O Novo pedido tem **"Data da solicitação"** (hoje por padrão; não aceita data futura): "O dia em que o pedido foi feito à SDC. Mude só para lançar um pedido antigo (da planilha, por exemplo)." As colunas **Solicitação** e **Compra** mostram essas datas, não a hora do lançamento; o painel do pedido mostra as duas ("Solicitado em 03/08/2026 · lançado no sistema em 28/10 às 12:00").
+
+**Painel "Registrar voo"** (em nome da SDC): faixa neutra "Você está registrando o voo informado pela SDC." Formulário por trecho: Companhia, Número do voo, Localizador, Partida (data e hora), Chegada (data e hora), link do cartão de embarque (opcional); o Valor (R$), a **Forma de pagamento** (opcional; sugere "Faturado SDC"; uma linha, sem link) e a **Data da compra** (hoje por padrão; não futura nem antes da solicitação: "A compra não pode ser antes da solicitação do pedido (03/08/2026)."). Primário "Registrar voo".
 Toast: "Voo do pedido SDC-000013 registrado. A copy de hospedagem da pessoa foi atualizada."
 
 **Alterar e cancelar** continuam como eram (alterar depois de emitido deixa "Alterado pelo time" até o novo retorno). Cancelar: confirmação "Cancelar o pedido SDC-000013?" — "Avise a SDC pelo canal de sempre. O voo some da copy da pessoa." Pedido cancelado não conta como "já tem pedido".
@@ -955,8 +1026,10 @@ de evento traz todos os eventos de hoje em diante, com ou sem escala.
 **Pedido à SDC (na linha do cartão):**
 - Sem quartos: "Monte os quartos para pedir a hospedagem à SDC." (o pedido diz quantos quartos e quem divide com quem).
 - Com quartos: botão primário **"Pedir hospedagem à SDC"**. Gera o pedido `SDC-…` e o texto de "Copiar pedido": evento, **local e cidade do evento** (para a SDC procurar hotel perto), check-in e check-out, "3 quartos · 7 pessoas" e a lista de quartos com os nomes. Sem hotel no texto (a não ser que já esteja definido).
+- **Data real:** ao lado de "Pedir hospedagem à SDC" há o campo **"Pedido em"** (hoje por padrão, não futuro), para lançar um pedido antigo. A linha do pedido mostra "pedido em 15/09/2026 · reservado em 20/09/2026". O painel "Registrar reserva" tem **"Data da reserva"** (hoje por padrão; não futura nem antes do pedido).
+- **Masterclass:** a tela tem o mesmo atalho **"Eventos | Masterclass"** de Voos; no recorte de Masterclass o seletor lista as palestras ("12/03/2027 · Hotel Central — Belém (PA)") e abre a próxima que já tem o que montar. Para uma palestra, o time acrescenta quem dorme (palestrante e time, sem escala), monta os quartos com as datas, pede à SDC e registra o retorno, como num evento. A "pré-reserva" da planilha é o chip **"Pedido à SDC"** (pedido feito, ainda sem a reserva registrada).
 - Pedido aguardando: referência, chip "Pedido à SDC", **"Registrar reserva"** e "Cancelar pedido".
-- **"Registrar reserva"** (painel, em nome da SDC): **Hotel reservado pela SDC** (um hotel de Locais e hotéis ou "Cadastrar outro hotel…", que abre ali mesmo Nome, Cidade e UF — já com a cidade do evento — e, opcionais, rua, número e bairro; o hotel entra em Configurações › Locais e hotéis), Número da reserva, Valor total (R$), **Forma de pagamento** (vem "Faturado SDC") e Observação da SDC. Aí o hotel aparece no cartão e na rooming list. Toast: "Reserva do pedido SDC-000020 registrada: o hotel já aparece na hospedagem e na rooming list."
+- **"Registrar reserva"** (painel, em nome da SDC): **Hotel reservado pela SDC** (um hotel de Locais e hotéis ou "Cadastrar outro hotel…", que abre ali mesmo Nome, Cidade e UF — já com a cidade do evento — e, opcionais, rua, número e bairro; o hotel entra em Configurações › Locais e hotéis; se o nome informado for o de um local que já veio do IAM Control, usa-se esse cadastro, que passa a hotel, sem criar outro), Número da reserva, Valor total (R$), **Forma de pagamento** (vem "Faturado SDC") e Observação da SDC. Aí o hotel aparece no cartão e na rooming list. Toast: "Reserva do pedido SDC-000020 registrada: o hotel já aparece na hospedagem e na rooming list."
 - Cancelar o pedido deixa os quartos montados e libera pedir de novo.
 
 **Apartamento da IAM** (sem SDC): escolhido no campo "Onde"; tem quartos e rooming list, não tem pedido.
@@ -1004,13 +1077,15 @@ Vazio: "Nenhum crédito de hotel registrado."
 
 **Moldura própria** (não é o painel do time): cabeçalho com "Eventos IAM · SDC", o nome e o e-mail de quem entrou, as duas abas **Voos | Hospedagem** e "Sair". Pensada para celular: uma coluna, cartões em vez de tabela larga, botões de toque inteiro.
 
+**Eventos | Masterclass:** as duas telas da SDC têm o mesmo atalho segmentado, com a quantidade de pedidos de cada lado; a situação filtra dentro do recorte.
+
 **Voos (`/sdc/voos`)** — "Passagens pedidas pelo time de eventos. Registre a compra e o valor de cada pedido; o time confere e aprova o pagamento."
 - Totais ("Pagamento a aprovar" e "Aprovado para pagamento") e filtro por situação: **A comprar | Aguardando aprovação | Aprovado | Cancelado | Todos**.
 - Pedidos por mês e por evento ("16 a 18/12 · IPR_POA_12 · Imersão · Centro de Eventos — Porto Alegre (RS)"). Cada pedido: referência `SDC-…`, nome do passageiro, o que o time pediu por trecho ("Ida: VCP → POA em 14/12 (manhã)"), a observação do time e, depois da compra, companhia, voo, horários, reserva e valor.
-- **"Registrar compra"** (a comprar) ou **"Corrigir compra"** (aguardando aprovação): por trecho, Companhia (lista: Azul, LATAM, GOL ou "Outra", que abre "Nome da companhia"), Número do voo, Código da reserva (localizador), Partida e Chegada (sem link de cartão de embarque: só o time põe); "Valor total da compra (R$)" e "Observação para o time (opcional)".
+- **"Registrar compra"** (a comprar) ou **"Corrigir compra"** (aguardando aprovação): por trecho, Companhia (lista: Azul, LATAM, GOL ou "Outra", que abre "Nome da companhia"), Número do voo, Código da reserva (localizador), Partida e Chegada (sem link de cartão de embarque: só o time põe); "Valor total da compra (R$)", **"Forma de pagamento"** (sugere "Faturado SDC"), **"Data da compra"** (hoje por padrão; não futura nem antes do pedido do time) e "Observação para o time (opcional)". Na turnê de Masterclass o cartão mostra a linha "Turnê: Volta da última palestra: 14/03 · Hotel … — Macapá (AP)" (o título é a primeira palestra). As datas mostradas são "pedido em" (a do time) e "comprado em" (a informada).
 - Situação: "A comprar", "Aguardando aprovação do time", "Aprovado para pagamento em dd/mm" (só leitura), "Cancelado" (só leitura). Pedido alterado pelo time depois da compra: "O time alterou este pedido depois da compra. Confira o trecho e registre a compra de novo."
 
-**Hospedagem (`/sdc/hospedagem`)** — cada pedido mostra o evento, check-in e check-out, quantos quartos e pessoas e a lista de quartos com os nomes de quem divide. **"Registrar reserva"** (ou "Corrigir reserva"): o hotel (Nome, Cidade, UF e, se quiser, rua, número e bairro), Número da reserva, Valor total e Forma de pagamento (padrão "Faturado SDC"). Os textos são de uma linha e não aceitam links ("Não use links nem endereços de site neste campo."). Corrigir o nome do hotel corrige o mesmo cadastro, sem criar outro.
+**Hospedagem (`/sdc/hospedagem`)** — cada pedido mostra o evento, check-in e check-out, quantos quartos e pessoas e a lista de quartos com os nomes de quem divide. **"Registrar reserva"** (ou "Corrigir reserva"): o hotel (Nome, Cidade, UF e, se quiser, rua, número e bairro), Número da reserva, Valor total, Forma de pagamento (padrão "Faturado SDC") e **Data da reserva** (hoje por padrão; não futura nem antes do pedido). Os textos são de uma linha e não aceitam links ("Não use links nem endereços de site neste campo."). Corrigir o nome do hotel corrige o mesmo cadastro, sem criar outro.
 
 **O que não aparece para a SDC:** telefone, e-mail, documento, endereço, função, escala, custos, histórico, quem do time pediu ou aprovou. Ela não cria, não altera e não cancela pedido, nem mexe nos quartos.
 
@@ -1066,14 +1141,15 @@ O staff envia a solicitação pelo **formulário dele** (`/solicitar-custo`, §1
 6. **Parecer anterior** (se reprovada antes e reenviada): "Reprovada em 15/11: falta o comprovante do pedágio."
 7. **Barra de ação fixa do painel:** perigo contorno **"Reprovar"** e primário **"Aprovar"**.
    - **Aprovar sem alerta:** aprova direto. Toast "STF-202611-0012 aprovada. Seguiu para o financeiro." O painel **fica na solicitação**
-     aprovada, com a faixa "Avise [nome]: copie a mensagem de aprovado abaixo e mande pelo WhatsApp." e a ação "Próxima da fila".
+     aprovada, com a faixa "Avise [nome]: abra a conversa no WhatsApp pela mensagem de aprovado abaixo, ou copie o texto." (sem
+     telefone válido no cadastro: "Avise [nome]: copie a mensagem de aprovado abaixo e mande pelo WhatsApp.") e a ação "Próxima da fila".
    - **Aprovar com alerta crítico:** modal "Aprovar com alerta crítico?" — texto com o alerta — campo "Motivo da aprovação (obrigatório)" (ex.: "Carro da pessoa é antigo; consumo conferido"). Botão "Aprovar".
    - **Reprovar:** modal "Reprovar STF-202611-0012?" — "A pessoa vai ver o motivo e poderá corrigir e reenviar." Campo "Motivo (obrigatório)". Botão "Reprovar".
    - **Reprovar:** depois de reprovar, o painel avança para a próxima da fila (a pessoa vê o motivo no formulário dela e pode corrigir, §11.4).
    - Já aprovada/reprovada: a barra mostra "Aprovada em 15/11 às 10:20" e, enquanto o financeiro não tiver pago, o link "Reabrir auditoria" (confirmação simples).
 8. **Mensagem de aprovado** (toda solicitação aprovada, logo depois de aprovar e sempre que o painel for aberto de novo): cartão com o
-   texto pronto e o botão **"Copiar mensagem"** (`BotaoCopiar`). O texto leva o primeiro nome, o evento, o protocolo e o valor aprovado
-   (`mensagemDeCustoAprovado`, no domínio de custos):
+   texto pronto e os botões **"Abrir no WhatsApp"** (`BotaoLink` secundário pequeno, `MessageCircle`) e **"Copiar mensagem"**
+   (`BotaoCopiar`). O texto leva o primeiro nome, o evento, o protocolo e o valor aprovado (`mensagemDeCustoAprovado`, no domínio de custos):
 
    ```
    Olá, Ana!
@@ -1086,8 +1162,24 @@ O staff envia a solicitação pelo **formulário dele** (`/solicitar-custo`, §1
    O valor seguiu para o financeiro fazer o pagamento. Qualquer dúvida, fale com o time de eventos.
    ```
 
-   O sistema **não envia nada sozinho**: o time copia e manda pelo WhatsApp. **Construção futura:** envio automático da mensagem
-   de aprovado pelo WhatsApp (e o registro de que foi enviada), junto com o envio das copys.
+   - **"Abrir no WhatsApp"** é um link `https://wa.me/<número>?text=<mensagem>` que abre, em nova aba
+     (`target="_blank"`, `rel="noopener noreferrer"`), a conversa com **aquela pessoa** já com a mensagem escrita: no celular abre o
+     app, no computador o WhatsApp Web. O time só aperta enviar. O número vem do telefone do cadastro (`core.pessoa.telefone`, o
+     mesmo da ficha em Pessoas), passado para o formato internacional por `telefoneParaWhatsApp` (domínio de pessoas): aceita com ou
+     sem +55, com máscara, com zero na frente do DDD, e põe o nono dígito em celular anotado com 8. Número sem DDD, de outro país
+     ou com dois telefones no mesmo campo não vira link.
+   - **Sem telefone válido no cadastro:** o botão não aparece e fica a nota "Sem telefone no cadastro: copie a mensagem e envie pelo
+     contato de sempre." O "Copiar mensagem" continua igual.
+   - **Telefone é dado pessoal:** ele não é mostrado no cartão. O servidor monta o link e o número existe só dentro do `href`; só é
+     lido para quem tem `custos.auditar` (nunca para o visitante da demo) e só em solicitação aprovada. Não vai para log
+     (`linkDoWhatsApp` está na lista de mascaramento), `registro_acao` nem mensagem de erro. A área `/sdc` e as páginas do staff
+     (`/solicitar-custo`) não recebem o link nem o telefone.
+   - **Nada é registrado como "enviado":** abrir a conversa não grava nada, porque o sistema não sabe se a pessoa apertou enviar.
+     O texto de ajuda do cartão diz isso: "O botão abre a conversa com a mensagem já escrita; quem aperta enviar é você. O sistema
+     não envia sozinho e não sabe se a mensagem foi enviada."
+
+   O sistema **não envia nada sozinho**: o time abre a conversa (ou copia) e manda pelo WhatsApp. **Construção futura:** envio
+   automático da mensagem de aprovado pelo WhatsApp (e o registro de que foi enviada), junto com o envio das copys.
 
 ### 11.3 Registrar solicitação (em nome da pessoa)
 
@@ -1217,10 +1309,33 @@ Cabeçalho: "Configurações" / "Valores e modelos usados pelo sistema. Mudança
 
 ### 12.4 Locais e hotéis
 
-- Tabela: Nome | Tipo (Local de evento, Hotel, Apartamento) | Cidade/UF | Capacidade | Localização no mapa (chip "Encontrada" sucesso / "Não encontrada" atenção) | "Editar".
-- Primário "Novo local" → painel: Nome, Tipo, CEP (preenche o endereço), Logradouro, Número, Complemento, Bairro, Cidade, UF, Capacidade.
-  Ao salvar: "Local salvo. Localização encontrada no mapa." ou faixa de atenção "Não encontramos este endereço no mapa. Confira o CEP e o número; sem isso, a distância até o evento não é calculada."
-- Remover local em uso: bloqueado com o motivo "Este local está em 3 eventos."
+A base vem do **IAM Control**: os locais das turmas entram sozinhos pela sincronização (a cada 30 minutos) e cada linha
+diz de onde veio. O time cadastra à mão só o que não existe lá: hotéis que a SDC reserva fora do local do evento e
+apartamentos da IAM.
+
+- Filtros: busca por nome ou cidade; atalhos de tipo (Todos | Locais de evento | Hotéis | Apartamentos) e de origem
+  (Qualquer origem | Do IAM Control | Cadastrados no Eventos).
+- Tabela: Nome | Tipo (Local de evento, Hotel, Apartamento) | **Origem** (chip "IAM Control" com cadeado, ou
+  "Cadastrado no Eventos") | Cidade/UF | Capacidade | Localização no mapa (chip "Informada" sucesso / "Sem localização"
+  atenção) | Em uso ("3 ev. · 1 hosp.") | "Editar" e, sem uso, "Arquivar".
+- Primário "Novo local" → painel (subtítulo "Os locais dos eventos chegam sozinhos do IAM Control. Cadastre aqui o que
+  não existe lá."): Nome, Tipo, CEP, Logradouro, Número, Complemento, Bairro, Cidade, UF, Capacidade e Localização no
+  mapa (latitude e longitude copiadas do Google Maps; a busca automática entra numa próxima versão).
+  Toast: "Hotel X salvo." ou "Hotel X salvo. Sem latitude e longitude, a distância até ele não é calculada."
+- **Editar um local vindo do IAM Control:** Nome, Endereço, Cidade/UF e CEP aparecem como texto, com o cadeado e
+  "Vem do IAM Control. Nome e endereço se atualizam sozinhos; para corrigir, altere o local lá." Editáveis, por serem
+  do Eventos: **Tipo** (Local de evento ou Hotel; ajuda "Marque como hotel o local que também hospeda o staff: ele
+  passa a aparecer na hospedagem."), **Complemento**, **Capacidade** e **Localização no mapa**.
+- Cadastrar à mão um lugar que já veio do IAM Control é recusado: "\"Hotel Sibara\" em Balneário Camboriú/SC já veio do
+  IAM Control como local de evento. Edite esse cadastro em vez de criar outro (para hospedar o staff nele, mude o tipo
+  para Hotel)." A comparação ignora maiúsculas, acentos e espaços repetidos.
+- Hotel cadastrado à mão (pelo time ou pela SDC) com o mesmo nome, cidade e UF de um local do IAM Control é **ligado**
+  a ele na sincronização seguinte: a linha passa a "IAM Control", com o nome e o endereço de lá, e mantém tipo,
+  complemento, capacidade e localização.
+- Nome repetido no mesmo tipo e cidade: "Já existe \"Hotel X\" em Manaus/AM. Edite o cadastro existente."
+- Tipo de local com hospedagem não muda: "Este local tem hospedagem: o tipo não muda enquanto ela existir."
+- Arquivar local em uso: sem botão; pelo servidor, "Este local está em 3 eventos." A sincronização nunca apaga nem
+  arquiva local: o que deixou de vir do IAM Control continua na lista até o time arquivar.
 
 ### 12.5 Aviso de voos (`/configuracoes/voos`)
 
@@ -1239,7 +1354,7 @@ Cabeçalho: "Configurações" / "Valores e modelos usados pelo sistema. Mudança
 - Desativar corta o acesso no próximo clique da pessoa. E-mail repetido é recusado ("Este e-mail já está na lista da SDC."; se estiver desativado, a mensagem manda reativar).
 - Vazio: "Ninguém da SDC tem acesso ainda." / "Inclua abaixo o e-mail de quem cuida dos pedidos na agência."
 
-**Estados (Configurações):** carregando e erro padrão; vazio por aba ("Nenhum modelo de copy." + "Novo modelo"; "Nenhum local cadastrado." + "Novo local").
+**Estados (Configurações):** carregando e erro padrão; vazio por aba ("Nenhum modelo de copy." + "Novo modelo"; "Nenhum local cadastrado." / "Os locais dos eventos chegam do IAM Control. Cadastre aqui os hotéis e apartamentos que não existem lá." + "Novo local").
 
 ---
 

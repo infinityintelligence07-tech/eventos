@@ -8,6 +8,7 @@ import type { LinhaGuiada, ModoDaVaga } from "@/modules/escala";
 import { useAcao } from "@/app/(time)/_componentes/ui";
 import { Botao } from "../../../_componentes/ui/botao";
 import { Confirmacao, PainelLateral } from "../../../_componentes/ui/dialogo";
+import { Seletor } from "../../../_componentes/ui/seletor";
 import { recalcularVagasDoTipo, salvarRegraDeVagas } from "../acoes";
 
 type Funcao = { codigo: string; nome: string };
@@ -117,6 +118,7 @@ export function EditorDeRegra({
   const nomes = useMemo(() => new Map(funcoes.map((funcao) => [funcao.codigo, funcao.nome])), [funcoes]);
   const valores = previa(edicao, publicoDeExemplo, filaDeExemplo);
   const idDoFormulario = `regra-${tipoEventoId}`;
+  const opcoesDeFuncao = useMemo(() => funcoes.map((funcao) => ({ valor: funcao.codigo, rotulo: funcao.nome })), [funcoes]);
   const personalizadas = new Set(linhas.filter((linha) => linha.modo === "PERSONALIZADA").map((linha) => linha.funcao));
   const erroGeral = salvar.estado.ok ? null : salvar.estado.erro;
 
@@ -186,17 +188,19 @@ export function EditorDeRegra({
                 <legend className="px-1 text-[13px] font-medium">{nomes.get(linha.funcao) ?? "Nova função"}</legend>
                 <input type="hidden" name={`${prefixo}.modo`} value={linha.modo} />
                 <div className="flex flex-wrap items-end gap-3">
-                  <label className="grid grid-cols-1 gap-1 text-[13px]">
-                    Função
-                    <select name={`${prefixo}.funcao`} value={linha.funcao} onChange={(evento) => mudar(linha.chave, { funcao: evento.target.value })} className={`${CAMPO} pr-8`}>
-                      <option value="">Escolha a função</option>
-                      {funcoes.map((funcao) => (
-                        <option key={funcao.codigo} value={funcao.codigo}>
-                          {funcao.nome}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <div className="grid grid-cols-1 gap-1 text-[13px]">
+                    <label htmlFor={`${idDoFormulario}-funcao-${linha.chave}`}>Função</label>
+                    <Seletor
+                      id={`${idDoFormulario}-funcao-${linha.chave}`}
+                      nome={`${prefixo}.funcao`}
+                      rotulo="Função"
+                      vazio="Escolha a função"
+                      valor={linha.funcao}
+                      aoMudar={(funcao) => mudar(linha.chave, { funcao })}
+                      opcoes={opcoesDeFuncao}
+                      className="w-auto min-w-[220px]"
+                    />
+                  </div>
                   <Botao
                     variante="icone"
                     aria-label={`Tirar ${nomes.get(linha.funcao) ?? "a função"} da regra`}
@@ -207,37 +211,38 @@ export function EditorDeRegra({
                 <div role="radiogroup" aria-label="Como calcular" className="mt-3 grid gap-1">
                   {[...MODOS, ...(personalizadas.has(linha.funcao) ? [{ modo: "PERSONALIZADA" as const, rotulo: "Manter o cálculo personalizado" }] : [])].map(
                     (opcao) => (
-                      <label key={opcao.modo} className="flex min-h-6 items-center gap-2 text-[14px]">
-                        <input
-                          type="radio"
-                          name={`modo-${linha.chave}`}
-                          checked={linha.modo === opcao.modo}
-                          onChange={() => mudar(linha.chave, { modo: opcao.modo })}
-                          className="h-[18px] w-[18px] accent-[var(--ds-brand)]"
-                        />
-                        {opcao.rotulo}
-                        {opcao.modo === "FIXO" && linha.modo === "FIXO" && (
+                      // A lista da função de base fica fora do rótulo do rádio: clicar nela não pode valer como clique no rádio.
+                      <div key={opcao.modo} className="flex flex-wrap items-center gap-2 text-[14px]">
+                        <label className="flex min-h-6 items-center gap-2">
                           <input
-                            name={`${prefixo}.quantidade`}
-                            aria-label="Número fixo de vagas"
-                            inputMode="numeric"
-                            value={linha.quantidade}
-                            onChange={(evento) => mudar(linha.chave, { quantidade: evento.target.value })}
-                            className={`${CAMPO} h-8 w-20`}
+                            type="radio"
+                            name={`modo-${linha.chave}`}
+                            checked={linha.modo === opcao.modo}
+                            onChange={() => mudar(linha.chave, { modo: opcao.modo })}
+                            className="h-[18px] w-[18px] accent-[var(--ds-brand)]"
                           />
-                        )}
-                        {(opcao.modo === "POR_PUBLICO" || opcao.modo === "POR_FILA") && linha.modo === opcao.modo && (
-                          <input
-                            name={`${prefixo}.cada`}
-                            aria-label="N (pessoas por vaga)"
-                            inputMode="numeric"
-                            value={linha.cada}
-                            onChange={(evento) => mudar(linha.chave, { cada: evento.target.value })}
-                            className={`${CAMPO} h-8 w-20`}
-                          />
-                        )}
-                        {opcao.modo === "POR_FUNCAO" && linha.modo === "POR_FUNCAO" && (
-                          <>
+                          {opcao.rotulo}
+                          {opcao.modo === "FIXO" && linha.modo === "FIXO" && (
+                            <input
+                              name={`${prefixo}.quantidade`}
+                              aria-label="Número fixo de vagas"
+                              inputMode="numeric"
+                              value={linha.quantidade}
+                              onChange={(evento) => mudar(linha.chave, { quantidade: evento.target.value })}
+                              className={`${CAMPO} h-8 w-20`}
+                            />
+                          )}
+                          {(opcao.modo === "POR_PUBLICO" || opcao.modo === "POR_FILA") && linha.modo === opcao.modo && (
+                            <input
+                              name={`${prefixo}.cada`}
+                              aria-label="N (pessoas por vaga)"
+                              inputMode="numeric"
+                              value={linha.cada}
+                              onChange={(evento) => mudar(linha.chave, { cada: evento.target.value })}
+                              className={`${CAMPO} h-8 w-20`}
+                            />
+                          )}
+                          {opcao.modo === "POR_FUNCAO" && linha.modo === "POR_FUNCAO" && (
                             <input
                               name={`${prefixo}.multiplicador`}
                               aria-label="Quantas vagas para cada vaga da outra função"
@@ -246,29 +251,27 @@ export function EditorDeRegra({
                               onChange={(evento) => mudar(linha.chave, { multiplicador: evento.target.value })}
                               className={`${CAMPO} h-8 w-16`}
                             />
-                            <select
-                              name={`${prefixo}.base`}
-                              aria-label="Função de base"
-                              value={linha.base}
-                              onChange={(evento) => mudar(linha.chave, { base: evento.target.value })}
-                              className={`${CAMPO} h-8 pr-8`}
-                            >
-                              <option value="">Função anterior</option>
-                              {anteriores.map((codigo) => (
-                                <option key={codigo} value={codigo}>
-                                  {nomes.get(codigo) ?? codigo}
-                                </option>
-                              ))}
-                            </select>
-                          </>
+                          )}
+                          {opcao.modo === "PERSONALIZADA" && linha.modo === "PERSONALIZADA" && (
+                            <>
+                              <input type="hidden" name={`${prefixo}.formula`} value={linha.formula} />
+                              <span className="text-[12px] text-[var(--ds-label-2)] [font-family:var(--ds-font-mono)]">{linha.formula}</span>
+                            </>
+                          )}
+                        </label>
+                        {opcao.modo === "POR_FUNCAO" && linha.modo === "POR_FUNCAO" && (
+                          <Seletor
+                            nome={`${prefixo}.base`}
+                            aria-label="Função de base"
+                            vazio="Função anterior"
+                            valor={linha.base}
+                            aoMudar={(base) => mudar(linha.chave, { base })}
+                            opcoes={anteriores.map((codigo) => ({ valor: codigo, rotulo: nomes.get(codigo) ?? codigo }))}
+                            tamanho="pequeno"
+                            className="w-auto min-w-[180px]"
+                          />
                         )}
-                        {opcao.modo === "PERSONALIZADA" && linha.modo === "PERSONALIZADA" && (
-                          <>
-                            <input type="hidden" name={`${prefixo}.formula`} value={linha.formula} />
-                            <span className="text-[12px] text-[var(--ds-label-2)] [font-family:var(--ds-font-mono)]">{linha.formula}</span>
-                          </>
-                        )}
-                      </label>
+                      </div>
                     ),
                   )}
                 </div>

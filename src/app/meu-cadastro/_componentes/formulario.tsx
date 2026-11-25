@@ -2,6 +2,8 @@
 
 import { useActionState, useState } from "react";
 
+import { Seletor } from "@/app/(time)/_componentes/ui/seletor";
+
 import { type ResultadoDoMeuCadastro, salvarMeuCadastroAcao } from "../acoes";
 
 export type ValoresDoMeuCadastro = {
@@ -27,6 +29,12 @@ const AVISO_DA_LOCALIZACAO: Record<string, string> = {
   NAO_ENCONTRADA: "Não achamos esse endereço no mapa. Confira rua, número e CEP e salve de novo.",
   INDISPONIVEL: "O mapa não respondeu agora. O resto foi salvo; tente salvar de novo mais tarde para calcular a localização.",
 };
+
+const MODELOS_DE_CAMISETA = [
+  { valor: "CAMISETA", rotulo: "Camiseta" },
+  { valor: "BABY_LOOK", rotulo: "Baby look" },
+];
+const TAMANHOS_DE_CAMISETA = ["PP", "P", "M", "G", "GG", "XG"].map((tamanho) => ({ valor: tamanho, rotulo: tamanho }));
 
 function Erro({ erros, campo }: { erros?: Record<string, string>; campo: string }) {
   return erros?.[campo] ? (
@@ -68,20 +76,21 @@ export function FormularioDoMeuCadastro({ valores, opcoes }: { valores: ValoresD
     <form action={enviar} className="cadastro-form" noValidate>
       <fieldset>
         <legend>Onde você atua</legend>
-        <label className="login-campo">
-          <span>Polo</span>
-          <select name="poloCodigo" defaultValue={valores.poloCodigo ?? ""} required>
-            <option value="" disabled>
-              Escolha o seu polo
-            </option>
-            {opcoes.polos.map((polo) => (
-              <option key={polo.codigo} value={polo.codigo}>
-                {polo.nome} ({polo.codigo})
-              </option>
-            ))}
-          </select>
+        <div className="login-campo">
+          <label htmlFor="cadastro-polo">Polo</label>
+          <Seletor
+            id="cadastro-polo"
+            nome="poloCodigo"
+            rotulo="Polo"
+            moldura="entrada"
+            marcador="Escolha o seu polo"
+            valorInicial={valores.poloCodigo ?? ""}
+            opcoes={opcoes.polos.map((polo) => ({ valor: polo.codigo, rotulo: `${polo.nome} (${polo.codigo})` }))}
+            aria-required
+            aria-invalid={erros?.poloCodigo ? true : undefined}
+          />
           <Erro erros={erros} campo="poloCodigo" />
-        </label>
+        </div>
       </fieldset>
 
       <fieldset>
@@ -102,31 +111,34 @@ export function FormularioDoMeuCadastro({ valores, opcoes }: { valores: ValoresD
           <Erro erros={erros} campo="sexo" />
         </div>
         <div className="cadastro-duas-colunas">
-          <label className="login-campo">
-            <span>Modelo da camiseta</span>
-            <select name="camisetaModelo" defaultValue={valores.camisetaModelo ?? ""}>
-              <option value="" disabled>
-                Escolha
-              </option>
-              <option value="CAMISETA">Camiseta</option>
-              <option value="BABY_LOOK">Baby look</option>
-            </select>
+          <div className="login-campo">
+            <label htmlFor="cadastro-camiseta-modelo">Modelo da camiseta</label>
+            <Seletor
+              id="cadastro-camiseta-modelo"
+              nome="camisetaModelo"
+              rotulo="Modelo da camiseta"
+              moldura="entrada"
+              marcador="Escolha"
+              valorInicial={valores.camisetaModelo ?? ""}
+              opcoes={MODELOS_DE_CAMISETA}
+              aria-invalid={erros?.camisetaModelo ? true : undefined}
+            />
             <Erro erros={erros} campo="camisetaModelo" />
-          </label>
-          <label className="login-campo">
-            <span>Tamanho</span>
-            <select name="camisetaTamanho" defaultValue={valores.camisetaTamanho ?? ""}>
-              <option value="" disabled>
-                Escolha
-              </option>
-              {["PP", "P", "M", "G", "GG", "XG"].map((tamanho) => (
-                <option key={tamanho} value={tamanho}>
-                  {tamanho}
-                </option>
-              ))}
-            </select>
+          </div>
+          <div className="login-campo">
+            <label htmlFor="cadastro-camiseta-tamanho">Tamanho</label>
+            <Seletor
+              id="cadastro-camiseta-tamanho"
+              nome="camisetaTamanho"
+              rotulo="Tamanho"
+              moldura="entrada"
+              marcador="Escolha"
+              valorInicial={valores.camisetaTamanho ?? ""}
+              opcoes={TAMANHOS_DE_CAMISETA}
+              aria-invalid={erros?.camisetaTamanho ? true : undefined}
+            />
             <Erro erros={erros} campo="camisetaTamanho" />
-          </label>
+          </div>
         </div>
       </fieldset>
 

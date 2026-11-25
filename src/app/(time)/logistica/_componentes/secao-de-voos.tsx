@@ -5,6 +5,7 @@ import type { LinhaDeVoo, PedidoCarregado, VoosCarregados } from "@/fluxos/logis
 import {
   aguardandoSdc,
   type EventoDaLogistica,
+  localDaPalestra,
   type PedidoDaSdc,
   rotuloDaPreferencia,
   rotuloDoMes,
@@ -48,13 +49,14 @@ import {
   type TrechosIniciais,
 } from "./formularios-de-voo";
 import { ChipDoPagamento, TotaisDoPagamentoNaTela } from "./pagamento";
+import { AtalhosDoRecorte } from "./recorte";
 import { ChipDoVoo, enderecoCom, paraCampoDeDataEHora, paraCampoDeDinheiro } from "./situacoes";
 
 // Voos como na planilha do time: pedidos agrupados por mês e por evento, uma linha por compra. Nós solicitamos, a SDC
 // compra e o time registra o retorno. O pedido não depende da escala: "Novo pedido" vale para qualquer evento futuro e
 // qualquer pessoa ativa do staff.
 
-export type ParametrosDeVoos = { evento?: string; situacao?: string; ref?: string; modo?: string; novo?: string; pessoa?: string; registrado?: string; hotel?: string };
+export type ParametrosDeVoos = { evento?: string; situacao?: string; ref?: string; modo?: string; novo?: string; pessoa?: string; registrado?: string; hotel?: string; /** "masterclass" = recorte de Masterclass; ausente = eventos. */ recorte?: string };
 
 function textoDoVoo(trecho: TrechoDoPedido): string | null {
   if (!trecho.companhia || !trecho.numeroVoo) return null;
@@ -63,6 +65,10 @@ function textoDoVoo(trecho: TrechoDoPedido): string | null {
 }
 
 const SEM_DADO = <span className="text-[var(--ds-label-2)]">—</span>;
+
+/** A palestra no seletor: a data primeiro (são centenas), depois onde é. */
+const rotuloDaPalestra = (evento: EventoDaLogistica) => `${dataCurta(evento.dataInicio)} · ${localDaPalestra(evento)}${evento.codigo ? ` · ${evento.codigo}` : ""}`;
+const rotuloNoSeletor = (evento: EventoDaLogistica) => (evento.masterclass ? rotuloDaPalestra(evento) : rotuloDoEvento(evento));
 
 const rotuloDoEvento = (evento: EventoDaLogistica) => `${periodo(evento.dataInicio, evento.dataFim)} · ${evento.codigo ?? evento.nome}${evento.cidade && evento.uf ? ` · ${evento.cidade} (${evento.uf})` : ""}`;
 
@@ -103,7 +109,23 @@ function trechosIniciais(trechos: TrechoDoPedido[]): TrechosIniciais {
 }
 
 /** Uma compra (ou um lembrete da escala, sem pedido) nas colunas da planilha. */
-function LinhaDoVoo({ linha, base, parametros, escrita, diasDoAtraso }: { linha: LinhaDeVoo; /** Limite do "atrasado" em vigor. */ diasDoAtraso: number; base: string; parametros: ParametrosDeVoos; escrita: boolean }) {
+function LinhaDoVoo({
+  linha,
+  base,
+  parametros,
+  escrita,
+  diasDoAtraso,
+  masterclass = false,
+}: {
+  linha: LinhaDeVoo;
+  /** Limite do "atrasado" em vigor. */
+  diasDoAtraso: number;
+  base: string;
+  parametros: ParametrosDeVoos;
+  escrita: boolean;
+  /** Colunas da aba VOOS MASTERCLASS: local da 1ª e da última palestra no lugar da escala, e a forma de pagamento. */
+  masterclass?: boolean;
+}) {
   const pedido = linha.pedido;
   const trechos = pedido?.trechos ?? [];
   const trajeto = trajetoDosTrechos(trechos.map((trecho) => trecho.sentido));
@@ -120,12 +142,16 @@ function LinhaDoVoo({ linha, base, parametros, escrita, diasDoAtraso }: { linha:
           </Link>
         )}
       </CelulaDaTabela>
-      <CelulaDaTabela className="whitespace-nowrap text-[13px]">
-        {linha.passageiro.naEscala ? "Na escala" : <span className="text-[var(--ds-label-2)]">Fora da escala</span>}
-      </CelulaDaTabela>
-      <CelulaDaTabela className="whitespace-nowrap tabular-nums">{pedido ? dataCurta(pedido.solicitadoEm) : SEM_DADO}</CelulaDaTabela>
+      {!masterclass && (
+        <CelulaDaTabela className="whitespace-nowrap text-[13px]">
+          {linha.passageiro.naEscala ? "Na escala" : <span className="text-[var(--ds-label-2)]">Fora da escala</span>}
+        </CelulaDaTabela>
+      )}
+      <CelulaDaTabela className="whitespace-nowrap tabular-nums">{pedido ? dataCurta(pedido.dataSolicitacao) : SEM_DADO}</CelulaDaTabela>
       <CelulaDaTabela className="whitespace-nowrap">{trajeto ? rotuloDoTrajeto(trajeto) : SEM_DADO}</CelulaDaTabela>
+      {masterclass && <CelulaDaPalestra evento={linha.evento} />}
       <CelulaDoSentido trechos={trechos} sentido="IDA" />
+      {masterclass && <CelulaDaPalestra evento={pedido?.eventoDaVolta ?? linha.evento} />}
       <CelulaDoSentido trechos={trechos} sentido="VOLTA" />
       <CelulaDaTabela>
         <span className="flex flex-wrap items-center gap-1">
@@ -140,12 +166,13 @@ function LinhaDoVoo({ linha, base, parametros, escrita, diasDoAtraso }: { linha:
           </span>
         )}
       </CelulaDaTabela>
-      <CelulaDaTabela className="whitespace-nowrap tabular-nums">{pedido?.emitidoEm ? dataCurta(pedido.emitidoEm) : SEM_DADO}</CelulaDaTabela>
+      <CelulaDaTabela className="whitespace-nowrap tabular-nums">{pedido?.dataCompra ? dataCurta(pedido.dataCompra) : SEM_DADO}</CelulaDaTabela>
       <CelulaDaTabela className="text-[13px]">{companhias.length ? companhias.map((companhia) => <span key={companhia} className="block whitespace-nowrap">{companhia}</span>) : SEM_DADO}</CelulaDaTabela>
       <CelulaDaTabela className="[font-family:var(--ds-font-mono)] text-[13px]">{reservas.length ? reservas.join(" / ") : SEM_DADO}</CelulaDaTabela>
       <CelulaDaTabela numero className="whitespace-nowrap">
         {pedido && pedido.valorCentavos !== null ? dinheiro(pedido.valorCentavos) : SEM_DADO}
       </CelulaDaTabela>
+      {masterclass && <CelulaDaTabela className="text-[13px]">{pedido?.formaPagamento ?? SEM_DADO}</CelulaDaTabela>}
       <CelulaDaTabela className="text-right">
         {escrita && linha.situacao === "A_PEDIR" && linha.passageiro.pessoaId && (
           <BotaoLink tamanho="pequeno" className="whitespace-nowrap" href={abrir({ novo: "1", evento: linha.evento.id, pessoa: linha.passageiro.pessoaId })} scroll={false}>
@@ -169,6 +196,48 @@ function LinhaDoVoo({ linha, base, parametros, escrita, diasDoAtraso }: { linha:
         )}
       </CelulaDaTabela>
     </LinhaDaTabela>
+  );
+}
+
+/** Onde é a palestra e quando (colunas "Local 1ª palestra" e "Local última palestra" da planilha de Masterclass). */
+function CelulaDaPalestra({ evento }: { evento: EventoDaLogistica }) {
+  return (
+    <CelulaDaTabela className="text-[13px]">
+      <span className="block">{localDaPalestra(evento)}</span>
+      <span className="block whitespace-nowrap text-[12px] tabular-nums text-[var(--ds-label-2)]">{dataCurta(evento.dataInicio)}</span>
+    </CelulaDaTabela>
+  );
+}
+
+/**
+ * Os voos de Masterclass de um mês, como a aba VOOS MASTERCLASS: a viagem é uma turnê (ida para a primeira palestra,
+ * volta da última), então no lugar do evento único vêm os dois locais; e a forma de pagamento de cada compra.
+ */
+function TabelaDeMasterclass({ legenda, linhas, base, parametros, escrita, diasDoAtraso }: { legenda: string; linhas: LinhaDeVoo[]; base: string; parametros: ParametrosDeVoos; escrita: boolean; diasDoAtraso: number }) {
+  return (
+    <Tabela legenda={legenda} larguraMinima="min-w-[1480px]">
+      <CabecaDaTabela>
+        <ColunaDaTabela>Passageiro</ColunaDaTabela>
+        <ColunaDaTabela>Solicitação</ColunaDaTabela>
+        <ColunaDaTabela>Ida/volta</ColunaDaTabela>
+        <ColunaDaTabela>Local 1ª palestra</ColunaDaTabela>
+        <ColunaDaTabela>Ida</ColunaDaTabela>
+        <ColunaDaTabela>Local última palestra</ColunaDaTabela>
+        <ColunaDaTabela>Volta</ColunaDaTabela>
+        <ColunaDaTabela>Situação</ColunaDaTabela>
+        <ColunaDaTabela>Compra</ColunaDaTabela>
+        <ColunaDaTabela>Companhia</ColunaDaTabela>
+        <ColunaDaTabela>Reserva</ColunaDaTabela>
+        <ColunaDaTabela numero>Preço</ColunaDaTabela>
+        <ColunaDaTabela>Pagamento</ColunaDaTabela>
+        <ColunaDaTabela className="text-right">Ações</ColunaDaTabela>
+      </CabecaDaTabela>
+      <tbody>
+        {linhas.map((linha) => (
+          <LinhaDoVoo key={linha.chave} linha={linha} base={base} parametros={parametros} escrita={escrita} diasDoAtraso={diasDoAtraso} masterclass />
+        ))}
+      </tbody>
+    </Tabela>
   );
 }
 
@@ -258,10 +327,21 @@ function DetalheDoPedido({ pedido, registrado, comHotel = false, escrita = false
             </dd>
           </>
         )}
-        <dt className="text-[var(--ds-label-2)]">Evento</dt>
-        <dd>
-          {pedido.evento.codigo ?? pedido.evento.nome} · {periodo(pedido.evento.dataInicio, pedido.evento.dataFim)}
-        </dd>
+        {pedido.tipo === "VOO" && pedido.evento.masterclass ? (
+          <>
+            <dt className="text-[var(--ds-label-2)]">1ª palestra</dt>
+            <dd>{rotuloDaPalestra(pedido.evento)}</dd>
+            <dt className="text-[var(--ds-label-2)]">Última palestra</dt>
+            <dd>{pedido.eventoDaVolta ? rotuloDaPalestra(pedido.eventoDaVolta) : "A mesma (ida e volta pela mesma palestra)"}</dd>
+          </>
+        ) : (
+          <>
+            <dt className="text-[var(--ds-label-2)]">Evento</dt>
+            <dd>
+              {pedido.evento.codigo ?? pedido.evento.nome} · {periodo(pedido.evento.dataInicio, pedido.evento.dataFim)}
+            </dd>
+          </>
+        )}
         {pedido.pessoaNome && (
           <>
             <dt className="text-[var(--ds-label-2)]">Passageiro</dt>
@@ -287,17 +367,29 @@ function DetalheDoPedido({ pedido, registrado, comHotel = false, escrita = false
           </>
         )}
         <dt className="text-[var(--ds-label-2)]">Solicitado em</dt>
-        <dd>{dataEHora(pedido.solicitadoEm)}</dd>
-        {pedido.emitidoEm && (
+        <dd>
+          {dataCurta(pedido.dataSolicitacao)}
+          <span className="block text-[12px] text-[var(--ds-label-2)]">lançado no sistema em {dataEHora(pedido.solicitadoEm)}</span>
+        </dd>
+        {pedido.dataCompra && (
           <>
-            <dt className="text-[var(--ds-label-2)]">Compra registrada em</dt>
-            <dd>{dataEHora(pedido.emitidoEm)}</dd>
+            <dt className="text-[var(--ds-label-2)]">Comprado em</dt>
+            <dd>
+              {dataCurta(pedido.dataCompra)}
+              {pedido.emitidoEm && <span className="block text-[12px] text-[var(--ds-label-2)]">lançado no sistema em {dataEHora(pedido.emitidoEm)}</span>}
+            </dd>
           </>
         )}
         {pedido.valorCentavos !== null && (
           <>
             <dt className="text-[var(--ds-label-2)]">Valor</dt>
             <dd className="tabular-nums">{dinheiro(pedido.valorCentavos)}</dd>
+          </>
+        )}
+        {pedido.formaPagamento && (
+          <>
+            <dt className="text-[var(--ds-label-2)]">Forma de pagamento</dt>
+            <dd>{pedido.formaPagamento}</dd>
           </>
         )}
         {pedido.observacaoTime && (
@@ -334,7 +426,7 @@ function DetalheDoPedido({ pedido, registrado, comHotel = false, escrita = false
   );
 }
 
-function PainelDoPedido({ pedido, base, parametros, escrita }: { pedido: PedidoCarregado; base: string; parametros: ParametrosDeVoos; escrita: boolean }) {
+function PainelDoPedido({ pedido, base, parametros, escrita, hoje }: { pedido: PedidoCarregado; base: string; parametros: ParametrosDeVoos; escrita: boolean; hoje: string }) {
   const fechar = enderecoCom(base, parametros, { ref: null, modo: null, registrado: null, hotel: null });
   const voltar = enderecoCom(base, parametros, { modo: null, registrado: null, hotel: null });
   const subtitulo = [pedido.pessoaNome ?? "Hospedagem", pedido.evento.codigo ?? pedido.evento.nome].join(" · ");
@@ -368,6 +460,11 @@ function PainelDoPedido({ pedido, base, parametros, escrita }: { pedido: PedidoC
           pedidoId={pedido.id}
           valorInicial={paraCampoDeDinheiro(pedido.valorCentavos)}
           aoConcluirIrPara={voltar}
+          formaPagamento={pedido.formaPagamento ?? ""}
+          // Corrigindo a compra, a data já registrada; senão, hoje (o pedido nunca é de depois de hoje).
+          dataCompra={pedido.situacao === "EMITIDO" && pedido.dataCompra ? pedido.dataCompra : hoje}
+          dataSolicitacao={pedido.dataSolicitacao}
+          hoje={hoje}
           trechos={pedido.trechos.map((trecho) => ({
             sentido: trecho.sentido,
             rotulo: `${trecho.sentido === "IDA" ? "Ida" : "Volta"}: ${trecho.origemIata} → ${trecho.destinoIata} em ${dataCurta(trecho.dataDesejada)}`,
@@ -525,7 +622,14 @@ export function SecaoDeVoos({
   const novoHref = enderecoCom(base, parametros, { ...limpo, novo: "1" });
   const diasDoAtraso = dados.avisoDeCompra.diasDoAtraso;
   // Na aba do evento o formulário já sabe o evento; na tela geral vale o do filtro (ou o do atalho que abriu o painel).
-  const eventosDoFormulario = comSeletorDeEvento ? dados.eventos : eventoDoFiltro ? [eventoDoFiltro] : [];
+  // (Na aba de uma Masterclass, as outras palestras também vão, para escolher a última da turnê.)
+  const eventosDoFormulario = comSeletorDeEvento
+    ? dados.eventos
+    : eventoDoFiltro
+      ? [eventoDoFiltro, ...(eventoDoFiltro.masterclass ? dados.eventos.filter((evento) => evento.masterclass && evento.id !== eventoDoFiltro.id) : [])]
+      : [];
+  const masterclass = dados.recorte === "MASTERCLASS";
+  const eventosDoRecorte = dados.eventos.filter((evento) => evento.masterclass === masterclass);
   const semPedidoAtivo = eventoDoFiltro !== null && !dados.pedidosAtivos.some((item) => item.eventoId === eventoDoFiltro.id);
   const noAviso = eventoDoFiltro !== null && dados.avisoDeCompra.eventos.some((item) => item.eventoId === eventoDoFiltro.id);
 
@@ -542,6 +646,14 @@ export function SecaoDeVoos({
         )}
       </div>
       {!escrita && <FaixaSomenteLeitura />}
+      {comSeletorDeEvento && (
+        <AtalhosDoRecorte
+          recorte={dados.recorte}
+          quantidades={dados.linhasPorRecorte}
+          // Trocar de recorte tira o evento escolhido (ele é do outro lado) e fecha o que estiver aberto.
+          href={(recorte) => enderecoCom(base, parametros, { ...limpo, novo: null, evento: null, situacao: null, recorte: recorte === "MASTERCLASS" ? "masterclass" : null })}
+        />
+      )}
       <AvisoDeCompra aviso={dados.avisoDeCompra} base={base} parametros={parametros} escrita={escrita} />
       {dados.hotelSemQuarto.length > 0 && (
         <Aviso
@@ -570,12 +682,13 @@ export function SecaoDeVoos({
         {comSeletorDeEvento && (
           <SeletorDeFiltro
             nome="evento"
-            rotulo="Evento"
-            todos="Próximos eventos"
+            rotulo={masterclass ? "Palestra" : "Evento"}
+            todos={masterclass ? "Próximas palestras" : "Próximos eventos"}
+            busca
             valor={parametros.evento ?? null}
-            opcoes={[...(eventoDoFiltro && !dados.eventos.some((evento) => evento.id === eventoDoFiltro.id) ? [eventoDoFiltro] : []), ...dados.eventos].map((evento) => ({
+            opcoes={[...(eventoDoFiltro && !eventosDoRecorte.some((evento) => evento.id === eventoDoFiltro.id) ? [eventoDoFiltro] : []), ...eventosDoRecorte].map((evento) => ({
               valor: evento.id,
-              rotulo: `${evento.codigo ?? evento.nome} · ${dataCurta(evento.dataInicio)}`,
+              rotulo: masterclass ? rotuloDaPalestra(evento) : `${evento.codigo ?? evento.nome} · ${dataCurta(evento.dataInicio)}`,
             }))}
           />
         )}
@@ -597,7 +710,15 @@ export function SecaoDeVoos({
         <Cartao espacamento="nenhum">
           <EstadoVazio
             icone={<Plane size={32} aria-hidden />}
-            titulo={parametros.situacao ? "Nenhum voo com esse filtro." : eventoDoFiltro ? "Nenhum pedido de voo para este evento." : "Nenhum pedido de voo nos próximos eventos."}
+            titulo={
+              parametros.situacao
+                ? "Nenhum voo com esse filtro."
+                : eventoDoFiltro
+                  ? "Nenhum pedido de voo para este evento."
+                  : masterclass
+                    ? "Nenhum pedido de voo de Masterclass nas próximas palestras."
+                    : "Nenhum pedido de voo nos próximos eventos."
+            }
             acao={
               escrita && (
                 <BotaoLink href={novoHref} scroll={false}>
@@ -613,7 +734,18 @@ export function SecaoDeVoos({
         dados.grupos.map((mes) => (
           <div key={mes.mes} className="mb-6">
             {comSeletorDeEvento && <h3 className={`${TITULO_DE_SECAO} mb-3`}>{rotuloDoMes(mes.mes)}</h3>}
-            {mes.eventos.map(({ evento, linhas }) => (
+            {/* Masterclass: uma tabela por mês (a planilha tem poucas linhas por mês), pela data da primeira palestra. */}
+            {masterclass && (
+              <TabelaDeMasterclass
+                legenda={`Voos de Masterclass de ${rotuloDoMes(mes.mes)}`}
+                linhas={mes.eventos.flatMap((grupo) => grupo.linhas)}
+                base={base}
+                parametros={parametros}
+                escrita={escrita}
+                diasDoAtraso={diasDoAtraso}
+              />
+            )}
+            {(masterclass ? [] : mes.eventos).map(({ evento, linhas }) => (
               <section key={evento.id} aria-labelledby={comSeletorDeEvento ? `voos-do-evento-${evento.id}` : undefined} className="mb-4">
                 {comSeletorDeEvento && (
                   <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -673,13 +805,15 @@ export function SecaoDeVoos({
             eventoFixo={!comSeletorDeEvento}
             eventoInicial={eventoDoFiltro?.id}
             pessoaInicial={parametros.pessoa}
-            eventos={eventosDoFormulario.map((evento) => ({ id: evento.id, rotulo: rotuloDoEvento(evento), dataInicio: evento.dataInicio, dataFim: evento.dataFim }))}
+            recorteInicial={dados.recorte}
+            hoje={dados.hoje}
+            eventos={eventosDoFormulario.map((evento) => ({ id: evento.id, rotulo: rotuloNoSeletor(evento), dataInicio: evento.dataInicio, dataFim: evento.dataFim, masterclass: evento.masterclass }))}
             pessoas={dados.staff}
             pedidosAtivos={dados.pedidosAtivos.map((item) => ({ ...item, trajeto: item.trajeto ? rotuloDoTrajeto(item.trajeto).toLowerCase() : null }))}
           />
         </PainelPelaUrl>
       )}
-      {parametros.ref && pedido && <PainelDoPedido pedido={pedido} base={base} parametros={parametros} escrita={escrita} />}
+      {parametros.ref && pedido && <PainelDoPedido pedido={pedido} base={base} parametros={parametros} escrita={escrita} hoje={dados.hoje} />}
       {parametros.ref && !pedido && (
         <PainelPelaUrl titulo="Pedido não encontrado" aoFecharIrPara={enderecoCom(base, parametros, { ref: null, modo: null })}>
           <Aviso tom="atencao">Não encontramos o pedido {parametros.ref}. Ele pode ter outra referência.</Aviso>

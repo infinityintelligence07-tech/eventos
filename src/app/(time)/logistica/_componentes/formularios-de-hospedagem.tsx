@@ -32,7 +32,8 @@ export function BotaoRegistrarReserva({
   referencia: string;
   /** Hotéis de Configurações › Locais e hotéis. */
   hoteis: OpcaoDeLocal[];
-  inicial: { localId: string | null; numeroReserva: string | null; valor: string; formaPagamento: string | null };
+  /** `dataCompra`: a data da reserva já registrada, ou hoje; não passa de `hoje` nem vem antes de `dataSolicitacao`. */
+  inicial: { localId: string | null; numeroReserva: string | null; valor: string; formaPagamento: string | null; dataCompra: string; dataSolicitacao: string; hoje: string };
   /** Sugestão para o cadastro de um hotel novo: a cidade do evento. */
   cidadeDoEvento: { cidade: string; uf: string } | null;
 }) {
@@ -56,8 +57,9 @@ export function BotaoRegistrarReserva({
             rotulo="Hotel reservado pela SDC"
             obrigatorio
             vazio="Escolha o hotel"
-            value={hotel}
-            onChange={(mudanca) => setHotel(mudanca.target.value)}
+            busca
+            valor={hotel}
+            aoMudar={setHotel}
             opcoes={[...hoteis, { valor: NOVO_HOTEL, rotulo: "Cadastrar outro hotel…" }]}
             ajuda="Não está na lista? Escolha &quot;Cadastrar outro hotel…&quot; e preencha aqui mesmo."
             erros={erros("localId")}
@@ -96,6 +98,17 @@ export function BotaoRegistrarReserva({
             maxLength={60}
             defaultValue={inicial.formaPagamento ?? FORMA_DE_PAGAMENTO_PADRAO}
             erros={erros("formaPagamento")}
+          />
+          <CampoDeTexto
+            className="mt-3"
+            nome="dataCompra"
+            rotulo="Data da reserva"
+            type="date"
+            defaultValue={inicial.dataCompra}
+            min={inicial.dataSolicitacao}
+            max={inicial.hoje}
+            ajuda="O dia em que a SDC reservou. Mude só para lançar uma reserva antiga ou feita fora do sistema."
+            erros={erros("dataCompra")}
           />
           <CampoDeTextoLongo className="mt-3" nome="observacaoSdc" rotulo="Observação da SDC" maxLength={500} erros={erros("observacaoSdc")} />
           <div className="mt-5 flex justify-end gap-2">
@@ -163,7 +176,8 @@ export function BotaoDefinirHospedagem({
             rotulo="Onde"
             vazio="Hotel pela SDC (ela escolhe e reserva)"
             opcoes={locais}
-            defaultValue={hospedagem?.localId ?? ""}
+            busca
+            valorInicial={hospedagem?.localId ?? ""}
             ajuda="Deixe assim quando a SDC for reservar. Escolha um apartamento da IAM (não passa pela SDC) ou um hotel só se ele já estiver definido."
             erros={erros("localId")}
           />
@@ -261,7 +275,7 @@ export function FormularioNovoQuarto({ acao, hospedagemId, proximoNome }: { acao
           nome="capacidade"
           rotulo="Camas"
           obrigatorio
-          defaultValue="2"
+          valorInicial="2"
           opcoes={[
             { valor: "1", rotulo: "1 (single)" },
             { valor: "2", rotulo: "2 (duplo)" },

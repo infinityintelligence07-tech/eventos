@@ -35,7 +35,7 @@ Não contém código de produção: os trechos de código são contratos e pseud
 | # | Decisão | Por quê |
 |---|---|---|
 | L1 | Login **só com Google** pelo Supabase Auth do `iam-pessoas` (fluxo OAuth com PKCE, `@supabase/ssr`). Sem senha no Eventos. | Decisão de produto (docs 01/04); mesmo login do IAM Control. |
-| L2 | O **middleware só autentica** (renova a sessão e manda para `/login`). Quem decide acesso é o servidor: layout do `(time)`, `executarAcao` e o fluxo. | Middleware não é fronteira de segurança (falhas de bypass já existiram no Next); a checagem fica onde o dado é lido e gravado. |
+| L2 | O **middleware só cuida da sessão** (renova o token e manda para `/login` quem não tem). Quem confere a sessão no Supabase Auth (uma vez por requisição, §2.3) e decide acesso é o servidor: layout do `(time)`, `executarAcao` e o fluxo. | Middleware não é fronteira de segurança (falhas de bypass já existiram no Next); a checagem fica onde o dado é lido e gravado. |
 | L3 | **Ator** = usuário do Supabase → `core.usuario` ativo (por e-mail verificado, como o GH) → perfis do Eventos em `core.usuario_perfil`. Lido do banco **a cada requisição** (cache só dentro da requisição). | Tirar um perfil vale na hora, sem esperar o token expirar. |
 | L4 | Perfis novos em `core.perfil`: **`EVENTOS_TIME`** e **`EVENTOS_LIDER`** (líder = time + aprovar, reabrir, configurações). Escopo `GLOBAL` nesta rodada; escopo `POLO` é **recusado** até ser implementado. | O time é central e cuida de todos os polos. `core.usuario_perfil` tem PK `(usuario_id, perfil_id)`: um perfil só aceita um polo, o que não serve para quem cuida de vários. |
 | L5 | Sem perfil do Eventos → `/sem-acesso` (logado, sem nenhum dado). Sem `core.usuario` ativo → sai da sessão e volta ao login com aviso. | Igual ao GH no segundo caso; no primeiro, a pessoa entende o que pedir. |
@@ -78,9 +78,10 @@ sequenceDiagram
   C->>S: exchangeCodeForSession(code)
   C-->>N: 302 proximo (só caminho interno) + cookies de sessão
   N->>M: GET /calendario
-  M->>S: getUser() (renova o token se precisar)
+  M->>M: getSession() (só lê o cookie; vai ao Auth apenas para renovar token que está para vencer)
   M-->>N: segue
   N->>T: render
+  T->>S: getUser() — a única ida ao Auth da requisição (§2.3)
   T->>T: atorDaRequisicao() → core.usuario + perfis → sem perfil: /sem-acesso
 ```
 
@@ -88,8 +89,8 @@ sequenceDiagram
 
 | Peça | Arquivo | Regra |
 |---|---|---|
-| Cliente Supabase do servidor | `src/core/auth/supabase-servidor.ts` | `createServerClient` do `@supabase/ssr` com `cookies()` do Next (igual ao GH). Opções de cookie: `httpOnly: true`, `secure` fora do local, `sameSite: "lax"`, `path: "/"`. Não há cliente Supabase no navegador. |
-| Middleware | `src/middleware.ts` | Renova a sessão (`auth.getUser()`) e redireciona para `/login` quem não tem sessão. `matcher` cobre tudo menos `/login`, `/auth/callback`, `/api/health`, `/_next/*`, `/images/*`, `favicon`. No modo local (`EVENTOS_MODO=local`) não fala com o Supabase e deixa passar (o layout aplica o seletor). Roda no runtime edge: não importa banco. |
+| Cliente Supabase do servidor | `src/core/auth/supabase-servidor.ts` | `createServerClient` do `@supabase/ssr` com `cookies()` do Next (igual ao GH). Opções de cookie: `httpOnly: true`, `secure` fora do local, `sameSite: "lax"`, `path: "/"`. Não há cliente Supabase no navegador. O `fetch` do cliente (`buscaDaRequisicao`) responde o `GET /auth/v1/user` do mesmo token uma vez só por requisição (§2.3). |
+| Middleware | `src/middleware.ts` | Renova a sessão (`auth.getSession()`: lê o cookie e só vai ao Auth quando o token está para vencer) e redireciona para `/login` quem não tem sessão. **Não chama `getUser()`** (§2.3). Com chave de assinatura assimétrica confere a assinatura do token sem rede (`getClaims()`). `matcher` cobre tudo menos `/login`, `/auth/callback`, `/api/health`, `/_next/*`, `/images/*`, `favicon`. No modo local (`EVENTOS_MODO=local`) não fala com o Supabase e deixa passar (o layout aplica o seletor). Roda no runtime edge: não importa banco. |
 | Página de login | `src/app/login/page.tsx` + `acoes.ts` | Um botão "Entrar com Google". `entrarComGoogle(form)` chama `signInWithOAuth({ provider: "google", options: { redirectTo, queryParams: { prompt: "select_account" } } })` e faz `redirect(data.url)`. Mensagens por código (`?erro=sem-cadastro`, `link-expirado`, `falhou`), nunca o texto do provedor. |
 | Callback | `src/app/auth/callback/route.ts` | `exchangeCodeForSession(code)`; destino = `proximo` **validado** (só `^/(?![/\\])`, sem esquema; senão `/inicio`). `redirectTo` e o destino são montados com `EVENTOS_URL_PUBLICA`, nunca com o `Host` da requisição. |
 | Sair | `src/app/(time)/_servidor/sessao.ts` → action `sair()` | `auth.signOut()` + `redirect("/login")`. Botão no cabeçalho do `painel.tsx`. |
@@ -103,14 +104,91 @@ não copia isso; handoff para o Lucas (§11).
 
 - Token de acesso do Supabase (JWT) com validade padrão de 1 hora e refresh token rotativo, guardados em cookies
   `httpOnly`. O middleware renova; páginas e actions só leem.
-- **Validação:** `auth.getUser()` (consulta o Auth a cada requisição, como o GH). Se o projeto passar a usar chaves de
-  assinatura assimétricas, trocar por `auth.getClaims()` (valida o JWT localmente) — decisão do Vitor, sem mudar o resto.
+- **Validação:** `auth.getUser()`, **uma vez por requisição, no servidor** (§2.3.1).
 - **Revogação:** o ator é lido do banco a cada requisição (`cache()` do React só dentro dela). Tirar o perfil ou
   desativar o `core.usuario` corta o acesso no próximo clique, mesmo com token válido.
 - **Server actions:** o Next confere `Origin` × `Host`. Atrás do proxy do Easypanel, configurar
   `experimental.serverActions.allowedOrigins` com o domínio público.
 - Inatividade: o Supabase só oferece tempo máximo de sessão/inatividade em plano pago; sugestão de 12 h de sessão
   (decisão em §13).
+
+#### 2.3.1 O que é conferido onde, e quantas vezes (25/11/2026)
+
+O servidor do app e o Supabase ficam em regiões diferentes: cada ida ao Supabase Auth custa cerca de 245 ms, e a mesma
+requisição ia duas ou três vezes (o middleware perguntava quem era o usuário e o servidor perguntava de novo; numa
+server action, mais uma vez na tela que ela redesenha). Agora é **uma ida por requisição**.
+
+| Onde | O que confere | Vai ao Supabase Auth? |
+|---|---|---|
+| `src/middleware.ts` | Há cookie de sessão e o token não venceu (`getSession()`). Token a menos de 90 s de vencer é renovado e os cookies novos vão para o pedido e para a resposta. Token assinado com **chave assimétrica**: confere também a assinatura (`getClaims(token)`, com a chave pública do projeto). **Nada daqui decide acesso.** | Só para renovar (1 `POST /token` quando o token está para vencer). A chave pública é buscada 1 vez e fica 10 minutos em memória. Token com segredo simétrico (HS256) não é conferido aqui: seria um `getUser()`, a ida repetida que saiu. |
+| `sessaoDoSupabase()` em `src/app/(time)/_servidor/usuario-atual.ts` | `getUser()`: o Auth confere a assinatura, a validade e se a sessão **não foi encerrada** (saiu em outro lugar, usuário removido ou banido). O e-mail, o `email_confirmed_at` e as identidades vêm dessa resposta, nunca do cookie. | **Sim, 1 vez por requisição** (`GET /user`). |
+| `situacaoDoAtor()` e `identidadeDaSessao()` (mesmo arquivo) | Quem é: `core.usuario` ativo + perfil do Eventos, lista da SDC, staff. Lido do **banco** em cada renderização e em cada action. | Não (usam a sessão acima). |
+| Regra da SDC (§15.2, passo 4) | `getClaims()`: o `amr` do token desta sessão. | Não: com chave assimétrica confere com a chave pública; com segredo simétrico a biblioteca faz um `getUser()` do mesmo token, respondido pela memória da requisição. |
+
+Como a ida única é garantida:
+
+- **Dentro de uma renderização** (layout + `generateMetadata` + página): `cache()` do React em `sessaoDoSupabase`,
+  `situacaoDoAtor` e `identidadeDaSessao`.
+- **Entre a server action e a tela que ela redesenha, e em route handlers** (onde o `cache()` do React não memoriza):
+  o `fetch` do cliente Supabase (`buscaDaRequisicao`, `src/core/auth/supabase-servidor.ts`) guarda a resposta do
+  `GET /auth/v1/user` **por requisição e por token**. A memória fica presa ao objeto que `headers()` do Next devolve
+  (um por requisição, o mesmo na action e na renderização) num `WeakMap`: some com a requisição e nada passa de uma
+  para outra. Renovar o token, sair e qualquer outro pedido vão sempre pela rede. Token diferente (renovado no meio do
+  caminho) pergunta de novo. Se um dia o Next deixar de devolver o mesmo objeto, o efeito é só voltar a perguntar.
+- **O acesso não entra nessa memória:** a decisão do banco é lida de novo na action e na renderização. Tirar o perfil
+  durante uma action já barra a tela que ela redesenha.
+
+Idas ao Supabase Auth (`GET /user`) por requisição, medidas por `src/app/__tests__/idas-ao-supabase-auth.test.ts`, que
+roda o middleware e o cliente do Supabase de verdade contra um Auth de mentira que conta os pedidos e **falha se voltar
+a duplicar**:
+
+| Requisição (sessão do Google) | Antes | Depois |
+|---|:-:|:-:|
+| Página do time | 2 | 1 |
+| Server action do time (com a tela que ela redesenha) | 3 | 1 |
+| Página da SDC | 2 | 1 |
+| Server action da SDC | 4 (segredo simétrico) ou 3 (chave assimétrica) | 1 |
+| Página do staff (`/meu-cadastro`, `/responder`, `/solicitar-custo`) | 2 | 1 |
+| Server action do staff | 3 | 1 |
+| Rota de comprovante do staff | 2 | 1 |
+
+A sessão por e-mail e senha do IAM Control (cookie assinado, docs/10) não vai ao Supabase Auth em nenhum dos dois.
+
+**O que não mudou:** revogar no Supabase (sair, remover ou banir o usuário) corta na requisição seguinte, porque o
+servidor continua perguntando ao Auth em toda requisição; tirar o perfil, desativar o usuário ou o e-mail da SDC corta no
+próximo clique (banco); o e-mail só vale com `email_confirmed_at`; a regra da SDC (§15.2) falha fechada.
+
+**O que mudou no middleware (ele nunca foi a fronteira, L2):** com segredo simétrico ele não confere mais o token, só a
+presença e a validade do cookie. Um cookie forjado passa por ele e é recusado pelo servidor (`getUser()` → `/login`)
+antes de qualquer leitura do banco. Toda página, layout, rota e arquivo de server actions atrás do middleware passa
+por uma porta do servidor que confere a sessão; o mesmo teste das idas varre `src/app` e mantém uma lista fechada das
+entradas que não têm sessão para conferir (login, callback, sair, saúde, versão). Sessão encerrada no Supabase com o
+token ainda válido agora é barrada pelo layout (`/login`, sem o `?proximo=`), não pelo middleware; o cookie velho some
+quando o token vence. Um token assinado com chave que o projeto não publica faz o `getClaims()` do middleware perguntar
+ao Auth (2 idas); só acontece com chave retirada, e aí o Auth recusa o token.
+
+**Chaves de assinatura do projeto** (o código não enxerga a configuração; conferir no painel do Supabase, nas chaves
+de assinatura do JWT; o jeito direto é o `alg` no cabeçalho de um token de acesso real: `HS256` = segredo simétrico,
+`ES256`/`RS256` = chave assimétrica). O código decide token a token, por esse cabeçalho (`alg` e `kid`), então
+funciona nos dois casos e durante uma troca de chave:
+
+- *Segredo simétrico (HS256, o padrão dos projetos antigos):* vale tudo acima; 1 ida por requisição.
+- *Chave assimétrica (ES256/RS256):* igual, e o middleware passa a barrar token adulterado sem rede. Continua 1 ida
+  por requisição, porque o servidor segue usando `getUser()`.
+
+**Alternativas não adotadas (decisão do Vitor):**
+
+1. *Trocar o `getUser()` do servidor por `getClaims()`* (só faz sentido com chave assimétrica; com segredo simétrico o
+   `getClaims()` chama `getUser()` por dentro e não economiza nada): zero idas por requisição. Custa duas garantias:
+   (a) sessão encerrada no Supabase continuaria aceita **até o token vencer — até 1 hora** com a validade padrão
+   (a janela é a validade do token de acesso configurada no projeto); (b) o token não traz
+   `email_confirmed_at` nem as identidades, então o e-mail confirmado e a regra da SDC continuariam precisando do
+   `getUser()` ou passariam a confiar só nas claims (`email`, `amr`, `app_metadata.provider`). O corte por perfil,
+   usuário inativo e lista da SDC não muda (é do banco).
+2. *Guardar a resposta do `getUser()` por alguns segundos entre requisições:* economiza as idas das navegações e
+   pré-carregamentos em sequência; a janela de uma sessão encerrada passa a ser o tempo guardado (ex.: 30 s).
+
+A mudança de região do servidor (para perto do Supabase) é infraestrutura e reduz o custo da ida que sobrou.
 
 ### 2.4 Quem pode criar conta
 
@@ -257,15 +335,20 @@ A SDC **não tem perfil nem permissão desta matriz**: ela não é um `Ator` (§
 | `disponibilidade/nova/acoes.ts` | `abrirEnqueteAcao` → `disponibilidade.gerir` |
 | `disponibilidade/[enqueteId]/acoes.ts` | `encerrarEnqueteAcao`, `reabrirEnqueteAcao` → `disponibilidade.gerir`; `registrarRespostaAcao` → `disponibilidade.registrar_resposta` |
 | `pessoas/[pessoaId]/acoes.ts` | `salvarPerfilAcao`, `definirFuncoesAcao`, `salvarVeiculoAcao`, `salvarCoordenadasAcao` → `pessoas.editar` |
-| `logistica/acoes.ts` | `registrarPedidoDeVooAcao`, `dispensarLogisticaDoEventoAcao`, `alterarPedidoAcao`, `cancelarPedidoAcao`, `criarHospedagemAcao`, `alterarHospedagemAcao`, `removerHospedagemAcao`, `registrarPedidoDeHospedagemAcao`, `adicionarQuartoAcao`, `removerQuartoAcao`, `porNoQuartoAcao`, `moverDeQuartoAcao`, `tirarDoQuartoAcao`, `definirPeriodoDoOcupanteAcao`, `aplicarRoomingSugeridoAcao`, `criarCaronaAcao`, `removerCaronaAcao`, `definirCaronaAcao`, `tirarDaCaronaAcao` → `logistica.gerir`; `registrarRetornoDeVooAcao`, `registrarRetornoDeHospedagemAcao` → `logistica.registrar_retorno_sdc`; `aprovarPagamentoAcao`, `desfazerAprovacaoAcao` → `logistica.aprovar_pagamento` |
+| `logistica/acoes.ts` | `registrarPedidoDeVooAcao`, `dispensarLogisticaDoEventoAcao`, `alterarPedidoAcao`, `cancelarPedidoAcao`, `definirHotelDoVooAcao`, `acrescentarHospedeAcao`, `tirarHospedeAcao`, `criarHospedagemAcao`, `alterarHospedagemAcao`, `removerHospedagemAcao`, `registrarPedidoDeHospedagemAcao`, `adicionarQuartoAcao`, `removerQuartoAcao`, `porNoQuartoAcao`, `moverDeQuartoAcao`, `tirarDoQuartoAcao`, `definirPeriodoDoOcupanteAcao`, `aplicarRoomingSugeridoAcao`, `criarCaronaAcao`, `removerCaronaAcao`, `definirCaronaAcao`, `tirarDaCaronaAcao` → `logistica.gerir`; `registrarRetornoDeVooAcao`, `registrarRetornoDeHospedagemAcao` → `logistica.registrar_retorno_sdc`; `aprovarPagamentoAcao`, `desfazerAprovacaoAcao` → `logistica.aprovar_pagamento` |
 | `custos/acoes.ts` | `registrarSolicitacaoAcao`, `corrigirSolicitacaoAcao`, `calcularPreviaAcao` (não grava) → `custos.registrar`; `aprovarSolicitacaoAcao`, `reprovarSolicitacaoAcao` → `custos.auditar`; `reabrirAuditoriaAcao` → `custos.reabrir_auditoria` |
 | `configuracoes/acesso/acoes.ts` | `definirAcessoAcao` → `config.acesso_do_time` |
 | `configuracoes/acesso-da-sdc/acoes.ts` | `incluirAcessoDaSdcAcao`, `definirAcessoDaSdcAcao` → `config.acesso_da_sdc` |
-| `configuracoes/locais/acoes.ts` | `salvarLocalAcao`, `arquivarLocalAcao` → `config.locais` |
+| `configuracoes/locais/acoes.ts` | `salvarLocalAcao`, `ajustarLocalDoIamControlAcao`, `arquivarLocalAcao` → `config.locais` |
 | `configuracoes/modelos-de-copy/acoes.ts` | `salvarModeloAcao`, `definirModeloAtivoAcao`, `previaDoModeloAcao` (não grava) → `config.modelos_copy`; `salvarLinkDeCustosAcao` → `config.link_custos` |
 | `configuracoes/voos/acoes.ts` | `salvarAvisoDeVoosAcao` → `config.aviso_de_voos` |
 | `configuracoes/vagas/acoes.ts` | `salvarRegraDeVagas`, `recalcularVagasDoTipo` → `config.regras_vagas` |
 | `configuracoes/regras-de-custo/acoes.ts` | `criarVigenciaDeRegraAcao`, `desativarRegraAcao` → `config.regras_custo` |
+
+As 26 actions de `logistica/acoes.ts` estão todas na linha acima (conferido com o arquivo em 25/11/2026: as três da
+lista de hotel sem escala — `definirHotelDoVooAcao`, `acrescentarHospedeAcao`, `tirarHospedeAcao` — faltavam aqui). A
+rodada de Masterclass e data real não criou action: os campos novos (evento da volta, datas, forma de pagamento no voo)
+entram nas actions que já existiam, com as mesmas permissões. O teste `acoes-com-permissao.test.ts` é a fonte da contagem.
 
 Actions que não gravam (`calcularPreviaAcao`, `previaDoModeloAcao`) continuam exigindo login e permissão (gastam CPU e
 leem dados), mas não passam pela guarda de escrita. Action nova sem permissão não compila (parâmetro obrigatório) e um
@@ -465,7 +548,7 @@ precisar ser anulável para ações de usuário (ver `origem` em §7.1).
 |---|---|
 | Coordenadas de casa (`pessoa_evento.lat/lng`) | Só aparecem no formulário de Pessoas; as outras telas mostram km. Nunca em URL, log, `registro_acao`, copy ou mapa externo (embutir mapa do Google com a coordenada só depois de decidir, §9.2). Cálculo de distância no servidor. |
 | Sexo | Usado só para quarto e `{{genero:…}}`; pode ficar vazio. Não aparece em listas que não precisam dele. |
-| Telefone e e-mail | Lidos com `GRANT` por coluna; só na ficha da pessoa. Já estão na lista de mascaramento do log. |
+| Telefone e e-mail | Lidos com `GRANT` por coluna; só na ficha da pessoa. Já estão na lista de mascaramento do log. Em Custos, o telefone entra só dentro do `href` do botão "Abrir no WhatsApp" da mensagem de aprovado (doc 08 §11.2): montado no servidor, só para quem tem `custos.auditar`, nunca na demo, sem aparecer na tela; `linkDoWhatsApp` também está na lista de mascaramento. |
 | Logs (pino) | Acrescentar `lat`, `lng`, `sexo`, `nomeCompleto`, `nomeSocial`, `observacao`, `comentario`, `motivo` à lista de `redact.ts`. Erro de banco sem parâmetros (já feito, M3). Log de acesso só com `usuarioId`. |
 | `registro_acao` | `dados` com nome de campo, não valor, quando o valor é pessoal (§7.1). Comentário livre só onde o usuário digita (devolução, motivo). |
 | Dado sensível do GH | O Eventos não lê `sensivel` (sem grant, §6). CPF/PIX/endereço continuam fora. |
@@ -748,7 +831,8 @@ compra e registra o valor, o time aprova o pagamento dizendo que usou**. Ela vê
    O Supabase aceita outras formas de criar sessão (e-mail e senha, código por e-mail, anônimo) e o app, sozinho, só
    via "e-mail confirmado". Para ser SDC exige-se, tudo junto: usuário não anônimo com e-mail confirmado; uma
    identidade `google` em `getUser().identities` com **o mesmo e-mail** (e não marcada como não verificada); e o token
-   desta sessão (`getClaims()`, que confere a assinatura) com `sub` do mesmo usuário e `amr` contendo `oauth` e nenhum
+   desta sessão (`getClaims()`, que confere o token: pela chave pública do projeto ou, com segredo simétrico, por um
+   `getUser()` do mesmo token, que não repete a ida ao Auth, §2.3.1) com `sub` do mesmo usuário e `amr` contendo `oauth` e nenhum
    método de senha, código, link mágico, anônimo, SSO ou recuperação. Informação ausente, erro do `getClaims()` ou
    formato inesperado → não é SDC.
 5. **Desativar corta no próximo clique:** não há sessão própria da SDC nem cache entre requisições; a linha é lida de
@@ -792,9 +876,16 @@ time nem o banco).
   o evento ganha uma chave "e1, e2…" que só vale dentro da resposta). O teste "não vaza dado"
   (`src/fluxos/sdc/__tests__/sdc.integracao.test.ts`) grava esses dados ao lado dos pedidos, confere que nenhum aparece
   no que a SDC recebe, que não há nenhum uuid, e fecha a **lista de campos** (campo novo quebra o teste).
+- **Campos que mudaram no que ela recebe (rodada 6, lista fechada atualizada de propósito):** `dataSolicitacao` e
+  `dataCompra` (dias, no lugar de `solicitadoEm` e `compradoEm`: a mesma informação, com a data real); `formaPagamento`
+  também no voo; `evento.masterclass` (para a tela separar Eventos de Masterclass); `eventoDaVolta` no voo (a última
+  palestra da turnê, com os mesmos campos do evento e sem id interno). Na turnê, o recorte de período vale pela data da
+  última palestra, na leitura e na escrita.
 - **Faz:** registrar ou corrigir a compra de um pedido que já existe, enquanto o time não aprovou
   (`registrarCompraDeVooAcao`, `registrarReservaAcao`). Voo: companhia, número do voo, código da reserva, horários e
-  valor. Hospedagem: o hotel (nome, cidade, UF), número da reserva, valor e forma de pagamento. As regras de transição
+  valor, e desde a 0019 a forma de pagamento e a **data da compra** (hoje por padrão; não futura nem antes do pedido
+  do time; a data da solicitação é só do time). Hospedagem: o hotel (nome, cidade, UF), número da reserva, valor,
+  forma de pagamento e a data da reserva. As regras de transição
   são as mesmas do registro feito pelo time (mesmo serviço), com um schema próprio e mais estreito:
   - **Lista fechada de campos.** O trecho da SDC tem só sentido, companhia, número do voo, localizador, partida e
     chegada. **Não tem o link do cartão de embarque**: a SDC não grava nem apaga `cartao_embarque_url` (só o time põe
@@ -806,7 +897,9 @@ time nem o banco).
   - **Hotel sem multiplicar cadastro.** Mesmo nome + cidade + UF (comparação sem maiúsculas, acentos e espaços
     repetidos) reaproveita o hotel que já existe, sem alterá-lo. Ao corrigir a reserva, o hotel que a própria SDC
     criou para aquele pedido (e que só ele usa) é **corrigido** (`LOCAL_ALTERADO`, origem `SDC`) em vez de nascer
-    outro. Hotel cadastrado pelo time nunca é alterado pela SDC.
+    outro. Hotel cadastrado pelo time nunca é alterado pela SDC, nem o que veio do IAM Control: se a sincronização
+    ligar ao IAM Control o hotel que a SDC criou (mesmo nome + cidade + UF de um local de lá, docs/07 §6.8.1), ele
+    deixa de ser corrigível por ela, e corrigir a reserva com outro nome cria outro hotel.
   - **Só no que ela enxerga.** A escrita aplica o mesmo recorte de período da lista (eventos terminados há até 120
     dias): fora dele, "Pedido não encontrado".
 - **Não faz:** criar, alterar ou cancelar pedido, mexer em quartos, aprovar. Não há action para isso em `/sdc`, e as do

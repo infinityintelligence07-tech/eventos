@@ -25,6 +25,24 @@ export type TrechoDaCompra = {
   chegadaEm: string;
 };
 
+/** A data da compra já registrada (ou hoje), que não passa de hoje nem vem antes do pedido do time. */
+export type DatasDaCompra = { dataCompra: string; dataSolicitacao: string; hoje: string };
+
+function CampoDaDataDaCompra({ rotulo, datas, erros }: { rotulo: string; datas: DatasDaCompra; erros: string[] | undefined }) {
+  return (
+    <CampoDeTexto
+      nome="dataCompra"
+      rotulo={rotulo}
+      type="date"
+      defaultValue={datas.dataCompra}
+      min={datas.dataSolicitacao}
+      max={datas.hoje}
+      ajuda="O dia em que a compra foi feita. Mude só se foi antes de hoje."
+      erros={erros}
+    />
+  );
+}
+
 /** Valor da opção "Outra" (o mesmo do schema da SDC). */
 const OUTRA = "OUTRA";
 
@@ -39,8 +57,8 @@ function CampoDaCompanhia({ indice, trecho, companhias, erros }: { indice: numbe
         obrigatorio
         vazio="Escolha…"
         opcoes={companhias}
-        value={escolhida}
-        onChange={(evento) => setEscolhida(evento.target.value)}
+        valor={escolhida}
+        aoMudar={setEscolhida}
         erros={erros(`trechos.${indice}.companhia`)}
       />
       {escolhida === OUTRA && (
@@ -67,11 +85,15 @@ export function BotaoRegistrarCompraDeVoo({
   observacao,
   corrigindo,
   companhias,
+  formaPagamento,
+  datas,
 }: {
   acao: AcaoDoFormulario;
   referencia: string;
   passageiro: string;
   companhias: OpcaoDoCampo[];
+  formaPagamento: string;
+  datas: DatasDaCompra;
   trechos: TrechoDaCompra[];
   valor: string;
   observacao: string;
@@ -125,6 +147,10 @@ export function BotaoRegistrarCompraDeVoo({
             </fieldset>
           ))}
           <CampoDeTexto nome="valorCentavos" rotulo="Valor total da compra (R$)" obrigatorio numerico inputMode="decimal" defaultValue={valor} placeholder="980,00" erros={erros("valorCentavos")} />
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <CampoDeTexto nome="formaPagamento" rotulo="Forma de pagamento" maxLength={60} defaultValue={formaPagamento} erros={erros("formaPagamento")} />
+            <CampoDaDataDaCompra rotulo="Data da compra" datas={datas} erros={erros("dataCompra")} />
+          </div>
           <CampoDeTextoLongo className="mt-3" nome="observacaoSdc" rotulo="Observação para o time (opcional)" maxLength={500} defaultValue={observacao} erros={erros("observacaoSdc")} />
           <Aviso tom="neutro" className="mt-4">
             Depois de registrar, o time de eventos confere e aprova o pagamento. Dá para corrigir enquanto ele não aprovar.
@@ -154,6 +180,7 @@ export function BotaoRegistrarReserva({
   formaPagamento,
   observacao,
   corrigindo,
+  datas,
 }: {
   acao: AcaoDoFormulario;
   referencia: string;
@@ -164,6 +191,7 @@ export function BotaoRegistrarReserva({
   formaPagamento: string;
   observacao: string;
   corrigindo: boolean;
+  datas: DatasDaCompra;
 }) {
   const [aberto, setAberto] = useState(false);
   const { enviar, erros, estado, pendente } = useAcao(acao, () => setAberto(false));
@@ -194,7 +222,10 @@ export function BotaoRegistrarReserva({
             <CampoDeTexto nome="numeroReserva" rotulo="Número da reserva" obrigatorio maxLength={60} defaultValue={numeroReserva} erros={erros("numeroReserva")} />
             <CampoDeTexto nome="valorCentavos" rotulo="Valor total (R$)" obrigatorio numerico inputMode="decimal" defaultValue={valor} placeholder="2.400,00" erros={erros("valorCentavos")} />
           </div>
-          <CampoDeTexto className="mt-3" nome="formaPagamento" rotulo="Forma de pagamento" obrigatorio maxLength={60} defaultValue={formaPagamento} erros={erros("formaPagamento")} />
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <CampoDeTexto nome="formaPagamento" rotulo="Forma de pagamento" obrigatorio maxLength={60} defaultValue={formaPagamento} erros={erros("formaPagamento")} />
+            <CampoDaDataDaCompra rotulo="Data da reserva" datas={datas} erros={erros("dataCompra")} />
+          </div>
           <CampoDeTextoLongo className="mt-3" nome="observacaoSdc" rotulo="Observação para o time (opcional)" maxLength={500} defaultValue={observacao} erros={erros("observacaoSdc")} />
           <Aviso tom="neutro" className="mt-4">
             Depois de registrar, o time de eventos confere e aprova o pagamento. Dá para corrigir enquanto ele não aprovar.

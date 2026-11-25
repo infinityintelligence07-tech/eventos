@@ -102,7 +102,7 @@ function CamposDosTrechos({ inicial, erros }: { inicial: TrechosIniciais; erros:
               rotulo={sentido === "IDA" ? "Horário da ida" : "Horário da volta"}
               opcoes={PREFERENCIAS}
               vazio="Sem preferência"
-              defaultValue={valores?.preferencia ?? ""}
+              valorInicial={valores?.preferencia ?? ""}
             />
           </div>
         );
@@ -116,7 +116,13 @@ function CamposDosTrechos({ inicial, erros }: { inicial: TrechosIniciais; erros:
   );
 }
 
-export type EventoDoPedido = { id: string; rotulo: string; dataInicio: string; dataFim: string };
+/** `masterclass`: palestra (o "Novo pedido" separa Eventos de Masterclass antes de escolher, como a planilha). */
+export type EventoDoPedido = { id: string; rotulo: string; dataInicio: string; dataFim: string; masterclass: boolean };
+
+const TIPOS_DE_VIAGEM = [
+  { valor: "EVENTOS", rotulo: "Evento" },
+  { valor: "MASTERCLASS", rotulo: "Masterclass (palestras)" },
+];
 export type PedidoAtivoDaPessoa = { eventoId: string; pessoaId: string; referencia: string; trajeto: string | null };
 
 function diaAnterior(data: string): string {
@@ -138,6 +144,8 @@ export function FormularioNovoPedido({
   eventoFixo,
   pessoaInicial,
   destino,
+  recorteInicial,
+  hoje,
 }: {
   acao: AcaoDoFormulario;
   eventos: EventoDoPedido[];
@@ -149,11 +157,24 @@ export function FormularioNovoPedido({
   pessoaInicial?: string;
   /** Tela para onde voltar com o painel do pedido aberto. */
   destino: string;
+  /** O recorte em vigor na tela (Eventos ou Masterclass): o formulário começa nele. */
+  recorteInicial: "EVENTOS" | "MASTERCLASS";
+  /** Hoje em São Paulo (AAAA-MM-DD): a data da solicitação não passa daqui. */
+  hoje: string;
 }) {
   const { despachar, erros, estado } = useAcao(acao);
-  const [eventoId, setEventoId] = useState(eventos.some((evento) => evento.id === eventoInicial) ? (eventoInicial ?? "") : eventoFixo ? (eventos[0]?.id ?? "") : "");
+  const inicial = eventos.find((evento) => evento.id === eventoInicial) ?? (eventoFixo ? eventos[0] : undefined);
+  const [recorte, setRecorte] = useState<"EVENTOS" | "MASTERCLASS">(inicial ? (inicial.masterclass ? "MASTERCLASS" : "EVENTOS") : recorteInicial);
+  const [eventoId, setEventoId] = useState(inicial?.id ?? "");
+  // Masterclass em turnê: a volta sai da última palestra. Vazio = a mesma palestra da ida.
+  const [eventoVoltaId, setEventoVoltaId] = useState("");
+  const masterclass = recorte === "MASTERCLASS";
+  const doRecorte = eventos.filter((evento) => evento.masterclass === masterclass);
   const [pessoaId, setPessoaId] = useState(pessoas.some((pessoa) => pessoa.pessoaId === pessoaInicial) ? (pessoaInicial ?? "") : "");
   const evento = eventos.find((item) => item.id === eventoId);
+  // A última palestra é do mesmo dia da primeira em diante.
+  const ultimasPalestras = masterclass && evento ? eventos.filter((item) => item.masterclass && item.id !== evento.id && item.dataInicio >= evento.dataInicio) : [];
+  const eventoDaVolta = ultimasPalestras.find((item) => item.id === eventoVoltaId) ?? evento;
   const jaPedidos = eventoId && pessoaId ? pedidosAtivos.filter((pedido) => pedido.eventoId === eventoId && pedido.pessoaId === pessoaId) : [];
   const nome = pessoas.find((pessoa) => pessoa.pessoaId === pessoaId)?.nome ?? "Esta pessoa";
 
@@ -166,26 +187,60 @@ export function FormularioNovoPedido({
       {eventoFixo ? (
         <input type="hidden" name="eventoId" value={eventoId} />
       ) : (
+        <>
+          <CampoDeSelecao
+            nome="tipoDeViagem"
+            rotulo="Viagem para"
+            valor={recorte}
+            aoMudar={(novo) => {
+              setRecorte(novo === "MASTERCLASS" ? "MASTERCLASS" : "EVENTOS");
+              setEventoId("");
+              setEventoVoltaId("");
+            }}
+            opcoes={TIPOS_DE_VIAGEM}
+            ajuda="Eventos e Masterclass ficam separados, como nas abas da planilha."
+          />
+          <CampoDeSelecao
+            className="mt-3"
+            nome="eventoId"
+            rotulo={masterclass ? "Primeira palestra (a ida chega aqui)" : "Evento"}
+            obrigatorio
+            vazio={masterclass ? "Escolha a palestra" : "Escolha o evento"}
+            busca
+            valor={eventoId}
+            aoMudar={(novo) => {
+              setEventoId(novo);
+              setEventoVoltaId("");
+            }}
+            opcoes={doRecorte.map((item) => ({ valor: item.id, rotulo: item.rotulo }))}
+            ajuda={masterclass ? "Qualquer Masterclass futura, por data." : "Qualquer evento futuro, com ou sem escala montada."}
+            erros={erros("eventoId")}
+          />
+        </>
+      )}
+      {masterclass && evento && (
         <CampoDeSelecao
-          nome="eventoId"
-          rotulo="Evento"
-          obrigatorio
-          vazio="Escolha o evento"
-          value={eventoId}
-          onChange={(mudanca) => setEventoId(mudanca.target.value)}
-          opcoes={eventos.map((item) => ({ valor: item.id, rotulo: item.rotulo }))}
-          ajuda="Qualquer evento futuro, com ou sem escala montada."
-          erros={erros("eventoId")}
+          className="mt-3"
+          nome="eventoVoltaId"
+          rotulo="Última palestra (a volta sai daqui)"
+          vazio="A mesma palestra (ida e volta)"
+          busca
+          valor={eventoVoltaId}
+          aoMudar={setEventoVoltaId}
+          opcoes={ultimasPalestras.map((item) => ({ valor: item.id, rotulo: item.rotulo }))}
+          ajuda="Na turnê, a pessoa vai para a primeira palestra e volta da última. As palestras do meio não entram no pedido."
+          erros={erros("eventoVoltaId")}
         />
       )}
       <CampoDeSelecao
-        className={eventoFixo ? undefined : "mt-3"}
+        className={eventoFixo && !masterclass ? undefined : "mt-3"}
         nome="pessoaId"
         rotulo="Passageiro"
         obrigatorio
         vazio="Escolha a pessoa"
-        value={pessoaId}
-        onChange={(mudanca) => setPessoaId(mudanca.target.value)}
+        busca
+        valor={pessoaId}
+        aoMudar={setPessoaId}
         opcoes={pessoas.map((pessoa) => ({ valor: pessoa.pessoaId, rotulo: pessoa.nome }))}
         ajuda="Qualquer pessoa ativa do cadastro de staff, esteja ou não na escala do evento."
         erros={erros("pessoaId")}
@@ -199,14 +254,25 @@ export function FormularioNovoPedido({
         </Aviso>
       )}
       <CamposDosTrechos
-        key={eventoId}
+        key={`${eventoId}|${eventoVoltaId}`}
         erros={erros}
         inicial={{
           origemIata: "",
           destinoIata: "",
           ida: evento ? { data: diaAnterior(evento.dataInicio), preferencia: "" } : null,
-          volta: evento ? { data: evento.dataFim, preferencia: "" } : null,
+          // Na turnê, a volta é sugerida para o dia da última palestra.
+          volta: eventoDaVolta ? { data: eventoDaVolta.dataFim, preferencia: "" } : null,
         }}
+      />
+      <CampoDeTexto
+        className="mt-4"
+        nome="dataSolicitacao"
+        rotulo="Data da solicitação"
+        type="date"
+        defaultValue={hoje}
+        max={hoje}
+        ajuda="O dia em que o pedido foi feito à SDC. Mude só para lançar um pedido antigo (da planilha, por exemplo)."
+        erros={erros("dataSolicitacao")}
       />
       {/* Marcada por padrão: quem vai de avião quase sempre dorme no hotel, e o hotel é pedido à SDC junto com o voo. */}
       <CaixaDeMarcar
@@ -259,6 +325,9 @@ export function FormularioAlterarPedido({
   );
 }
 
+/** Como a planilha anota o pagamento de cada compra. */
+const FORMA_DE_PAGAMENTO_PADRAO = "Faturado SDC";
+
 export type TrechoParaRegistrar = { sentido: "IDA" | "VOLTA"; rotulo: string; partidaSugerida: string; companhia: string; numeroVoo: string; localizador: string; partidaEm: string; chegadaEm: string; cartaoEmbarqueUrl: string };
 
 export function FormularioRegistrarVoo({
@@ -267,12 +336,22 @@ export function FormularioRegistrarVoo({
   trechos,
   valorInicial,
   aoConcluirIrPara,
+  formaPagamento,
+  dataCompra,
+  dataSolicitacao,
+  hoje,
 }: {
   acao: AcaoDoFormulario;
   pedidoId: string;
   trechos: TrechoParaRegistrar[];
   valorInicial: string;
   aoConcluirIrPara: string;
+  /** A forma de pagamento já registrada (vazio = ainda não há: o campo sugere "Faturado SDC"). */
+  formaPagamento: string;
+  /** A data da compra já registrada, ou hoje; não passa de hoje nem vem antes da solicitação. */
+  dataCompra: string;
+  dataSolicitacao: string;
+  hoje: string;
 }) {
   const router = useRouter();
   const { despachar, erros, estado } = useAcao(acao, () => router.push(aoConcluirIrPara, { scroll: false }));
@@ -323,6 +402,17 @@ export function FormularioRegistrarVoo({
       ))}
       <div className="grid grid-cols-2 gap-3">
         <CampoDeTexto nome="valorCentavos" rotulo="Valor (R$)" obrigatorio numerico inputMode="decimal" defaultValue={valorInicial} placeholder="980,00" erros={erros("valorCentavos")} />
+        <CampoDeTexto nome="formaPagamento" rotulo="Forma de pagamento" maxLength={60} defaultValue={formaPagamento || FORMA_DE_PAGAMENTO_PADRAO} erros={erros("formaPagamento")} />
+        <CampoDeTexto
+          nome="dataCompra"
+          rotulo="Data da compra"
+          type="date"
+          defaultValue={dataCompra}
+          min={dataSolicitacao}
+          max={hoje}
+          ajuda="O dia em que a SDC comprou. Mude só para lançar uma compra antiga ou feita fora do sistema."
+          erros={erros("dataCompra")}
+        />
       </div>
       <CampoDeTextoLongo className="mt-3" nome="observacaoSdc" rotulo="Observação da SDC" maxLength={500} erros={erros("observacaoSdc")} />
       <div className="mt-5 flex justify-end gap-2">

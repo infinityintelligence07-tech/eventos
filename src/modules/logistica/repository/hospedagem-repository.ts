@@ -39,6 +39,9 @@ export type HospedagemDoEvento = {
     observacaoSdc: string | null;
     /** Preenchido = pagamento aprovado pelo time. */
     aprovadoEm: Date | null;
+    /** Dia em que o pedido foi feito à SDC e dia em que ela reservou (AAAA-MM-DD), informados por quem lança. */
+    dataSolicitacao: string;
+    dataCompra: string | null;
     atualizadoEm: string;
   } | null;
   checkIn: string;
@@ -203,6 +206,8 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
           observacaoTime: pedidoSdc.observacaoTime,
           observacaoSdc: pedidoSdc.observacaoSdc,
           aprovadoEm: pedidoSdc.aprovadoEm,
+          dataSolicitacao: pedidoSdc.dataSolicitacao,
+          dataCompra: pedidoSdc.dataCompra,
           pedidoAtualizadoEm: pedidoSdc.atualizadoEm,
           checkIn: hospedagem.checkIn,
           checkOut: hospedagem.checkOut,
@@ -266,6 +271,8 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
                 observacaoTime: linha.observacaoTime,
                 observacaoSdc: linha.observacaoSdc,
                 aprovadoEm: linha.aprovadoEm,
+                dataSolicitacao: linha.dataSolicitacao ?? linha.pedidoAtualizadoEm.toISOString().slice(0, 10),
+                dataCompra: linha.dataCompra,
                 atualizadoEm: linha.pedidoAtualizadoEm.toISOString(),
               }
             : null,

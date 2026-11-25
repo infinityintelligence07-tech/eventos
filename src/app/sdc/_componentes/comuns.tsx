@@ -40,7 +40,16 @@ export function TotaisDaSdc({ totais }: { totais: TotaisDoPagamento }) {
   );
 }
 
-export function FiltroDaSdc({ base, atual, contagens }: { base: string; atual: SituacaoParaASdc | undefined; contagens: Record<SituacaoParaASdc, number> }) {
+/** O endereço da tela com o recorte (Eventos ou Masterclass) e, se houver, a situação. */
+export function enderecoDaSdc(base: string, recorte: "EVENTOS" | "MASTERCLASS", situacao?: SituacaoParaASdc): string {
+  const parametros = new URLSearchParams();
+  if (recorte === "MASTERCLASS") parametros.set("recorte", "masterclass");
+  if (situacao) parametros.set("situacao", situacao);
+  const texto = parametros.toString();
+  return texto ? `${base}?${texto}` : base;
+}
+
+export function FiltroDaSdc({ base, recorte, atual, contagens }: { base: string; recorte: "EVENTOS" | "MASTERCLASS"; atual: SituacaoParaASdc | undefined; contagens: Record<SituacaoParaASdc, number> }) {
   const opcoes: { valor: SituacaoParaASdc | undefined; rotulo: string }[] = [...ORDEM.map((valor) => ({ valor, rotulo: `${ROTULOS[valor]} (${contagens[valor]})` })), { valor: undefined, rotulo: "Todos" }];
   return (
     <nav aria-label="Filtrar por situação" className="mb-5 overflow-x-auto">
@@ -50,7 +59,7 @@ export function FiltroDaSdc({ base, atual, contagens }: { base: string; atual: S
           return (
             <li key={opcao.rotulo}>
               <Link
-                href={opcao.valor ? `${base}?situacao=${opcao.valor}` : base}
+                href={enderecoDaSdc(base, recorte, opcao.valor)}
                 aria-current={ativo ? "true" : undefined}
                 className={`inline-flex h-9 items-center whitespace-nowrap rounded-full border px-3 text-[13px] font-medium ${
                   ativo ? "border-transparent bg-[var(--ds-tint-soft)] text-[var(--ds-tint-text)]" : "border-[var(--ds-separator)] text-[var(--ds-label-2)] hover:text-[var(--ds-label)]"
@@ -66,9 +75,12 @@ export function FiltroDaSdc({ base, atual, contagens }: { base: string; atual: S
   );
 }
 
+/** "Centro de Eventos — Porto Alegre (RS)": onde o evento (ou a palestra) acontece. */
+export const ondeE = (evento: EventoParaASdc) => [evento.local, evento.cidade && evento.uf ? `${evento.cidade} (${evento.uf})` : null].filter(Boolean).join(" — ");
+
 /** "16 a 18/12 · IPR_POA_12 · Imersão · Centro de Eventos — Porto Alegre (RS)". */
 export function TituloDoEvento({ evento }: { evento: EventoParaASdc }) {
-  const onde = [evento.local, evento.cidade && evento.uf ? `${evento.cidade} (${evento.uf})` : null].filter(Boolean).join(" — ");
+  const onde = ondeE(evento);
   return (
     <h3 className="mb-2 text-[15px] font-semibold">
       {periodo(evento.dataInicio, evento.dataFim)} · {evento.codigo ?? evento.nome}

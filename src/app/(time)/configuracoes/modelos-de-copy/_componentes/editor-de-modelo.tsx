@@ -120,7 +120,7 @@ export function EditorDoModelo({
           {modelo && <input type="hidden" name="modeloId" value={modelo.id} />}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <CampoDeTexto nome="nome" rotulo="Nome" obrigatorio defaultValue={modelo?.nome ?? ""} erros={campoComErro("nome")} />
-            <CampoDeSelecao nome="tipo" rotulo="Tipo" obrigatorio opcoes={tipos} defaultValue={modelo?.tipo ?? "ESCALACAO"} erros={campoComErro("tipo")} />
+            <CampoDeSelecao nome="tipo" rotulo="Tipo" obrigatorio opcoes={tipos} valorInicial={modelo?.tipo ?? "ESCALACAO"} erros={campoComErro("tipo")} />
           </div>
 
           <div>
@@ -225,8 +225,9 @@ export function EditorDoModelo({
             nome="exemplo"
             rotulo="Ver com"
             className="mb-3"
-            value={exemplo}
-            onChange={(evento) => setExemplo(evento.target.value)}
+            busca
+            valor={exemplo}
+            aoMudar={setExemplo}
             opcoes={exemplos.map((item) => ({ valor: `${item.eventoId}:${item.convocacaoId}`, rotulo: `${item.nome} · ${item.evento}` }))}
           />
         ) : (

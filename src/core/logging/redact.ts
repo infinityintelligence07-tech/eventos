@@ -11,6 +11,8 @@ const SENSITIVE_FIELDS = new Set([
   "email",
   "endereco",
   "lat",
+  // Leva o telefone da pessoa dentro do endereço (wa.me/<número>).
+  "linkDoWhatsApp",
   "lng",
   "motivo",
   "nomeCompleto",

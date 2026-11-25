@@ -158,11 +158,15 @@ export function textoDoPedidoDeVoo(pedido: {
   passageiro: string;
   trechos: TrechoDesejado[];
   observacaoTime: string | null;
+  /** Só na turnê de Masterclass: onde é a primeira palestra (a ida chega) e a última (a volta sai). */
+  turne?: { primeiraPalestra: string; ultimaPalestra: string } | null;
 }): string {
   const ordenados = [...pedido.trechos].sort((a, b) => (a.sentido === b.sentido ? 0 : a.sentido === "IDA" ? -1 : 1));
   const linhas = [
     `Pedido ${pedido.referencia} — passagem aérea`,
-    `Evento: ${pedido.eventoCodigo ?? pedido.eventoNome}`,
+    ...(pedido.turne
+      ? [`Masterclass (turnê) — primeira palestra: ${pedido.turne.primeiraPalestra}`, `Última palestra: ${pedido.turne.ultimaPalestra}`]
+      : [`Evento: ${pedido.eventoCodigo ?? pedido.eventoNome}`]),
     `Passageiro: ${pedido.passageiro}`,
     ...ordenados.map(
       (trecho) =>

@@ -5,6 +5,7 @@ import {
   criarRepositorioSolicitacoes,
   type DeslocamentoGravado,
   type DetalheDaSolicitacao,
+  mensagemDeCustoAprovado,
   type NivelDeExcecao,
   type NumerosDaFila,
   ordenarParaAuditoria,
@@ -14,6 +15,7 @@ import {
   type SolicitacaoDaFila,
   type StatusAuditoria,
 } from "@/modules/custos";
+import { linkDoWhatsApp } from "@/modules/pessoas";
 
 import { diaEmSaoPaulo } from "./comum";
 
@@ -69,15 +71,38 @@ export async function carregarFilaDeAuditoria(filtro: FiltroDeCustos, agora: Dat
   };
 }
 
+/** Mensagem de "custo aprovado" (doc 08 §11.2). O sistema não envia nem registra envio: o time copia ou abre a conversa. */
+export type MensagemDeAprovado = {
+  texto: string;
+  /**
+   * https://wa.me/… da pessoa, com o texto já escrito. Nulo = sem telefone válido no cadastro, ou quem abriu não recebe
+   * o link. O telefone só existe aqui dentro: não vai para log, histórico nem para outro campo da tela.
+   */
+  linkDoWhatsApp: string | null;
+  /** O telefone foi procurado e o cadastro não tem um válido (a tela avisa para usar o contato de sempre). */
+  semTelefone: boolean;
+};
+
 export type SolicitacaoCarregada = DetalheDaSolicitacao & {
   alertasPorDeslocamento: AlertaDeCusto[][];
   /** Vizinhas na fila "Para auditar" (Anterior / Próxima). */
   anterior: string | null;
   proxima: string | null;
+  /** Só nas aprovadas. */
+  mensagemDeAprovado: MensagemDeAprovado | null;
+};
+
+export type OpcoesDaSolicitacao = {
+  /** Quem abriu audita custos (custos.auditar, conferido pela página): só então o telefone da pessoa é lido para o link. */
+  comLinkDoWhatsApp?: boolean;
 };
 
 /** Painel do detalhe (?protocolo=STF-…). Nulo = protocolo inexistente. */
-export async function carregarSolicitacao(protocolo: string, filtro: FiltroDeCustos = {}): Promise<SolicitacaoCarregada | null> {
+export async function carregarSolicitacao(
+  protocolo: string,
+  filtro: FiltroDeCustos = {},
+  { comLinkDoWhatsApp = false }: OpcoesDaSolicitacao = {},
+): Promise<SolicitacaoCarregada | null> {
   if (!/^STF-\d{6}-\d{4,}$/.test(protocolo)) return null;
   const repo = criarRepositorioSolicitacoes(await bancoParaLeitura());
   const detalhe = await repo.detalhe(protocolo);
@@ -90,5 +115,22 @@ export async function carregarSolicitacao(protocolo: string, filtro: FiltroDeCus
     alertasPorDeslocamento: alertasDosDeslocamentos(detalhe.deslocamentos, regras, detalhe.evento),
     anterior: posicao > 0 ? fila[posicao - 1]!.protocolo : null,
     proxima: posicao >= 0 ? (fila[posicao + 1]?.protocolo ?? null) : (fila[0]?.protocolo ?? null),
+    mensagemDeAprovado: detalhe.auditoria === "APROVADO" ? await mensagemDeAprovado(repo, detalhe, comLinkDoWhatsApp) : null,
   };
+}
+
+async function mensagemDeAprovado(
+  repo: { telefoneDaPessoa(pessoaId: string): Promise<string | null> },
+  detalhe: DetalheDaSolicitacao,
+  comLinkDoWhatsApp: boolean,
+): Promise<MensagemDeAprovado> {
+  const texto = mensagemDeCustoAprovado({
+    nome: detalhe.pessoaNome,
+    evento: detalhe.evento.codigo ?? detalhe.evento.nome,
+    protocolo: detalhe.protocolo,
+    totalCentavos: detalhe.totalCentavos,
+  });
+  if (!comLinkDoWhatsApp) return { texto, linkDoWhatsApp: null, semTelefone: false };
+  const link = linkDoWhatsApp(await repo.telefoneDaPessoa(detalhe.pessoaId), texto);
+  return { texto, linkDoWhatsApp: link, semTelefone: link === null };
 }

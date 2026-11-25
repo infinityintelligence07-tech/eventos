@@ -477,6 +477,46 @@ casa a convocação com o quarto pela pessoa e pelo evento, e os colegas de quar
 `HOSPEDE_ACRESCENTADO` / `HOSPEDE_RETIRADO` / `HOSPEDE_MANTIDO_NO_QUARTO` são do evento (entidade `EVENTO`, com a
 pessoa em `em_nome_de_pessoa_id`); `HOTEL_MARCADO` / `HOTEL_DESMARCADO` são do pedido de voo.
 
+### 4.7 Masterclass (turnê) e data real da solicitação e da compra (25/11/2026, migration 0019)
+
+A planilha do time tem abas próprias para Masterclass (VOOS MASTERCLASS e HOSPEDAGEM MASTERCLASS). Masterclass é evento do
+tipo `MC` (uma palestra); o que muda é o voo.
+
+**Turnê: o menor modelo.** Na Masterclass a pessoa vai para a **primeira** palestra e volta da **última**, passando por
+várias no meio. O pedido de voo **continua sendo de um evento** — a primeira palestra (`pedido_sdc.evento_id`, onde a ida
+chega) — e ganha um **evento da volta opcional** (`pedido_sdc.evento_volta_id`, a última palestra, de onde a volta sai).
+Uma palestra só (ou a mesma na ida e na volta) = sem evento da volta. As palestras do meio não entram no pedido. Tudo o
+mais (trechos, situação, compra, aprovação, "também precisa de hotel", que vale para a primeira palestra) é igual ao voo
+de evento. Função pura `validarTurne` (`domain/turne.ts`): com volta por outra palestra, as duas pontas são Masterclass,
+a última não vem antes da primeira e não está cancelada. O banco reforça: evento da volta só em pedido de voo e
+diferente do evento do pedido (`pedido_sdc_evento_volta_check`). `alterarPedido` não troca a última palestra (para
+isso, cancela-se e pede-se de novo).
+
+- **Recorte "Eventos | Masterclass"** (`recorteDaLogistica`, `?recorte=masterclass`; `EventoDaLogistica.masterclass`):
+  Voos, Hospedagem e as duas telas da SDC separam os dois lados, como as abas da planilha. Com um evento escolhido,
+  vale o recorte dele. Em Voos, o recorte de Masterclass mostra uma tabela por mês (pela data da primeira palestra) com
+  "Local 1ª palestra" e "Local última palestra" no lugar da escala/evento e a coluna "Pagamento".
+- **Período:** na turnê vale a data da **última** palestra: o pedido fica nas listas (do time e da SDC) e aceita a
+  compra da SDC até ela passar. Filtrando por evento, a turnê aparece na primeira e na última palestra.
+- **Aviso de voos por evento:** continua sem as Masterclasses (nada mudou).
+- **Hospedagem de Masterclass:** já funcionava com o que existe desde a 0017 e continua sem modelo próprio — uma
+  hospedagem por palestra (datas de entrada e saída), quem dorme entra pela lista de hotel sem escala ("Acrescentar
+  pessoa" ou "Também precisa de hotel" no voo), pedido à SDC e retorno com hotel, valor e forma de pagamento. O
+  palestrante precisa estar no cadastro de staff (a mesma regra do voo). A **"pré-reserva"** da planilha é a situação
+  `PEDIDO` (pedido feito à SDC, ainda sem emissão): não há situação nova.
+
+**Data real.** "Solicitação" e "Compra" eram sempre a hora do lançamento. Agora cada pedido tem `data_solicitacao`
+(dia em que foi feito à SDC) e `data_compra` (dia em que ela comprou), informados por quem lança, para compras antigas
+(da planilha) e compras feitas fora do sistema. `dataRealDoLancamento` (pura): sem data informada vale hoje (fuso de São
+Paulo); **não aceita data futura**; a **compra não pode ser antes da solicitação** (também `CHECK` no banco). O time
+informa as duas; a SDC, só a da compra. `solicitado_em`, `emitido_em` e o `registro_acao` continuam com a hora real do
+lançamento (a data informada vai em `dados.dataSolicitacao` / `dados.dataCompra`). Corrigir a compra regrava a data;
+pedido `ALTERADO` guarda a data da compra anterior (como o `emitido_em`), e a SDC a vê vazia.
+
+**Forma de pagamento também no voo** (a planilha anota "Faturado SDC" por voo): `pedido_sdc.forma_pagamento` passa a
+ser gravada no retorno de voo (opcional; obrigatória só na hospedagem), pelo time e pela SDC, com a mesma validação de
+texto (uma linha, sem link).
+
 ---
 
 ## 5. Mudanças de banco (migration 0004, só no banco local)
@@ -562,7 +602,10 @@ hotel, que a fatura da SDC vai citar). Formato a confirmar (§11).
 | `cancelado_em` | timestamptz | `CHECK ((situacao = 'CANCELADO') = (cancelado_em IS NOT NULL))` |
 | `cancelado_por` | uuid → `core.usuario` ON DELETE SET NULL | |
 | `motivo_cancelamento` | text | |
-| `forma_pagamento` | text | 0015. Informada no retorno da SDC (ex.: "Faturado SDC"); `CHECK` de 1 a 60 caracteres. Hoje só a hospedagem preenche |
+| `forma_pagamento` | text | 0015. Informada no retorno da SDC (ex.: "Faturado SDC"); `CHECK` de 1 a 60 caracteres. Obrigatória na hospedagem; no voo, opcional desde a 0019 |
+| `evento_volta_id` | uuid → `evento` ON DELETE RESTRICT | 0019. Só no voo de Masterclass em turnê: a última palestra (a volta sai de lá). `CHECK`: nulo, ou pedido de voo e diferente de `evento_id`. Índice |
+| `data_solicitacao` | date not null default hoje (São Paulo) | 0019. Dia em que o pedido foi feito à SDC, informado por quem lança |
+| `data_compra` | date | 0019. Dia em que a SDC comprou. `CHECK`: nula ou `>= data_solicitacao` |
 | `retorno_registrado_pela_sdc` | uuid → `acesso_sdc` ON DELETE RESTRICT | 0016. Quem da SDC lançou a compra; vazio quando foi o time (`retorno_registrado_por`). `CHECK pedido_sdc_retorno_autor_check`: nunca os dois preenchidos |
 | `aprovado_em` | timestamptz | 0016. Preenchido = pagamento aprovado pelo time. `CHECK`: só com `situacao = 'EMITIDO'` e `valor_centavos` preenchido |
 | `aprovado_por` | uuid → `core.usuario` ON DELETE SET NULL | 0016 |
@@ -792,6 +835,7 @@ Server actions (Zod):
 | `alterarPedido` | `{ pedidoId, trechos?, observacaoTime?, atualizadoEm }` (EMITIDO → ALTERADO) |
 | `cancelarPedido` | `{ pedidoId, motivo: 3..500 }` |
 | `registrarRetornoDaSdc` | voo: `{ pedidoId, valorCentavos ≥ 0, observacaoSdc?, trechos: [{ sentido, companhia, numeroVoo, localizador, partidaEm, chegadaEm, cartaoEmbarqueUrl? }] }`; hotel: `{ pedidoId, valorCentavos, numeroReserva }` |
+| (desde a 0019) | `registrarPedidoDeVoo` aceita `eventoVoltaId?` (última palestra da turnê) e `dataSolicitacao?`; `registrarPedidoDeHospedagem` aceita `dataSolicitacao?`; os retornos de voo e de hospedagem aceitam `dataCompra?`, e o de voo, `formaPagamento?`. Os schemas da SDC têm `dataCompra?` e `formaPagamento` (sem `dataSolicitacao` nem `eventoVoltaId`). |
 | `criarHospedagem` / `alterarHospedagem` | `{ eventoId, localId, checkIn, checkOut, observacao? }` |
 | `registrarPedidoDeHospedagem` | `{ hospedagemId, observacaoTime? }` (cria `pedido_sdc` tipo HOSPEDAGEM e liga) |
 | `adicionarQuarto` / `removerQuarto` | `{ hospedagemId, nome, capacidade: 1..4, sexo?, valorDiariaCentavos? }` / `{ quartoId }` (só vazio) |
@@ -809,7 +853,7 @@ são `aprovarPagamentoAcao` (`{ pedidoId, valorCentavos, atualizadoEm, confirmo:
 | | |
 |---|---|
 | Rotas | `custos/page.tsx` (fila de auditoria, filtros evento/situação/alerta; painel lateral `?protocolo=STF-…`), `custos/nova/page.tsx` (registrar em nome do staff, `?evento=&pessoa=`), `eventos/[eventoId]/custos` (o mesmo, filtrado) |
-| Lê | solicitações com deslocamentos, itens, alertas, regras de custo vigentes, convocações do evento, veículo da pessoa |
+| Lê | solicitações com deslocamentos, itens, alertas, regras de custo vigentes, convocações do evento, veículo da pessoa; `core.pessoa.telefone` só para o link do WhatsApp da mensagem de aprovado (doc 08 §11.2) |
 | Escreve | `solicitacao_custo` (+ `registrado_por`), `deslocamento`, `custo_item`, `registro_acao` |
 | Módulo | `custos` (novo) |
 | Fluxos | `carregarFilaDeAuditoria(filtros)`, `carregarSolicitacao(protocolo)`, `prepararSolicitacao(eventoId, pessoaId)` (pré-cálculo pela regra), `registrarSolicitacao`, `corrigirSolicitacao`, `aprovarSolicitacao`, `reprovarSolicitacao`, `reabrirAuditoria` |
@@ -850,7 +894,79 @@ Cada sub-tela é do módulo dono do dado (e da frente dona desse módulo). O `la
 | Regras de custo | `custos` | `regra_custo` | `listarRegrasDeCusto`; `criarVigenciaDeRegra` ← `{ regraId, valorCentavos?, parametros?, vigenteDesde: date }` (nova linha; nunca edita a antiga, porque solicitações apontam para ela); `desativarRegra` ← `{ regraId }` |
 | Regras de vagas | `escala` | `tipo_evento.regra_vagas` | `listarRegrasDeVagas`; `salvarRegraDeVagas` ← `{ tipoEventoId, funcoes: [{ funcao, formula? \| fixo? \| digitado? }] }` (validado por `compilarRegraVagas`; prévia com público de exemplo); `recalcularVagasDoTipo` ← `{ tipoEventoId }` (chama `gerarVagasDoEvento` nos eventos futuros em `SEM_ESCALA`/`RASCUNHO`/`DEVOLVIDA`; linhas confirmadas não mudam) |
 | Modelos de copy | `comunicacao` | `modelo_copy` | `listarModelos`; `salvarModelo` ← `{ modeloId?, tipo: enum do CHECK, nome, corpo }` (recusa se `validarModelo` devolver erro); `ativarModelo`/`desativarModelo` ← `{ modeloId }`. Mudar o texto não deixa copy enviada "desatualizada" (o hash é dos dados) |
-| Locais e hotéis | `eventos` | `local` | `listarLocais`; `salvarLocal` ← `{ localId?, nome, tipo: 'EVENTO'\|'HOTEL'\|'APARTAMENTO', endereço…, cidade, uf: /^[A-Z]{2}$/, lat?, lng?, capacidade? }`; `arquivarLocal` ← `{ localId }` (`deleted_at`) |
+| Locais e hotéis | `eventos` | `local` | `listarLocais` ← `{ tipo?, origem?, busca? }`; `salvarLocal` ← `{ localId?, nome, tipo: 'EVENTO'\|'HOTEL'\|'APARTAMENTO', endereço…, cidade, uf: /^[A-Z]{2}$/, lat?, lng?, capacidade? }` (só cadastro do Eventos); `ajustarLocalDoIamControl` ← `{ localId, tipo: 'EVENTO'\|'HOTEL', complemento?, lat?, lng?, capacidade? }` (só local vindo do IAM Control); `arquivarLocal` ← `{ localId }` (`deleted_at`) |
+
+#### 6.8.1 Locais e hotéis vindos do IAM Control (25/11/2026, migration 0018)
+
+Pedido do Vitor: "locais e hotéis devem pegar de IAM Control". A base do cadastro passa a vir de lá; o time só cadastra
+à mão o que não existe lá (hotéis que a SDC reserva fora do local do evento, apartamentos da IAM).
+
+**O que o IAM Control tem e o que ele expõe** (IAM-Control-Backend, `origin/main` em 25/11/2026):
+
+- Uma entidade só, `endereco_eventos` (`src/modules/config/entities/enderecoEventos.entity.ts`): `id`, `id_polo`,
+  `local_evento` (o nome: "P7 Eventos", "Hotel Sibara"), `logradouro`, `numero`, `bairro`, `cidade`, `estado`, `cep`,
+  `capacidade` (lugares da sala). Lá não existe "hotel de hospedagem" separado de "local do evento": o que a tela
+  chama de hotel é o local onde a turma acontece. Não há complemento, tipo nem latitude/longitude.
+- A turma aponta para o local por `turmas.id_endereco_evento` (opcional) e tem um endereço próprio digitado.
+- A rota de cadastro, `GET /api/endereco-eventos` (`src/modules/api/endereco-eventos`), exige login de usuário
+  (`JwtAuthGuard` + permissão `enderecosEventos.view`). **O token do Eventos não a alcança.**
+- O token do Eventos (`IntegracaoEventosTokenGuard`, env `EVENTOS_WEBHOOK_TOKENS`) só abre duas rotas, em
+  `src/modules/api/integracao-eventos`: `GET /api/webhooks/eventos/turmas` e `GET /api/webhooks/eventos/colaboradores`.
+- Na turma, o local chega **embutido**, em `local: { nome, logradouro, numero, complemento, bairro, cidade, estado, cep }`
+  (`IntegracaoEventosService.mapTurma`): do `endereco_eventos` quando a turma tem um, senão do endereço digitado na
+  turma (com `nome: null`). **Não vêm o `id` nem a `capacidade` do local**; vem a `capacidade` da turma, que o IAM
+  Control preenche com a do local quando o hotel é escolhido na agenda.
+
+**Desenho adotado** (não há rota de locais, então o Eventos aproveita o que já chega na turma):
+
+- `eventos.local` ganha `origem` (`EVENTOS` | `IAM_CONTROL`) e `iam_control_endereco_id` (o `endereco_eventos.id`;
+  fica vazio até o IAM Control mandar o id na turma, e o cliente já aceita `local.id` e `local.capacidade` opcionais).
+- **Sincronização** (o mesmo job das turmas, `src/jobs/sincronizar-turmas.ts`): antes de gravar o evento, cada local
+  da rodada é gravado **uma vez** por `salvarLocalDoIamControl` (`sincronizacao-repository.ts`). A identidade é o id do
+  IAM Control quando vier; hoje é a chave nome + cidade + UF comparada sem maiúsculas, acentos e espaços repetidos
+  (`chaveDoLocal`, a mesma regra do hotel informado pela SDC). O resumo da rodada conta `locais: { criados,
+  vinculados, atualizados }`.
+- **Ligar em vez de duplicar** (`correspondentesDoIamControl`): se já existe cadastro ativo com a mesma chave, de tipo
+  local de evento **ou hotel**, ele passa a `IAM_CONTROL` (histórico `LOCAL_VINCULADO`, origem `SISTEMA`, com o de/para)
+  e recebe nome e endereço de lá. O evento usa o local de evento, se houver; senão, o hotel. Só nasce cadastro novo
+  (tipo local de evento) quando nenhum corresponde. Apartamento da IAM nunca corresponde.
+- **De quem é cada campo:** do IAM Control: nome, logradouro, número, bairro, cidade, UF e CEP
+  (`CAMPOS_DO_IAM_CONTROL`). Do Eventos, editáveis na tela: **tipo** (local de evento ou hotel), **complemento**,
+  **capacidade** e **latitude/longitude**. A capacidade é sugerida uma vez (lugares da turma, só em local de evento e
+  só enquanto está vazia); depois é do time.
+- **Tipo é do Eventos:** o local chega como "local de evento". Para hospedar o staff nele, o time muda o tipo para
+  Hotel (um cadastro só serve ao evento e à hospedagem). No "Registrar reserva" feito pelo time, informar um hotel que
+  já veio do IAM Control como local de evento usa esse cadastro e o marca como hotel. Com hospedagem, o tipo não muda.
+- **Endereço digitado na turma** (sem local cadastrado lá): vira local `IAM_CONTROL` com o nome montado pelo Eventos
+  ("Rua X, Cidade" ou "Local a definir — Cidade"); só casa com local de evento e não é regravado a cada rodada.
+- **Nunca apaga:** a sincronização não apaga nem arquiva local. O que deixa de vir nas turmas continua no cadastro
+  (com os eventos antigos e as hospedagens); o time arquiva o que não está em uso. Local arquivado não é reaproveitado.
+- **SDC** (docs/09 §15.4): nada muda no que ela vê e faz. O hotel que ela informa é reaproveitado pelo nome ou nasce
+  como cadastro do Eventos; se corresponder a um local do IAM Control, a rodada seguinte o liga, e a partir daí ela
+  não o corrige mais (corrigir a reserva com outro nome cria outro hotel).
+- **Banco:** o papel do app não tem `UPDATE` em `origem` nem em `iam_control_endereco_id` (privilégio por coluna da
+  0005): só a sincronização (`app_eventos_worker`) liga um cadastro ao IAM Control.
+
+**Migration 0018 sobre os dados existentes:** acrescenta as duas colunas (`origem` nasce `EVENTOS` em toda linha), os
+dois `CHECK`s e um índice. Marca como `IAM_CONTROL` os locais (de evento ou hotel) apontados por evento que veio de
+turma, que é onde a sincronização já os punha. Não apaga linha, não muda nome, tipo, endereço nem `atualizado_em`. Os
+hotéis cadastrados à mão com o mesmo nome de um local do IAM Control são ligados pela primeira sincronização depois do
+deploy. O `.down.sql` só remove as colunas.
+
+**Limites de hoje e o que pedir ao time do IAM Control:**
+
+1. **`id` e `capacidade` do local dentro da turma** (`mapTurma`, em `integracao-eventos.service.ts`):
+   `local.id = endereco.id` e `local.capacidade = endereco.capacidade` (nulos quando a turma não tem
+   `id_endereco_evento`). Sem o id, local renomeado no IAM Control vira cadastro novo no Eventos (o antigo fica, sem
+   uso, e o que o time preencheu nele não acompanha) e dois locais de lá com o mesmo nome na mesma cidade viram um só.
+2. **Rota de locais para o token do Eventos**: `GET /api/webhooks/eventos/locais`, com o mesmo guard das turmas,
+   devolvendo todos os `endereco_eventos` (inclusive excluídos): `{ total, locais: [{ id, nome, logradouro, numero,
+   bairro, cidade, estado, cep, capacidade, polo: { id, sigla } | null, atualizado_em, excluido_em }] }`. Sem ela, o
+   Eventos só conhece os locais usados por turmas presenciais que viram evento e que terminam de 30 dias atrás em
+   diante, e não fica sabendo de local excluído lá.
+
+Nada disso exige mudança de banco no Eventos: o cliente e a sincronização já tratam o id e a capacidade quando vierem
+(testado com dublê). A rota de locais, quando existir, pede um método novo no cliente e um passo a mais no job.
 
 ### 6.9 Início — `/inicio`
 
@@ -1111,6 +1227,7 @@ Onde a doc 08 diverge, vale o que está aqui.
 | Voos e hotel pela SDC (24/11/2026, migration 0015) | "Nós solicitamos e eles compram." Voo: pedido por evento + pessoa do staff, sem depender da escala; mais de um pedido ativo por pessoa no evento, com confirmação; tela agrupada por mês e evento como a planilha; aviso por evento, com "não precisa de voo". Hospedagem: o time monta os quartos sem hotel, pede à SDC e registra no retorno o hotel, a reserva, o valor e a forma de pagamento; apartamento da IAM continua sem pedido; "sem hospedagem" por evento. Datas de solicitação e de compra são as do registro no sistema. Sem login nem perfil para a SDC (não decidido). |
 | Acesso da SDC e aprovação do pagamento (25/11/2026, migration 0016) | "Time solicita, SDC coloca o valor e nosso time aprova falando que usamos." A SDC entra pelo Google com um e-mail da lista mantida pela líder (nada no cadastro do GH), vê só pedidos de voo e de hospedagem e registra tudo da compra. O time aprova **depois** da compra; a aprovação cai se a compra mudar. Detalhes e riscos em docs/09 §15. |
 | Hotel sem depender da escala (25/11/2026, migration 0017) | "Precisamos que os hotéis também possam ser pedidos juntos com os voos, não apenas na escala." Quem precisa de hotel é a união de três origens (escala, "Também precisa de hotel" no pedido de voo, acrescentada na Hospedagem); o ocupante do quarto passou a ser a pessoa no evento, com a convocação opcional. Regras de conflito e consumidores em §4.6. |
+| Masterclass e data real (25/11/2026, migration 0019) | O voo de Masterclass é uma turnê: o pedido é da primeira palestra e guarda a última como "evento da volta". Voos e Hospedagem (e a SDC) ganham o recorte Eventos \| Masterclass. A hospedagem de Masterclass usa o que já existia; "pré-reserva" = pedido feito e não emitido. Solicitação e compra têm data real, informada por quem lança (não futura; compra não antes da solicitação); o histórico guarda a hora do lançamento. Forma de pagamento também no voo. Detalhes em §4.7. |
 | Formulário de custo do staff (24/11/2026) | `/solicitar-custo` substitui o Google Forms: aberto do primeiro dia do evento até 5 dias depois do último (inclusive, fuso de São Paulo); fora do prazo, só o time registra. A pessoa informa só deslocamento e despesas; remuneração e alimentação são fixas e entram sozinhas pela regra (quantidade 1, como a tela do time sugere). Tipo de combustível e data do evento ficam de fora. Correção pelo staff só da reprovada, até 5 dias depois da reprovação. Detalhe na doc 08 §11.4. |
 | Comprovante do custo (24/11/2026) | Anexo no formulário do staff: até 3 arquivos de 8 MB (JPEG, PNG, WebP ou PDF, conferidos pelos bytes), obrigatório quando há deslocamento ou despesa. Storage do Supabase, bucket privado `eventos-comprovantes`, pelo protocolo S3 com chave de acesso S3 (nunca a `service_role`); leitura por rota autenticada que redireciona para URL pré-assinada de 5 minutos. Sem as variáveis, o anexo fica desligado e o formulário funciona sem o campo. |
 | Custo aprovado (24/11/2026) | Mensagem pronta para copiar e mandar no WhatsApp (primeiro nome, evento, protocolo, valor). O sistema não envia. **Construção futura:** envio automático pelo WhatsApp. |
@@ -1129,7 +1246,7 @@ Onde a doc 08 diverge, vale o que está aqui.
 | Conflito de agenda | Recusa incluir a pessoa (§4.2). Validar com a Patricia se há casos legítimos (ex.: Masterclass e evento no mesmo dia). |
 | "Desfazer" ao aprovar | Não nesta rodada; o caminho é reabrir e aprovar de novo. |
 | Trocar o tipo de um modelo ativo | Recusado ("desative antes"). |
-| Local com nome repetido | Recusado no mesmo tipo, cidade e UF (sem diferenciar maiúsculas), a chave que a sincronização usa. |
+| Local com nome repetido | Recusado no mesmo tipo, cidade e UF (sem diferenciar maiúsculas). Desde a 0018, também é recusado cadastrar à mão (como local de evento ou hotel) um lugar que já veio do IAM Control, comparando sem maiúsculas, acentos e espaços repetidos (§6.8.1). |
 | Masterclasses nas listas | Escalas abre escondendo Masterclasses; o Início agrupa ("+N Masterclasses"). |
 | Alerta de custo por km | Texto "acima do limite de R$ 0,95" (sem arredondamento enganoso); o modal de aprovar com crítico lista todos os alertas. |
 | Lugares do veículo | `pessoa_veiculo.lugares` = lugares para passageiros (sem o motorista). |
