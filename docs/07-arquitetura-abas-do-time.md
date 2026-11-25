@@ -809,7 +809,7 @@ são `aprovarPagamentoAcao` (`{ pedidoId, valorCentavos, atualizadoEm, confirmo:
 | | |
 |---|---|
 | Rotas | `custos/page.tsx` (fila de auditoria, filtros evento/situação/alerta; painel lateral `?protocolo=STF-…`), `custos/nova/page.tsx` (registrar em nome do staff, `?evento=&pessoa=`), `eventos/[eventoId]/custos` (o mesmo, filtrado) |
-| Lê | solicitações com deslocamentos, itens, alertas, regras de custo vigentes, convocações do evento, veículo da pessoa |
+| Lê | solicitações com deslocamentos, itens, alertas, regras de custo vigentes, convocações do evento, veículo da pessoa; `core.pessoa.telefone` só para o link do WhatsApp da mensagem de aprovado (doc 08 §11.2) |
 | Escreve | `solicitacao_custo` (+ `registrado_por`), `deslocamento`, `custo_item`, `registro_acao` |
 | Módulo | `custos` (novo) |
 | Fluxos | `carregarFilaDeAuditoria(filtros)`, `carregarSolicitacao(protocolo)`, `prepararSolicitacao(eventoId, pessoaId)` (pré-cálculo pela regra), `registrarSolicitacao`, `corrigirSolicitacao`, `aprovarSolicitacao`, `reprovarSolicitacao`, `reabrirAuditoria` |

@@ -1,9 +1,9 @@
-import { ChevronLeft, ChevronRight, CircleCheck, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, CircleCheck, MessageCircle, Plus } from "lucide-react";
 import Link from "next/link";
 import { z } from "zod";
 
-import type { FilaCarregada, LinhaDaFila, SolicitacaoCarregada } from "@/fluxos/custos";
-import { DIAS_DE_PRAZO_DO_FORMULARIO, mensagemDeCustoAprovado, type NivelDeExcecao, primeiroNome, rotuloDaCategoriaDoItem, type StatusAuditoria, tamanhoLegivel, textoDoFinanceiro } from "@/modules/custos";
+import type { FilaCarregada, LinhaDaFila, MensagemDeAprovado as TextoDeAprovado, SolicitacaoCarregada } from "@/fluxos/custos";
+import { DIAS_DE_PRAZO_DO_FORMULARIO, type NivelDeExcecao, primeiroNome, rotuloDaCategoriaDoItem, type StatusAuditoria, tamanhoLegivel, textoDoFinanceiro } from "@/modules/custos";
 import { BotaoCopiar, PainelPelaUrl } from "@/app/(time)/_componentes/ui";
 
 import { Aviso, FaixaSomenteLeitura } from "../../_componentes/ui/aviso";
@@ -86,30 +86,46 @@ function LinhaDaSolicitacao({ linha, base, parametros }: { linha: LinhaDaFila; b
 }
 
 /**
- * Mensagem de "custo aprovado" pronta para o WhatsApp (doc 08 §11.2). Só copia: o sistema não envia nada, e o envio
- * automático fica para depois.
+ * Mensagem de "custo aprovado" pronta para o WhatsApp (doc 08 §11.2). O sistema não envia nada: o time copia o texto ou
+ * abre a conversa com a pessoa já com ele escrito, e aperta enviar lá. O envio automático fica para depois.
+ * O telefone da pessoa vem do servidor já dentro do `href` e só ali: não é mostrado na tela.
  */
-function MensagemDeAprovado({ solicitacao }: { solicitacao: SolicitacaoCarregada }) {
-  const mensagem = mensagemDeCustoAprovado({
-    nome: solicitacao.pessoaNome,
-    evento: solicitacao.evento.codigo ?? solicitacao.evento.nome,
-    protocolo: solicitacao.protocolo,
-    totalCentavos: solicitacao.totalCentavos,
-  });
+function MensagemDeAprovado({ pessoaNome, mensagem }: { pessoaNome: string; mensagem: TextoDeAprovado }) {
+  const nome = primeiroNome(pessoaNome);
   return (
     <section aria-labelledby="titulo-mensagem-de-aprovado" className="rounded-[var(--ds-radius-md)] border border-[var(--ds-separator)] p-4">
       <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-        <div>
+        <div className="min-w-0">
           <h3 id="titulo-mensagem-de-aprovado" className="text-[15px] font-semibold">
             Mensagem de aprovado
           </h3>
-          <p className="text-[12px] text-[var(--ds-label-2)]">Copie e mande para a pessoa pelo WhatsApp. O sistema não envia sozinho.</p>
+          <p className="text-[12px] text-[var(--ds-label-2)]">
+            {mensagem.linkDoWhatsApp
+              ? "O botão abre a conversa com a mensagem já escrita; quem aperta enviar é você. O sistema não envia sozinho e não sabe se a mensagem foi enviada."
+              : "Copie e mande para a pessoa pelo WhatsApp. O sistema não envia sozinho e não sabe se a mensagem foi enviada."}
+          </p>
         </div>
-        <BotaoCopiar texto={mensagem} mensagem={`Mensagem copiada. Mande para ${primeiroNome(solicitacao.pessoaNome)} pelo WhatsApp.`} tamanho="pequeno">
-          Copiar mensagem
-        </BotaoCopiar>
+        <div className="flex flex-wrap items-center gap-2">
+          {mensagem.linkDoWhatsApp && (
+            <BotaoLink
+              href={mensagem.linkDoWhatsApp}
+              target="_blank"
+              rel="noopener noreferrer"
+              prefetch={false}
+              tamanho="pequeno"
+              icone={<MessageCircle size={16} aria-hidden />}
+              aria-label={`Abrir no WhatsApp a conversa com ${nome || "a pessoa"} (abre em nova aba)`}
+            >
+              Abrir no WhatsApp
+            </BotaoLink>
+          )}
+          <BotaoCopiar texto={mensagem.texto} mensagem={`Mensagem copiada. Mande para ${nome} pelo WhatsApp.`} tamanho="pequeno">
+            Copiar mensagem
+          </BotaoCopiar>
+        </div>
       </div>
-      <p className="sem-caixa-alta whitespace-pre-wrap rounded-[var(--ds-radius-md)] bg-[var(--ds-surface-2)] px-4 py-3 text-[13px]">{mensagem}</p>
+      <p className="sem-caixa-alta whitespace-pre-wrap rounded-[var(--ds-radius-md)] bg-[var(--ds-surface-2)] px-4 py-3 text-[13px]">{mensagem.texto}</p>
+      {mensagem.semTelefone && <p className="mt-2 text-[12px] text-[var(--ds-label-2)]">Sem telefone no cadastro: copie a mensagem e envie pelo contato de sempre.</p>}
     </section>
   );
 }
@@ -203,7 +219,10 @@ function PainelDaSolicitacao({
               )
             }
           >
-            {solicitacao.protocolo} aprovada. Avise {primeiroNome(solicitacao.pessoaNome)}: copie a mensagem de aprovado abaixo e mande pelo WhatsApp.
+            {solicitacao.protocolo} aprovada. Avise {primeiroNome(solicitacao.pessoaNome)}:{" "}
+            {solicitacao.mensagemDeAprovado?.linkDoWhatsApp
+              ? "abra a conversa no WhatsApp pela mensagem de aprovado abaixo, ou copie o texto."
+              : "copie a mensagem de aprovado abaixo e mande pelo WhatsApp."}
           </Aviso>
         )}
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -240,7 +259,7 @@ function PainelDaSolicitacao({
           </Aviso>
         )}
 
-        {solicitacao.auditoria === "APROVADO" && <MensagemDeAprovado solicitacao={solicitacao} />}
+        {solicitacao.mensagemDeAprovado && <MensagemDeAprovado pessoaNome={solicitacao.pessoaNome} mensagem={solicitacao.mensagemDeAprovado} />}
 
         <section aria-labelledby="titulo-deslocamentos">
           <h3 id="titulo-deslocamentos" className="mb-2 text-[15px] font-semibold">

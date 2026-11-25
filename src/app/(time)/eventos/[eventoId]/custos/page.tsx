@@ -17,16 +17,18 @@ export const metadata: Metadata = { title: "Custos" };
 type Props = { params: Promise<{ eventoId: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> };
 
 export default async function PaginaCustosDoEvento({ params, searchParams }: Props) {
-  await exigirAtor();
+  const ator = await exigirAtor();
   const eventoId = z.uuid().safeParse((await params).eventoId).data;
   if (!eventoId) notFound();
   const parametros = { ...parametrosDeCustos(await searchParams), evento: undefined };
   const filtro = { ...filtroDosParametros(parametros), eventoId };
-  const [dados, solicitacao, escrita, permissoes, site] = await Promise.all([
+  const permissoes = await permissoesDoAtor("custos.reabrir_auditoria", "custos.auditar");
+  // O link do WhatsApp leva o telefone da pessoa: só para quem audita custos, e nunca para o visitante da demo.
+  const comLinkDoWhatsApp = permissoes["custos.auditar"] && ator.origem !== "DEMO";
+  const [dados, solicitacao, escrita, site] = await Promise.all([
     carregarFilaDeAuditoria(filtro, new Date()),
-    parametros.protocolo ? carregarSolicitacao(parametros.protocolo, filtro) : null,
+    parametros.protocolo ? carregarSolicitacao(parametros.protocolo, filtro, { comLinkDoWhatsApp }) : null,
     situacaoDaEscrita(),
-    permissoesDoAtor("custos.reabrir_auditoria"),
     enderecoDoSite(),
   ]);
   return (

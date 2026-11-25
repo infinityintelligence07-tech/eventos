@@ -465,7 +465,7 @@ precisar ser anulável para ações de usuário (ver `origem` em §7.1).
 |---|---|
 | Coordenadas de casa (`pessoa_evento.lat/lng`) | Só aparecem no formulário de Pessoas; as outras telas mostram km. Nunca em URL, log, `registro_acao`, copy ou mapa externo (embutir mapa do Google com a coordenada só depois de decidir, §9.2). Cálculo de distância no servidor. |
 | Sexo | Usado só para quarto e `{{genero:…}}`; pode ficar vazio. Não aparece em listas que não precisam dele. |
-| Telefone e e-mail | Lidos com `GRANT` por coluna; só na ficha da pessoa. Já estão na lista de mascaramento do log. |
+| Telefone e e-mail | Lidos com `GRANT` por coluna; só na ficha da pessoa. Já estão na lista de mascaramento do log. Em Custos, o telefone entra só dentro do `href` do botão "Abrir no WhatsApp" da mensagem de aprovado (doc 08 §11.2): montado no servidor, só para quem tem `custos.auditar`, nunca na demo, sem aparecer na tela; `linkDoWhatsApp` também está na lista de mascaramento. |
 | Logs (pino) | Acrescentar `lat`, `lng`, `sexo`, `nomeCompleto`, `nomeSocial`, `observacao`, `comentario`, `motivo` à lista de `redact.ts`. Erro de banco sem parâmetros (já feito, M3). Log de acesso só com `usuarioId`. |
 | `registro_acao` | `dados` com nome de campo, não valor, quando o valor é pessoal (§7.1). Comentário livre só onde o usuário digita (devolução, motivo). |
 | Dado sensível do GH | O Eventos não lê `sensivel` (sem grant, §6). CPF/PIX/endereço continuam fora. |

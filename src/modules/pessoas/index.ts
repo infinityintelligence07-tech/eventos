@@ -85,3 +85,4 @@ export {
   rotuloDoNivel as rotuloDoNivelDeAcesso,
 } from "./domain/acesso";
 export { criarRepositorioAcesso } from "./repository/acesso-repository";
+export { linkDoWhatsApp, telefoneParaWhatsApp } from "./domain/whatsapp";

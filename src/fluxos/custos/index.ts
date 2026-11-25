@@ -5,6 +5,8 @@ export {
   type FilaCarregada,
   type FiltroDeCustos,
   type LinhaDaFila,
+  type MensagemDeAprovado,
+  type OpcoesDaSolicitacao,
   type SolicitacaoCarregada,
 } from "./fila";
 export {

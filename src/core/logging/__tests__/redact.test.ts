@@ -14,4 +14,9 @@ describe("redactSensitive", () => {
     });
     expect(limpo).toEqual({ usuarioId: "u1", pessoa: {}, dados: { campos: ["sexo"] } });
   });
+
+  it("tira o link do WhatsApp, que leva o telefone da pessoa no endereço", () => {
+    const limpo = redactSensitive({ protocolo: "STF-202612-0007", mensagemDeAprovado: { linkDoWhatsApp: "https://wa.me/5511999990000?text=Ol%C3%A1", semTelefone: false } });
+    expect(limpo).toEqual({ protocolo: "STF-202612-0007", mensagemDeAprovado: { semTelefone: false } });
+  });
 });
