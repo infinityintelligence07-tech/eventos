@@ -265,7 +265,7 @@ Para listas com mais de ~6 itens e dados para comparar. Cartão vale para poucos
 ```
 Rótulo:  <label for="id" class="mb-1 block text-[13px] font-medium text-[var(--ds-label)]">Expectativa de público</label>
 Entrada: CAMPO = "h-10 w-full rounded-[10px] border border-[var(--ds-separator)] bg-[var(--ds-surface)] px-3 text-[14px] text-[var(--ds-label)]"
-Select:  CAMPO + "pl-3 pr-8" (é o CAMPO de filtros.tsx)
+Lista de escolha: o `Seletor` do sistema (3.6.1), nunca o select do navegador
 Texto longo: CAMPO sem h-10 + "min-h-[96px] py-2"
 Ajuda:   <p id="id-ajuda" class="mt-1 text-[12px] text-[var(--ds-label-2)]">Vem do IAM Control. Pode ser corrigida.</p>
 Erro:    <p id="id-erro" class="mt-1 flex items-center gap-1 text-[12px] font-medium text-[var(--ds-red-deep)]"><CircleAlert size={14}/> Informe um número maior que zero.</p>
@@ -279,11 +279,76 @@ Erro:    <p id="id-erro" class="mt-1 flex items-center gap-1 text-[12px] font-me
 - Foco: já tratado no `design-system.css` (borda azul + halo). Campo composto usa `data-ds-field` no invólucro.
 - Salvar em formulário pequeno de um campo (ex.: público e fila): salva ao sair do campo, com o indicador de salvamento (3.12).
 
+### 3.6.1 Lista de escolha — `Seletor`
+
+**Regra: nenhuma tela usa a lista nativa do sistema operacional.** Nada de `<select>`, `<option>`, `<optgroup>`,
+`<datalist>` nem `list=` em `src/app`: toda lista de escolha é o `Seletor` (`ui/seletor.tsx`), direto ou pelos
+componentes que o embrulham — `CampoDeSelecao` (rótulo + ajuda + erro, 3.6) e `SeletorDeFiltro` (filtro na URL, 3.7).
+O teste `src/app/__tests__/sem-lista-nativa.test.ts` falha se uma lista nativa voltar (a lista de exceções dele
+está vazia; uma exceção nova precisa do motivo escrito lá). Campos de data, hora, número e caixas de marcar
+continuam nativos: a regra é sobre listas.
+
+Uma peça, duas formas:
+
+| | Lista curta | Lista longa |
+|---|---|---|
+| Quando | até 8 opções (contando a vazia) | mais de 8 opções, ou `busca` ligada |
+| Abre | a lista, com o foco no próprio campo | a lista com um **campo de busca** em cima, já com o foco |
+| Digitar | pula para a opção que começa com o texto | filtra enquanto digita, sem diferenciar maiúsculas nem acentos; todas as palavras digitadas precisam aparecer (no rótulo, na descrição ou no grupo); quem começa pelo texto vem primeiro |
+| Sem resultado | — | "Nenhum resultado" |
+| Centenas de opções | — | desenha 50 por vez; o rodapé diz "Mostrando 50 de 320. Continue digitando ou role a lista para ver mais." e rolar (ou descer pelo teclado) mostra as seguintes |
+
+**Lista de pessoas, eventos, palestras, locais/hotéis, passageiros, motoristas e ocupantes: sempre com `busca`**,
+mesmo quando hoje tem poucas opções (a lista cresce). Nas outras, a busca aparece sozinha acima de 8 opções.
+
+Propriedades (`PropsDoSeletor`):
+
+| Propriedade | Para quê |
+|---|---|
+| `opcoes` | `{ valor, rotulo, descricao?, grupo?, desabilitada? }`. `descricao` é a segunda linha, menor; `grupo` é o título de um bloco de opções seguidas (o `optgroup` de antes) |
+| `nome` | `name` do campo oculto: a server action e o `FormData` recebem o mesmo nome e valor que o select mandava |
+| `vazio` | opção vazia que **pode** ser escolhida, com valor `""` ("Todos", "—", "Sem preferência") |
+| `marcador` | texto de quando nada foi escolhido e o vazio **não** é uma opção ("Escolha pelo nome…"). Vazio assim não é enviado no formulário |
+| `valor` + `aoMudar` | uso controlado (`aoMudar` recebe o valor, não o evento) |
+| `valorInicial` | uso não controlado. O campo volta a ele quando o formulário é limpo, inclusive pelo React depois de uma action |
+| `enviarAoEscolher` | envia o formulário logo depois da escolha (o deslocamento na escala) |
+| `obrigatorio` | sem escolha, o navegador segura o envio com a mensagem dele (o `required` nativo). No `CampoDeSelecao`, `obrigatorio` só marca o rótulo e o `aria-required`, como nos outros campos: quem recusa é o servidor |
+| `desabilitado` | o campo não abre e não é enviado |
+| `busca` | liga (ou desliga) o campo de busca, sem olhar a quantidade |
+| `rotulo` | nome do campo dito pelo leitor de tela dentro da lista |
+| `tamanho` | `normal` (40 px, 14 px) ou `pequeno` (32 px, 13 px), para linhas de tabela e cartões |
+| `moldura` | `sistema` (padrão) ou `entrada`: as telas escuras do staff (Meu cadastro, enquete, custo, login) |
+| `className` | só largura e posição do invólucro (`w-auto min-w-[160px] max-w-[280px]`); o padrão é a largura toda |
+
+Sem valor, sem `vazio` e sem `marcador`, vale a primeira opção que pode ser escolhida, como no select nativo.
+
+**Comportamento**
+
+- Teclado, no padrão ARIA de combobox + listbox: `↓` `↑` `Enter` e `Espaço` abrem; `Home`/`End` vão à primeira e à
+  última; `PageDown`/`PageUp` pulam dez; `Enter` escolhe; `Esc` fecha sem escolher (dentro de painel ou diálogo,
+  fecha só a lista); `Tab` fecha e segue para o próximo campo — na lista curta confirmando a opção ativa, na longa
+  sem escolher. Opção desabilitada é pulada. Na lista longa, digitar com o campo fechado já abre com a letra na busca.
+- Leitor de tela: o campo é um `combobox` com `aria-expanded`, `aria-controls` e `aria-activedescendant`, nomeado
+  pelo `<label for>` (ou `aria-label`); as opções são `option` com `aria-selected`; os grupos, `group` com título; a
+  quantidade de resultados da busca é anunciada (`aria-live`). Erro: `aria-invalid` + borda vermelha, e a mensagem
+  continua vindo do `Campo`.
+- A lista abre na camada de cima do navegador (`popover="manual"` + `position: fixed`): nenhum contêiner com rolagem
+  corta, e ela fica acima do painel lateral e dos diálogos. Abre para baixo; para cima quando não cabe embaixo e
+  há mais espaço em cima. Acompanha a rolagem e o redimensionamento. Clicar fora fecha.
+- Celular (menos de 640 px): a lista vira uma folha na largura da tela, com fundo escurecido — embaixo na lista
+  curta; em cima na longa, ocupando só o que sobra acima do teclado. Opções com 44 px de altura.
+- O texto das opções nunca fica em caixa alta (a lista leva `sem-caixa-alta`) e nunca é cortado: quebra a linha.
+- **Não pôr o `Seletor` dentro de um `<label>`**: use `<label htmlFor>` ao lado (ou `aria-label`).
+- As regras (filtro, teclado como máquina de estados, quanto desenhar, onde abrir) ficam em `ui/seletor-logica.ts`,
+  sem React, e são testadas em `ui/__tests__/seletor-logica.test.ts`.
+
 ### 3.7 Barra de filtros — `BarraDeFiltros`
 
 Mesmo padrão de `filtros.tsx`: filtros na URL (`searchParams`), para o link poder ser compartilhado e o "voltar" funcionar.
 
 - Ordem: busca (quando houver) → seletores → atalhos (chips) → "Limpar filtros" (link, só aparece com filtro ativo).
+- Seletores: `SeletorDeFiltro`, que é o `Seletor` (3.6.1) com a opção "Todos" e que **navega ao escolher** (a escolha
+  aparece no campo na hora; a URL e a lista chegam em seguida). Filtro de evento, palestra ou pessoa: com `busca`.
 - Busca: campo com ícone `Search`, rótulo `sr-only` ("Buscar por nome ou código"), aplica 300 ms depois de parar de digitar.
 - **Atalhos de situação** (segmentos tipo "Para auditar (12) | Aprovadas | Reprovadas | Todas"): `nav` com links,
   `aria-current="page"` no ativo. Ativo: `bg-[var(--ds-tint-soft)] text-[var(--ds-tint-text)] font-semibold`;
@@ -410,6 +475,7 @@ Acrescentar `scroll-padding-bottom` no `main` com a altura da barra, para o foco
 - **Contraste:** texto principal `--ds-label`, secundário `--ds-label-2` (≈ 5:1 no claro). **`--ds-label-3` não serve para texto que importa** (≈ 3:1); só para desabilitado ou decorativo.
 - **Alvos:** controles com no mínimo 24 × 24 px (WCAG 2.5.8); botões padrão já têm 40 px.
 - **Arrastar** nunca é a única forma (WCAG 2.5.7): quartos e caronas também têm um seletor "Mover para…".
+- **Listas de escolha** são sempre o `Seletor` do sistema (3.6.1), nunca a lista nativa do sistema operacional.
 - **Zoom 200%:** a tela deve continuar usável em 1280 px com zoom 200% (equivale a 640 px): o menu vira gaveta, tabelas rolam dentro do cartão, painel lateral ocupa a largura toda.
 - **Tema escuro:** testar cada tela. Atenção: as classes `.situacao-*` hoje têm só cores do tema claro (ver Handoffs).
 - **Movimento:** o `design-system.css` já zera animações com `prefers-reduced-motion`; não usar animação para chamar atenção além do destaque de 1,5 s do "ao vivo".
