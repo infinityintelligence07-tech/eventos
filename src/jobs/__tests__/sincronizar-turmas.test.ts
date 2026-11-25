@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { RepositorioVagas } from "@/modules/escala";
-import type { EventoDaTurma, RepositorioSincronizacao } from "@/modules/eventos";
+import type { EventoDaTurma, LocalDaTurma, RepositorioSincronizacao } from "@/modules/eventos";
 import { turmaDeExemplo } from "@/test/turmas";
 
 import { hojeEmSaoPaulo, sincronizarTurmas } from "../sincronizar-turmas";
@@ -13,10 +13,18 @@ const tipos = new Map([
 
 function dependencias(turmas = [turmaDeExemplo()]) {
   const salvos: EventoDaTurma[] = [];
+  const locais: LocalDaTurma[] = [];
+  const locaisDosEventos: (string | null)[] = [];
   const eventos: RepositorioSincronizacao = {
     tiposAtivos: async () => tipos,
-    salvarEventoDaTurma: vi.fn(async (dados: EventoDaTurma) => {
+    salvarLocalDoIamControl: vi.fn(async (dados: LocalDaTurma) => {
+      locais.push(dados);
+      if (dados.nome === "Local Com Defeito") throw new Error("falhou no local");
+      return { localId: `local-${locais.length}`, criado: locais.length === 1, vinculados: locais.length === 2 ? 1 : 0, atualizados: 0 };
+    }),
+    salvarEventoDaTurma: vi.fn(async (dados: EventoDaTurma, _tipo: string, _agora: Date, localId: string | null) => {
       salvos.push(dados);
+      locaisDosEventos.push(localId);
       if (dados.iamControlTurmaId === 999) throw new Error("falhou no banco");
       return {
         acao: dados.iamControlTurmaId === 502 ? "ATUALIZADO" : "CRIADO",
@@ -37,6 +45,8 @@ function dependencias(turmas = [turmaDeExemplo()]) {
       agora: new Date("2026-10-26T15:00:00Z"),
     },
     salvos,
+    locais,
+    locaisDosEventos,
   };
 }
 
@@ -66,6 +76,44 @@ describe("sincronizar turmas", () => {
     });
     expect(resumo.vagas.NAO_ENCONTRADO).toBe(2);
     expect(salvos[0]?.nome).toBe("Confronto · ed. 60 · Manaus");
+  });
+
+  it("cada local do IAM Control é gravado uma vez por rodada e o evento recebe o cadastro dele", async () => {
+    const hotel = { ...turmaDeExemplo().local, nome: "Hotel Atlântico" };
+    const { deps, locais, locaisDosEventos } = dependencias([
+      turmaDeExemplo(),
+      // Mesmo local, escrito de outro jeito e com outro número: vale o da primeira turma.
+      turmaDeExemplo({ id: 502, edicao: "61", local: { ...turmaDeExemplo().local, nome: "  centro de CONVENCOES  vasco vasques ", numero: "9" } }),
+      turmaDeExemplo({ id: 503, edicao: "62", local: hotel }),
+      turmaDeExemplo({ id: 504, edicao: "63", local: hotel, polo: null }),
+      // Sem cidade nem polo não há local.
+      turmaDeExemplo({ id: 505, edicao: "64", polo: null, local: { ...turmaDeExemplo().local, cidade: null, estado: null } }),
+    ]);
+
+    const resumo = await sincronizarTurmas(deps);
+
+    expect(locais.map((local) => [local.nome, local.numero])).toEqual([
+      ["Centro de Convenções Vasco Vasques", "5001"],
+      ["Hotel Atlântico", "5001"],
+    ]);
+    expect(locaisDosEventos).toEqual(["local-1", "local-1", "local-2", "local-2", null]);
+    expect(resumo.locais).toEqual({ criados: 1, vinculados: 1, atualizados: 0 });
+  });
+
+  it("local que falha derruba só as turmas dele", async () => {
+    const { deps } = dependencias([
+      turmaDeExemplo({ local: { ...turmaDeExemplo().local, nome: "Local Com Defeito" } }),
+      turmaDeExemplo({ id: 502, edicao: "61", local: { ...turmaDeExemplo().local, nome: "Local Com Defeito" } }),
+      turmaDeExemplo({ id: 503, edicao: "62" }),
+    ]);
+
+    const resumo = await sincronizarTurmas(deps);
+
+    expect(resumo.falhas).toEqual([
+      { iamControlTurmaId: 501, erro: "falhou no local" },
+      { iamControlTurmaId: 502, erro: "falhou no local" },
+    ]);
+    expect(resumo).toMatchObject({ criados: 1, locais: { criados: 0, vinculados: 1, atualizados: 0 } });
   });
 
   it("hoje é a data de São Paulo, não a de UTC", () => {
