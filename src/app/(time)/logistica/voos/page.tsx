@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { situacaoDaEscrita } from "@/fluxos/_base";
 import { carregarPedido, carregarVoos } from "@/fluxos/logistica";
+import { recorteDaLogistica } from "@/modules/logistica";
 
 import { CabecalhoDeVoos } from "../_componentes/cabecalho-da-logistica";
 import { parametro } from "../_componentes/situacoes";
@@ -27,10 +28,11 @@ export default async function PaginaVoos({ searchParams }: { searchParams: Promi
     pessoa: z.uuid().safeParse(parametro(busca.pessoa)).data,
     registrado: parametro(busca.registrado),
     hotel: parametro(busca.hotel),
+    recorte: recorteDaLogistica(parametro(busca.recorte)) === "MASTERCLASS" ? "masterclass" : undefined,
   };
   const agora = new Date();
   const [dados, pedido, escrita] = await Promise.all([
-    carregarVoos({ eventoId, situacao: situacaoDoFiltro(parametros.situacao) }, agora),
+    carregarVoos({ eventoId, situacao: situacaoDoFiltro(parametros.situacao), recorte: recorteDaLogistica(parametros.recorte) }, agora),
     parametros.ref ? carregarPedido(parametros.ref) : null,
     situacaoDaEscrita(),
   ]);

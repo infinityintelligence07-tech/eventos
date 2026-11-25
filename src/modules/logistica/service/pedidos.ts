@@ -18,6 +18,7 @@ import {
   type QuemMexeNaCompra,
 } from "../domain/pagamento";
 import { dataEmSaoPaulo, instanteDeSaoPaulo } from "../domain/datas";
+import { dataRealDoLancamento, mensagemDaRecusaDaTurne, validarTurne } from "../domain/turne";
 import type { OrigemDoHotel } from "../domain/hotel";
 import type {
   AlterarPedido,
@@ -43,7 +44,7 @@ export type ContextoDoRetorno = { autor: AutorDoRetorno; instante: Date };
 const quemMexe = (autor: AutorDoRetorno): QuemMexeNaCompra => ("acessoSdcId" in autor ? "SDC" : "TIME");
 
 /** Evento do pedido, travado. `dataFim` no fuso de São Paulo (AAAA-MM-DD). */
-export type EventoDoPedido = { id: string; dataFim: string; cancelado: boolean };
+export type EventoDoPedido = { id: string; dataInicio: string; dataFim: string; cancelado: boolean; /** Evento do tipo Masterclass (palestra). */ masterclass: boolean };
 
 export type PedidoTravado = {
   id: string;
@@ -54,6 +55,8 @@ export type PedidoTravado = {
   pessoaId: string | null;
   /** Só no voo: "também precisa de hotel". */
   precisaHotel: boolean;
+  /** Dia em que o pedido foi feito à SDC (AAAA-MM-DD): a compra não pode vir antes dele. */
+  dataSolicitacao: string;
   valorCentavos: number | null;
   /** Preenchido = pagamento aprovado pelo time. */
   aprovadoEm: Date | null;
@@ -86,6 +89,8 @@ export type RegistroDoPedido = {
 export type RepositorioPedidos = {
   /** Trava o evento (serializa os pedidos dele). Nulo = não existe ou foi apagado. */
   travarEvento(eventoId: string): Promise<EventoDoPedido | null>;
+  /** Evento sem trava (a última palestra de uma turnê de Masterclass). Nulo = não existe ou foi apagado. */
+  eventoDoPedido(eventoId: string): Promise<EventoDoPedido | null>;
   /** Pessoa ativa do cadastro de staff (core.pessoa ativa com pessoa_evento). Nulo = não é staff ou está inativa. */
   staffAtivo(pessoaId: string): Promise<{ pessoaId: string; nome: string } | null>;
   /** Convocação principal ativa da pessoa no evento, se ela já estiver na escala (vínculo opcional do pedido). */
@@ -100,6 +105,10 @@ export type RepositorioPedidos = {
     observacaoTime: string | null;
     /** Só no voo: "também precisa de hotel". */
     precisaHotel?: boolean;
+    /** Só no voo de Masterclass: a última palestra da turnê (a volta sai de lá). */
+    eventoVoltaId?: string | null;
+    /** Dia em que o pedido foi feito à SDC (AAAA-MM-DD). */
+    dataSolicitacao: string;
     usuarioId: string;
     instante: Date;
   }): Promise<{ id: string; referencia: string }>;
@@ -120,7 +129,7 @@ export type RepositorioPedidos = {
       para: SituacaoDoPedido;
       instante: Date;
       observacaoTime?: string | null;
-      emissao?: { valorCentavos: number; observacaoSdc: string | null; autor: AutorDoRetorno; formaPagamento?: string | null };
+      emissao?: { valorCentavos: number; observacaoSdc: string | null; autor: AutorDoRetorno; formaPagamento?: string | null; /** Dia em que a SDC comprou (AAAA-MM-DD). */ dataCompra: string };
       cancelamento?: { usuarioId: string; motivo: string };
       /** A compra mudou: a aprovação do pagamento (se havia) deixa de valer. */
       aprovacaoCai?: boolean;
@@ -141,6 +150,26 @@ export type RepositorioPedidos = {
   registrarReserva(pedidoId: string, reserva: { numeroReserva: string; localId: string }, instante: Date): Promise<boolean>;
   registrar(registro: RegistroDoPedido & AutorDoRetorno): Promise<void>;
 };
+
+const dataCurta = (data: string) => `${data.slice(8, 10)}/${data.slice(5, 7)}/${data.slice(0, 4)}`;
+
+/** O dia em que o pedido foi feito à SDC: o informado ou hoje; nunca no futuro. */
+function dataDaSolicitacao(informada: string | undefined, instante: Date): string {
+  const resultado = dataRealDoLancamento({ informada, hoje: dataEmSaoPaulo(instante) });
+  if (!resultado.ok) throw new ErroDaLogistica("A data da solicitação não pode ser no futuro.");
+  return resultado.data;
+}
+
+/** O dia em que a SDC comprou: o informado ou hoje; nunca no futuro nem antes da solicitação. */
+function dataDaCompra(informada: string | undefined, pedido: PedidoTravado, instante: Date): string {
+  const resultado = dataRealDoLancamento({ informada, hoje: dataEmSaoPaulo(instante), naoAntesDe: pedido.dataSolicitacao });
+  if (resultado.ok) return resultado.data;
+  throw new ErroDaLogistica(
+    resultado.motivo === "FUTURA"
+      ? "A data da compra não pode ser no futuro."
+      : `A compra não pode ser antes da solicitação do pedido (${dataCurta(pedido.dataSolicitacao)}).${informada === undefined ? " Informe a data em que a compra foi feita." : ""}`,
+  );
+}
 
 async function pedidoTravado(repo: RepositorioPedidos, pedidoId: string): Promise<PedidoTravado> {
   const pedido = await repo.travarPedido(pedidoId);
@@ -190,6 +219,12 @@ export async function registrarPedidoDeVoo(
   if (evento.dataFim < dataEmSaoPaulo(instante)) throw new ErroDaLogistica("Este evento já terminou: não dá para pedir voo para ele.");
   const pessoa = await repo.staffAtivo(entrada.pessoaId);
   if (!pessoa) throw new ErroDaLogistica("Esta pessoa não está ativa no cadastro de staff. Confira em Pessoas.");
+  // Masterclass: a volta pode sair de outra palestra (a última da turnê). O pedido continua sendo da primeira.
+  const eventoDaVolta = entrada.eventoVoltaId && entrada.eventoVoltaId !== evento.id ? await repo.eventoDoPedido(entrada.eventoVoltaId) : null;
+  if (entrada.eventoVoltaId && entrada.eventoVoltaId !== evento.id && !eventoDaVolta) throw new ErroDaLogistica("Última palestra não encontrada. Recarregue a página.");
+  const turne = validarTurne(evento, eventoDaVolta);
+  if (!turne.ok) throw new ErroDaLogistica(mensagemDaRecusaDaTurne(turne.motivo));
+  const dataSolicitacao = dataDaSolicitacao(entrada.dataSolicitacao, instante);
 
   const outrosAtivos = await repo.pedidosDeVooAtivos(evento.id, pessoa.pessoaId);
   if (outrosAtivos.length > 0 && !entrada.outraCompra) {
@@ -206,6 +241,8 @@ export async function registrarPedidoDeVoo(
     convocacaoId: await repo.convocacaoPrincipal(evento.id, pessoa.pessoaId),
     observacaoTime: entrada.observacaoTime ?? null,
     precisaHotel: entrada.precisaHotel === true,
+    eventoVoltaId: turne.eventoVoltaId,
+    dataSolicitacao,
     usuarioId,
     instante,
   });
@@ -221,6 +258,8 @@ export async function registrarPedidoDeVoo(
       tipo: "VOO",
       trechos: entrada.trechos.map((trecho) => trecho.sentido),
       ...(entrada.precisaHotel === true ? { precisaHotel: true } : {}),
+      ...(turne.eventoVoltaId ? { eventoVoltaId: turne.eventoVoltaId } : {}),
+      dataSolicitacao,
       ...(outrosAtivos.length > 0 ? { outrosAtivos } : {}),
     },
   });
@@ -340,11 +379,12 @@ export async function registrarRetornoDeVoo(
   if (faltando.length > 0) throw new ErroDaLogistica(`Informe o voo de ${faltando.map((sentido) => (sentido === "IDA" ? "ida" : "volta")).join(" e de ")}.`);
   const sobrando = entrada.trechos.filter((trecho) => !pedido.sentidos.includes(trecho.sentido));
   if (sobrando.length > 0) throw new ErroDaLogistica("O pedido não tem esse trecho. Altere o pedido antes de registrar o voo.");
+  const dataCompra = dataDaCompra(entrada.dataCompra, pedido, instante);
 
   const mudou = await repo.mudarPedido(
     pedido.id,
     { de: pedido.situacao },
-    { para, instante, emissao: { valorCentavos: entrada.valorCentavos, observacaoSdc: entrada.observacaoSdc ?? null, autor }, aprovacaoCai },
+    { para, instante, emissao: { valorCentavos: entrada.valorCentavos, observacaoSdc: entrada.observacaoSdc ?? null, autor, formaPagamento: entrada.formaPagamento ?? null, dataCompra }, aprovacaoCai },
   );
   if (!mudou) throw new LogisticaMudouError(`o pedido ${pedido.referencia} mudou`);
   if (aprovacaoCai) await registrarQuedaDaAprovacao(repo, pedido, autor, "compra corrigida");
@@ -370,7 +410,14 @@ export async function registrarRetornoDeVoo(
     statusPara: para,
     ...autor,
     // Localizador e número da reserva ficam no trecho/hospedagem; o histórico imutável só diz que houve (docs/09 §7.1).
-    dados: { ...dadosDaAutoria(autor, pedido), valorCentavos: entrada.valorCentavos, trechos: entrada.trechos.length, temLocalizador: entrada.trechos.some((trecho) => Boolean(trecho.localizador)) },
+    dados: {
+      ...dadosDaAutoria(autor, pedido),
+      valorCentavos: entrada.valorCentavos,
+      trechos: entrada.trechos.length,
+      temLocalizador: entrada.trechos.some((trecho) => Boolean(trecho.localizador)),
+      dataCompra,
+      ...(entrada.formaPagamento ? { formaPagamento: entrada.formaPagamento } : {}),
+    },
   });
   return { ...pedido, situacao: para };
 }
@@ -386,6 +433,7 @@ export async function registrarPedidoDeHospedagem(
   if (hospedagem.localTipo === "APARTAMENTO") throw new ErroDaLogistica("Apartamento da IAM não passa pela SDC.");
   // O pedido diz à SDC quantos quartos e quem divide com quem: sem quarto não há o que pedir.
   if (hospedagem.quartos === 0) throw new ErroDaLogistica("Monte os quartos antes de pedir a hospedagem à SDC.");
+  const dataSolicitacao = dataDaSolicitacao(entrada.dataSolicitacao, instante);
 
   const pedido = await repo.inserirPedido({
     tipo: "HOSPEDAGEM",
@@ -393,6 +441,7 @@ export async function registrarPedidoDeHospedagem(
     pessoaId: null,
     convocacaoId: null,
     observacaoTime: entrada.observacaoTime ?? null,
+    dataSolicitacao,
     usuarioId,
     instante,
   });
@@ -403,7 +452,7 @@ export async function registrarPedidoDeHospedagem(
     acao: "PEDIDO_REGISTRADO",
     statusPara: "PEDIDO",
     usuarioId,
-    dados: { referencia: pedido.referencia, tipo: "HOSPEDAGEM", hospedagemId: entrada.hospedagemId },
+    dados: { referencia: pedido.referencia, tipo: "HOSPEDAGEM", hospedagemId: entrada.hospedagemId, dataSolicitacao },
   });
   return { ...pedido, eventoId: hospedagem.eventoId };
 }
@@ -424,10 +473,11 @@ export async function registrarRetornoDeHospedagem(
   const tipoDoLocal = await repo.tipoDoLocal(entrada.localId);
   if (tipoDoLocal === null) throw new ErroDaLogistica("Hotel não encontrado. Escolha outro ou cadastre o hotel que a SDC reservou.");
   if (tipoDoLocal !== "HOTEL") throw new ErroDaLogistica("Escolha um hotel: a SDC não reserva apartamento da IAM nem local de evento.");
+  const dataCompra = dataDaCompra(entrada.dataCompra, pedido, instante);
   const mudou = await repo.mudarPedido(
     pedido.id,
     { de: pedido.situacao },
-    { para, instante, emissao: { valorCentavos: entrada.valorCentavos, observacaoSdc: entrada.observacaoSdc ?? null, autor, formaPagamento: entrada.formaPagamento }, aprovacaoCai },
+    { para, instante, emissao: { valorCentavos: entrada.valorCentavos, observacaoSdc: entrada.observacaoSdc ?? null, autor, formaPagamento: entrada.formaPagamento, dataCompra }, aprovacaoCai },
   );
   if (!mudou) throw new LogisticaMudouError(`o pedido ${pedido.referencia} mudou`);
   if (aprovacaoCai) await registrarQuedaDaAprovacao(repo, pedido, autor, "compra corrigida");
@@ -441,7 +491,7 @@ export async function registrarRetornoDeHospedagem(
     statusDe: pedido.situacao,
     statusPara: para,
     ...autor,
-    dados: { ...dadosDaAutoria(autor, pedido), valorCentavos: entrada.valorCentavos, temNumeroReserva: Boolean(entrada.numeroReserva), localId: entrada.localId, formaPagamento: entrada.formaPagamento },
+    dados: { ...dadosDaAutoria(autor, pedido), valorCentavos: entrada.valorCentavos, temNumeroReserva: Boolean(entrada.numeroReserva), localId: entrada.localId, formaPagamento: entrada.formaPagamento, dataCompra },
   });
   return { ...pedido, situacao: para };
 }

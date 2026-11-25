@@ -291,13 +291,15 @@ async function semearLogistica(db: Executor, evento: EventoCenario, voando: Conv
     const r = await db.query<{ id: string; referencia: string }>(
       `INSERT INTO eventos.pedido_sdc
          (tipo, evento_id, pessoa_id, convocacao_id, situacao, valor_centavos, observacao_time, observacao_sdc, solicitado_por, solicitado_em,
-          emitido_em, retorno_registrado_por, cancelado_em, cancelado_por, motivo_cancelamento)
+          emitido_em, retorno_registrado_por, cancelado_em, cancelado_por, motivo_cancelamento, data_solicitacao, data_compra)
        VALUES ('VOO', $1, $2, $3, $4, $5, 'Prefere voo pela manhã na ida (dado fictício)', $6, $7, now() - interval '96 hours',
           CASE WHEN $8::boolean THEN now() - interval '60 hours' END,
           CASE WHEN $8::boolean THEN $7::uuid END,
           CASE WHEN $4 = 'CANCELADO' THEN now() - interval '50 hours' END,
           CASE WHEN $4 = 'CANCELADO' THEN $7::uuid END,
-          CASE WHEN $4 = 'CANCELADO' THEN 'Pessoa vai de carro com outra equipe (dado fictício)' END)
+          CASE WHEN $4 = 'CANCELADO' THEN 'Pessoa vai de carro com outra equipe (dado fictício)' END,
+          ((now() - interval '96 hours') at time zone 'America/Sao_Paulo')::date,
+          CASE WHEN $8::boolean THEN ((now() - interval '60 hours') at time zone 'America/Sao_Paulo')::date END)
        RETURNING id, referencia`,
       [
         evento.id, c.pessoa.id, c.id, situacao, emissao?.valor ?? null,
@@ -350,8 +352,9 @@ async function semearLogistica(db: Executor, evento: EventoCenario, voando: Conv
 
   const pedidoHotel = (
     await db.query<{ id: string }>(
-      `INSERT INTO eventos.pedido_sdc (tipo, evento_id, situacao, valor_centavos, observacao_time, solicitado_por, solicitado_em, emitido_em, retorno_registrado_por)
-       VALUES ('HOSPEDAGEM', $1, 'EMITIDO', 240000, 'Quartos duplos por sexo (dado fictício)', $2, now() - interval '96 hours', now() - interval '72 hours', $2)
+      `INSERT INTO eventos.pedido_sdc (tipo, evento_id, situacao, valor_centavos, observacao_time, solicitado_por, solicitado_em, emitido_em, retorno_registrado_por, data_solicitacao, data_compra)
+       VALUES ('HOSPEDAGEM', $1, 'EMITIDO', 240000, 'Quartos duplos por sexo (dado fictício)', $2, now() - interval '96 hours', now() - interval '72 hours', $2,
+         ((now() - interval '96 hours') at time zone 'America/Sao_Paulo')::date, ((now() - interval '72 hours') at time zone 'America/Sao_Paulo')::date)
        RETURNING id`,
       [evento.id, USUARIO_TESTE_ID],
     )

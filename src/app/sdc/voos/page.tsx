@@ -7,9 +7,10 @@ import { EstadoVazio } from "@/app/(time)/_componentes/ui/estados";
 import { dataCurta, dinheiro, hora } from "@/app/(time)/_componentes/ui/formatos";
 import { paraCampoDeDataEHora, paraCampoDeDinheiro } from "@/app/(time)/logistica/_componentes/situacoes";
 import { carregarVoosDaSdc } from "@/fluxos/sdc";
-import { COMPANHIAS_DA_SDC, companhiaNoFormulario, OUTRA_COMPANHIA, rotuloDaPreferencia, rotuloDoMes, rotuloDoTrajeto, trajetoDosTrechos, type TrechoParaASdc } from "@/modules/logistica";
+import { AtalhosDoRecorte } from "@/app/(time)/logistica/_componentes/recorte";
+import { COMPANHIAS_DA_SDC, companhiaNoFormulario, dataEmSaoPaulo, OUTRA_COMPANHIA, recorteDaLogistica, rotuloDaPreferencia, rotuloDoMes, rotuloDoTrajeto, trajetoDosTrechos, type TrechoParaASdc } from "@/modules/logistica";
 
-import { FiltroDaSdc, Linha, SituacaoDoPedidoParaASdc, situacaoDoFiltroDaSdc, TituloDoEvento, TotaisDaSdc } from "../_componentes/comuns";
+import { enderecoDaSdc, FiltroDaSdc, Linha, ondeE, SituacaoDoPedidoParaASdc, situacaoDoFiltroDaSdc, TituloDoEvento, TotaisDaSdc } from "../_componentes/comuns";
 import { BotaoRegistrarCompraDeVoo } from "../_componentes/formularios";
 import { exigirAtorSdc } from "../_servidor/ator-sdc";
 import { registrarCompraDeVooAcao } from "../acoes";
@@ -37,19 +38,25 @@ function compra(trecho: TrechoParaASdc): string | null {
 /** Voos pedidos pelo time, como na planilha: por mês e evento. A SDC registra a compra e o valor de cada um. */
 export default async function PaginaVoosDaSdc({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await exigirAtorSdc();
-  const situacao = situacaoDoFiltroDaSdc((await searchParams).situacao);
-  const dados = await carregarVoosDaSdc({ situacao }, new Date());
+  const busca = await searchParams;
+  const situacao = situacaoDoFiltroDaSdc(busca.situacao);
+  const agora = new Date();
+  const hoje = dataEmSaoPaulo(agora);
+  const dados = await carregarVoosDaSdc({ situacao, recorte: recorteDaLogistica(typeof busca.recorte === "string" ? busca.recorte : undefined) }, agora);
+  const masterclass = dados.recorte === "MASTERCLASS";
 
   return (
     <>
       <h1 className="mb-1 text-[22px] font-semibold tracking-[-0.01em]">Voos</h1>
       <p className="mb-4 text-[14px] text-[var(--ds-label-2)]">Passagens pedidas pelo time de eventos. Registre a compra e o valor de cada pedido; o time confere e aprova o pagamento.</p>
+      {/* Eventos | Masterclass, como as abas da planilha. */}
+      <AtalhosDoRecorte recorte={dados.recorte} quantidades={dados.pedidosPorRecorte} href={(recorte) => enderecoDaSdc("/sdc/voos", recorte)} />
       <TotaisDaSdc totais={dados.totais} />
-      <FiltroDaSdc base="/sdc/voos" atual={situacao} contagens={dados.contagens} />
+      <FiltroDaSdc base="/sdc/voos" recorte={dados.recorte} atual={situacao} contagens={dados.contagens} />
 
       {dados.total === 0 ? (
         <Cartao espacamento="nenhum">
-          <EstadoVazio icone={<Plane size={32} aria-hidden />} titulo={situacao ? "Nenhum pedido de voo com esse filtro." : "Nenhum pedido de voo por enquanto."} nivel="h2">
+          <EstadoVazio icone={<Plane size={32} aria-hidden />} titulo={situacao ? "Nenhum pedido de voo com esse filtro." : masterclass ? "Nenhum pedido de voo de Masterclass por enquanto." : "Nenhum pedido de voo por enquanto."} nivel="h2">
             Os pedidos aparecem aqui assim que o time de eventos registra.
           </EstadoVazio>
         </Cartao>
@@ -70,7 +77,7 @@ export default async function PaginaVoosDaSdc({ searchParams }: { searchParams: 
                           explicacao={
                             <>
                               <span className="[font-family:var(--ds-font-mono)]">{voo.referencia}</span>
-                              {trajeto ? ` · ${rotuloDoTrajeto(trajeto)}` : ""} · pedido em {dataCurta(voo.solicitadoEm)}
+                              {trajeto ? ` · ${rotuloDoTrajeto(trajeto)}` : ""} · pedido em {dataCurta(voo.dataSolicitacao)}
                             </>
                           }
                           acoes={
@@ -82,6 +89,8 @@ export default async function PaginaVoosDaSdc({ searchParams }: { searchParams: 
                                 corrigindo={voo.paraASdc === "AGUARDANDO_APROVACAO"}
                                 valor={paraCampoDeDinheiro(voo.paraASdc === "AGUARDANDO_APROVACAO" ? voo.valorCentavos : null)}
                                 observacao={voo.observacaoSdc ?? ""}
+                                formaPagamento={voo.formaPagamento ?? "Faturado SDC"}
+                                datas={{ dataCompra: voo.dataCompra ?? hoje, dataSolicitacao: voo.dataSolicitacao, hoje }}
                                 companhias={COMPANHIAS}
                                 trechos={voo.trechos.map((trecho) => ({
                                   sentido: trecho.sentido,
@@ -102,6 +111,12 @@ export default async function PaginaVoosDaSdc({ searchParams }: { searchParams: 
                             <SituacaoDoPedidoParaASdc situacao={voo.paraASdc} aprovadoEm={voo.aprovadoEm} />
                           </p>
                           <dl className="grid grid-cols-[92px_1fr] gap-x-3 gap-y-1 text-[14px]">
+                            {/* Masterclass em turnê: a ida é para a primeira palestra (o título acima) e a volta sai da última. */}
+                            {voo.eventoDaVolta && (
+                              <Linha rotulo="Turnê">
+                                Volta da última palestra: {dataCurta(voo.eventoDaVolta.dataInicio)} · {ondeE(voo.eventoDaVolta) || (voo.eventoDaVolta.codigo ?? voo.eventoDaVolta.nome)}
+                              </Linha>
+                            )}
                             {voo.trechos.map((trecho) => (
                               <Linha key={trecho.sentido} rotulo={sentido(trecho)}>
                                 {pedido(trecho)}
@@ -109,9 +124,10 @@ export default async function PaginaVoosDaSdc({ searchParams }: { searchParams: 
                               </Linha>
                             ))}
                             {voo.observacaoTime && <Linha rotulo="Do time">{voo.observacaoTime}</Linha>}
-                            {voo.compradoEm && voo.valorCentavos !== null && (
+                            {voo.dataCompra && voo.valorCentavos !== null && (
                               <Linha rotulo="Valor">
-                                <span className="tabular-nums">{dinheiro(voo.valorCentavos)}</span> · registrado em {dataCurta(voo.compradoEm)}
+                                <span className="tabular-nums">{dinheiro(voo.valorCentavos)}</span>
+                                {voo.formaPagamento ? ` · ${voo.formaPagamento}` : ""} · comprado em {dataCurta(voo.dataCompra)}
                               </Linha>
                             )}
                             {voo.observacaoSdc && <Linha rotulo="Sua obs.">{voo.observacaoSdc}</Linha>}

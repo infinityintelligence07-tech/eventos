@@ -2,7 +2,7 @@ import { Hotel, Sparkles } from "lucide-react";
 import Link from "next/link";
 
 import type { HospedagemDoEventoCarregada } from "@/fluxos/logistica";
-import { destinoDaTroca, destinoNoQuarto, diasEntre, type OrigemDoHotel, rotuloDaCapacidade, rotuloDaOrigemDoHotel, rotuloDoSexoDoQuarto, situacaoDoPagamento, somarDias, textoDoPeriodo } from "@/modules/logistica";
+import { destinoDaTroca, destinoNoQuarto, diasEntre, localDaPalestra, type OrigemDoHotel, rotuloDaCapacidade, rotuloDaOrigemDoHotel, rotuloDoSexoDoQuarto, situacaoDoPagamento, somarDias, textoDoPeriodo } from "@/modules/logistica";
 import { BotaoCopiar, FormularioDeAcao } from "@/app/(time)/_componentes/ui";
 
 import { Aviso, FaixaSomenteLeitura } from "../../_componentes/ui/aviso";
@@ -33,6 +33,7 @@ import {
   tirarHospedeAcao,
 } from "../acoes";
 import { BotaoDefinirHospedagem, BotaoPeriodoDoOcupante, BotaoRegistrarReserva, FormularioNovoQuarto } from "./formularios-de-hospedagem";
+import { AtalhosDoRecorte } from "./recorte";
 import { BotaoAprovarPagamento, BotaoCancelarPedido, BotaoDesfazerAprovacao } from "./formularios-de-voo";
 import { ChipDoPagamento } from "./pagamento";
 import { ChipDoVoo, paraCampoDeDinheiro } from "./situacoes";
@@ -188,16 +189,25 @@ function MoverDeQuarto({ pessoaId, nome, quartoAtual, quartos, trocas }: { pesso
 
 export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dados: HospedagemDoEventoCarregada; escrita: boolean; comSeletorDeEvento: boolean }) {
   const { evento } = dados;
+  const masterclass = dados.recorte === "MASTERCLASS";
   const seletor = comSeletorDeEvento && (
-    <BarraDeFiltros>
-      <SeletorDeFiltro
-        nome="evento"
-        rotulo="Evento"
-        todos="Próximo evento"
-        valor={evento?.id ?? null}
-        opcoes={dados.eventos.map((item) => ({ valor: item.id, rotulo: `${item.codigo ?? item.nome} · ${dataCurta(item.dataInicio)}${item.semHospedagem ? " · sem hospedagem" : ""}` }))}
-      />
-    </BarraDeFiltros>
+    <>
+      {/* Eventos | Masterclass, como as abas da planilha. Trocar de recorte tira o evento escolhido (é do outro lado). */}
+      <AtalhosDoRecorte recorte={dados.recorte} href={(recorte) => (recorte === "MASTERCLASS" ? "/logistica/hospedagem?recorte=masterclass" : "/logistica/hospedagem")} />
+      <BarraDeFiltros>
+        <SeletorDeFiltro
+          nome="evento"
+          rotulo={masterclass ? "Palestra" : "Evento"}
+          todos={masterclass ? "Próxima palestra" : "Próximo evento"}
+          valor={evento?.id ?? null}
+          opcoes={[...(evento && !dados.eventos.some((item) => item.id === evento.id) ? [evento] : []), ...dados.eventos].map((item) => ({
+            valor: item.id,
+            // Na Masterclass (são centenas), a data vem primeiro e depois onde é a palestra.
+            rotulo: `${masterclass ? `${dataCurta(item.dataInicio)} · ${localDaPalestra(item)}` : `${item.codigo ?? item.nome} · ${dataCurta(item.dataInicio)}`}${item.semHospedagem ? " · sem hospedagem" : ""}`,
+          }))}
+        />
+      </BarraDeFiltros>
+    </>
   );
 
   if (!evento) {
@@ -206,8 +216,9 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
         <h2 id="titulo-hospedagem" className={`${TITULO_DE_SECAO} mb-3`}>
           Hospedagem
         </h2>
+        {seletor}
         <Cartao espacamento="nenhum">
-          <EstadoVazio icone={<Hotel size={32} aria-hidden />} titulo="Nenhum evento nos próximos dias.">
+          <EstadoVazio icone={<Hotel size={32} aria-hidden />} titulo={masterclass ? "Nenhuma Masterclass nos próximos dias." : "Nenhum evento nos próximos dias."}>
             Os quartos são montados por evento, com quem precisa de hotel: marcado na escala, com pedido de voo ou acrescentado aqui.
           </EstadoVazio>
         </Cartao>
@@ -456,6 +467,10 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
                         <>
                           <span className="[font-family:var(--ds-font-mono)] text-[13px]">{pedido.referencia}</span>
                           <ChipDoVoo situacao={pedido.situacao} />
+                          <span className="text-[12px] tabular-nums text-[var(--ds-label-2)]">
+                            pedido em {dataCurta(pedido.dataSolicitacao)}
+                            {pedido.situacao === "EMITIDO" && pedido.dataCompra ? ` · reservado em ${dataCurta(pedido.dataCompra)}` : ""}
+                          </span>
                           {escrita && aguardando && (
                             <BotaoRegistrarReserva
                               acao={registrarRetornoDeHospedagemAcao}
@@ -468,6 +483,9 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
                                 numeroReserva: hospedagem.numeroReserva,
                                 valor: paraCampoDeDinheiro(pedido.valorCentavos),
                                 formaPagamento: pedido.formaPagamento,
+                                dataCompra: pedido.situacao === "EMITIDO" && pedido.dataCompra ? pedido.dataCompra : dados.hoje,
+                                dataSolicitacao: pedido.dataSolicitacao,
+                                hoje: dados.hoje,
                               }}
                             />
                           )}
@@ -486,8 +504,13 @@ export function SecaoDeHospedagem({ dados, escrita, comSeletorDeEvento }: { dado
                       ) : hospedagem.quartos.length === 0 ? (
                         <span className="text-[var(--ds-label-2)]">Monte os quartos para pedir a hospedagem à SDC.</span>
                       ) : (
-                        <FormularioDeAcao acao={registrarPedidoDeHospedagemAcao} aria-label="Pedir hospedagem à SDC">
+                        <FormularioDeAcao acao={registrarPedidoDeHospedagemAcao} className="flex flex-wrap items-center gap-2" aria-label="Pedir hospedagem à SDC">
                           <input type="hidden" name="hospedagemId" value={hospedagem.id} />
+                          {/* Data real do pedido: hoje, ou o dia em que ele foi feito (pedido antigo, da planilha). */}
+                          <label className="flex items-center gap-1 text-[12px] text-[var(--ds-label-2)]">
+                            Pedido em
+                            <input type="date" name="dataSolicitacao" defaultValue={dados.hoje} max={dados.hoje} className={`${CAMPO} h-8 w-auto px-2 text-[13px]`} />
+                          </label>
                           <BotaoDeEnvio tamanho="pequeno" variante="primario">
                             Pedir hospedagem à SDC
                           </BotaoDeEnvio>

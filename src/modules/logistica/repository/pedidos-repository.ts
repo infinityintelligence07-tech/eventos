@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne, notInArray, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne, notInArray, or, sql, type SQL } from "drizzle-orm";
 
 import { pessoa, polo, usuario } from "@/core/db/schema/core";
 import type { Executor } from "@/core/db/database";
@@ -26,6 +26,8 @@ export type EventoDaLogistica = {
   semVoo: boolean;
   /** O time marcou que o evento não tem hospedagem (o "Sem hospedagem" da planilha). */
   semHospedagem: boolean;
+  /** Evento do tipo Masterclass (palestra): fica no recorte "Masterclass" das telas de Voos e de Hospedagem. */
+  masterclass: boolean;
 };
 
 /** Evento de hoje em diante, não cancelado, com a sigla do tipo e o código do polo (o aviso de voos deixa de fora as Masterclasses e o polo de casa). */
@@ -64,10 +66,19 @@ export type PedidoDaSdc = {
   convocacaoId: string | null;
   /** Só no voo: "também precisa de hotel" (uma das origens da lista de hotel do evento). */
   precisaHotel: boolean;
+  /**
+   * Só no voo de Masterclass em turnê: a última palestra, de onde a volta sai (`evento` é a primeira, onde a ida
+   * chega). Nulo = ida e volta pelo mesmo evento.
+   */
+  eventoDaVolta: EventoDaLogistica | null;
   valorCentavos: number | null;
   formaPagamento: string | null;
   observacaoTime: string | null;
   observacaoSdc: string | null;
+  /** Dia em que o pedido foi feito à SDC e dia em que ela comprou (AAAA-MM-DD), informados por quem lança. */
+  dataSolicitacao: string;
+  dataCompra: string | null;
+  /** Instantes do lançamento no sistema (o histórico usa estes). */
   solicitadoEm: Date;
   emitidoEm: Date | null;
   retornoRegistradoPor: string | null;
@@ -84,18 +95,25 @@ export type PedidoDaSdc = {
   trechos: TrechoDoPedido[];
 };
 
-const colunasDoEvento = {
-  id: evento.id,
-  codigo: evento.codigo,
-  nome: evento.nome,
-  dataInicio: inicioDoEvento,
-  dataFim: fimDoEvento,
-  localNome: local.nome,
-  cidade: local.cidade,
-  uf: local.uf,
-  semVoo: evento.semVoo,
-  semHospedagem: evento.semHospedagem,
-};
+/** Sigla do tipo Masterclass (a mesma de modules/eventos). */
+const SIGLA_MASTERCLASS = "MC";
+
+/** As colunas do evento para a logística, do evento do pedido ou de um apelido dele (o evento da volta, na turnê). */
+const colunasDe = (ev: typeof evento, lugar: typeof local) => ({
+  id: ev.id,
+  codigo: ev.codigo,
+  nome: ev.nome,
+  dataInicio: sql<string>`to_char(${ev.inicio} at time zone 'America/Sao_Paulo', 'YYYY-MM-DD')`,
+  dataFim: sql<string>`to_char(${ev.fim} at time zone 'America/Sao_Paulo', 'YYYY-MM-DD')`,
+  localNome: lugar.nome,
+  cidade: lugar.cidade,
+  uf: lugar.uf,
+  semVoo: ev.semVoo,
+  semHospedagem: ev.semHospedagem,
+  masterclass: sql<boolean>`coalesce((select t.sigla = ${SIGLA_MASTERCLASS} from eventos.tipo_evento t where t.id = ${ev.tipoEventoId}), false)`,
+});
+
+const colunasDoEvento = colunasDe(evento, local);
 
 /** Recebe o executor da transação do fluxo (escrita) ou o banco (leitura). */
 export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos & {
@@ -269,9 +287,14 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
 
     async pedidos({ desde, eventoId, tipo, referencia, situacoes, aAprovar }) {
       const aprovador = alias(usuario, "aprovador");
+      // A última palestra da turnê de Masterclass (a volta sai de lá).
+      const eventoDaVolta = alias(evento, "evento_volta");
+      const localDaVolta = alias(local, "local_volta");
       const condicoes: (SQL | undefined)[] = [
-        eventoId ? eq(pedidoSdc.eventoId, eventoId) : undefined,
-        desde && !eventoId && !referencia ? eventoTerminaDesde(desde) : undefined,
+        // Na turnê, o pedido aparece tanto na primeira palestra quanto na última.
+        eventoId ? or(eq(pedidoSdc.eventoId, eventoId), eq(pedidoSdc.eventoVoltaId, eventoId)) : undefined,
+        // A turnê continua na lista até a última palestra passar.
+        desde && !eventoId && !referencia ? sql`(coalesce(${eventoDaVolta.fim}, ${evento.fim}) at time zone 'America/Sao_Paulo')::date >= ${desde}::date` : undefined,
         tipo ? eq(pedidoSdc.tipo, tipo) : undefined,
         referencia ? eq(pedidoSdc.referencia, referencia) : undefined,
         situacoes ? inArray(pedidoSdc.situacao, situacoes) : undefined,
@@ -288,10 +311,15 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
           pessoaNome: sql<string | null>`case when ${pessoa.id} is null then null else ${nomeDaPessoa} end`,
           convocacaoId: pedidoSdc.convocacaoId,
           precisaHotel: pedidoSdc.precisaHotel,
+          eventoVoltaId: pedidoSdc.eventoVoltaId,
+          // O apelido tem as mesmas colunas; só o nome da tabela no tipo é outro.
+          eventoDaVolta: colunasDe(eventoDaVolta as unknown as typeof evento, localDaVolta as unknown as typeof local),
           valorCentavos: pedidoSdc.valorCentavos,
           formaPagamento: pedidoSdc.formaPagamento,
           observacaoTime: pedidoSdc.observacaoTime,
           observacaoSdc: pedidoSdc.observacaoSdc,
+          dataSolicitacao: pedidoSdc.dataSolicitacao,
+          dataCompra: pedidoSdc.dataCompra,
           solicitadoEm: pedidoSdc.solicitadoEm,
           emitidoEm: pedidoSdc.emitidoEm,
           retornoRegistradoPor: sql<string | null>`case when ${pedidoSdc.retornoRegistradoPor} is null then null else coalesce(${usuario.nomeUsuario}, ${usuario.email}, 'time') end`,
@@ -306,6 +334,8 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
         .from(pedidoSdc)
         .innerJoin(evento, eq(evento.id, pedidoSdc.eventoId))
         .leftJoin(local, eq(local.id, evento.localId))
+        .leftJoin(eventoDaVolta, eq(eventoDaVolta.id, pedidoSdc.eventoVoltaId))
+        .leftJoin(localDaVolta, eq(localDaVolta.id, eventoDaVolta.localId))
         .leftJoin(pessoa, eq(pessoa.id, pedidoSdc.pessoaId))
         .leftJoin(usuario, eq(usuario.id, pedidoSdc.retornoRegistradoPor))
         .leftJoin(aprovador, eq(aprovador.id, pedidoSdc.aprovadoPor))
@@ -313,8 +343,9 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
         .where(and(...condicoes))
         .orderBy(asc(inicioDoEvento), desc(pedidoSdc.referencia));
       const trechos = await trechosDosPedidos(linhas.map((linha) => linha.id));
-      return linhas.map((linha) => ({
+      return linhas.map(({ eventoVoltaId, eventoDaVolta: daVolta, ...linha }) => ({
         ...linha,
+        eventoDaVolta: eventoVoltaId && daVolta?.id ? (daVolta as EventoDaLogistica) : null,
         // tipo e situacao têm CHECK no banco com esses valores.
         tipo: linha.tipo as TipoDoPedido,
         situacao: linha.situacao as SituacaoDoPedido,
@@ -325,11 +356,15 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
 
     async travarEvento(eventoId) {
       if (!(await travarLinha(executor, evento, eventoId))) return null;
+      return this.eventoDoPedido(eventoId);
+    },
+
+    async eventoDoPedido(eventoId) {
       const [linha] = await executor
-        .select({ id: evento.id, dataFim: fimDoEvento, status: evento.status })
+        .select({ id: evento.id, dataInicio: inicioDoEvento, dataFim: fimDoEvento, status: evento.status, masterclass: colunasDoEvento.masterclass })
         .from(evento)
         .where(and(eq(evento.id, eventoId), isNull(evento.deletedAt)));
-      return linha ? { id: linha.id, dataFim: linha.dataFim, cancelado: linha.status === "CANCELADO" } : null;
+      return linha ? { id: linha.id, dataInicio: linha.dataInicio, dataFim: linha.dataFim, cancelado: linha.status === "CANCELADO", masterclass: linha.masterclass === true } : null;
     },
 
     async staffAtivo(pessoaId) {
@@ -369,6 +404,8 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
           pessoaId: pedido.pessoaId,
           convocacaoId: pedido.convocacaoId,
           precisaHotel: pedido.tipo === "VOO" && pedido.precisaHotel === true,
+          eventoVoltaId: pedido.tipo === "VOO" ? (pedido.eventoVoltaId ?? null) : null,
+          dataSolicitacao: pedido.dataSolicitacao,
           observacaoTime: pedido.observacaoTime,
           solicitadoPor: pedido.usuarioId,
           solicitadoEm: pedido.instante,
@@ -419,6 +456,7 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
           eventoId: pedidoSdc.eventoId,
           pessoaId: pedidoSdc.pessoaId,
           precisaHotel: pedidoSdc.precisaHotel,
+          dataSolicitacao: pedidoSdc.dataSolicitacao,
           valorCentavos: pedidoSdc.valorCentavos,
           aprovadoEm: pedidoSdc.aprovadoEm,
           atualizadoEm: pedidoSdc.atualizadoEm,
@@ -446,6 +484,7 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
           ...(mudanca.emissao
             ? {
                 emitidoEm: mudanca.instante,
+                dataCompra: mudanca.emissao.dataCompra,
                 valorCentavos: mudanca.emissao.valorCentavos,
                 observacaoSdc: mudanca.emissao.observacaoSdc,
                 // Um ou outro: o time em nome da SDC, ou a própria SDC.
