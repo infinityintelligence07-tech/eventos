@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   date,
   index,
@@ -39,6 +40,9 @@ export const pedidoSdc = eventosSchema.table(
     // Passageiro: obrigatório no voo, vazio na hospedagem.
     pessoaId: uuid("pessoa_id").references(() => pessoa.id, { onDelete: "restrict" }),
     convocacaoId: uuid("convocacao_id").references(() => convocacao.id, { onDelete: "set null" }),
+    // Só no voo: "também precisa de hotel". Põe o passageiro na lista de quem precisa de hotel do evento (uma das três
+    // origens, com a escala e o acréscimo direto na Hospedagem), enquanto o pedido não for cancelado.
+    precisaHotel: boolean("precisa_hotel").notNull().default(false),
     situacao: text("situacao").notNull().default("PEDIDO"),
     valorCentavos: integer("valor_centavos"),
     observacaoTime: text("observacao_time"),
@@ -187,27 +191,54 @@ export const quarto = eventosSchema.table(
   ],
 );
 
+// Uma cama por pessoa no evento. O ocupante é a PESSOA (o hotel é pedido à SDC antes de a escala existir); a convocação
+// é só um vínculo, preenchido quando a pessoa está na escala. evento_id repete o do quarto (quarto → hospedagem) para
+// o banco garantir "uma cama por pessoa por evento".
 export const quartoOcupante = eventosSchema.table(
   "quarto_ocupante",
   {
     quartoId: uuid("quarto_id")
       .notNull()
       .references(() => quarto.id, { onDelete: "cascade" }),
-    // Uma cama por convocação.
-    convocacaoId: uuid("convocacao_id")
+    eventoId: uuid("evento_id")
       .notNull()
+      .references(() => evento.id, { onDelete: "restrict" }),
+    pessoaId: uuid("pessoa_id")
+      .notNull()
+      .references(() => pessoa.id, { onDelete: "restrict" }),
+    // Sair da escala não tira ninguém do quarto: o vínculo só fica vazio.
+    convocacaoId: uuid("convocacao_id")
       .unique()
-      .references(() => convocacao.id, { onDelete: "cascade" }),
+      .references(() => convocacao.id, { onDelete: "set null" }),
     // Período da pessoa quando difere do da hospedagem (chega depois ou sai antes). Nulo = o da hospedagem.
     checkIn: date("check_in"),
     checkOut: date("check_out"),
     criadoEm: timestamp("criado_em", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    primaryKey({ columns: [table.quartoId, table.convocacaoId] }),
+    primaryKey({ columns: [table.quartoId, table.pessoaId] }),
+    unique("quarto_ocupante_evento_pessoa_unique").on(table.eventoId, table.pessoaId),
+    index("quarto_ocupante_pessoa_idx").on(table.pessoaId),
     check(
       "quarto_ocupante_periodo_check",
       sql`(${table.checkIn} IS NULL) = (${table.checkOut} IS NULL) AND (${table.checkIn} IS NULL OR ${table.checkOut} > ${table.checkIn})`,
     ),
   ],
+);
+
+// Quem precisa de hotel num evento sem depender da escala nem de pedido de voo: a pessoa foi acrescentada direto na
+// tela de Hospedagem. As outras duas origens ficam onde nascem (convocacao.precisa_hotel e pedido_sdc.precisa_hotel).
+export const hospedagemPessoa = eventosSchema.table(
+  "hospedagem_pessoa",
+  {
+    eventoId: uuid("evento_id")
+      .notNull()
+      .references(() => evento.id, { onDelete: "restrict" }),
+    pessoaId: uuid("pessoa_id")
+      .notNull()
+      .references(() => pessoa.id, { onDelete: "restrict" }),
+    criadoPor: uuid("criado_por").references(() => usuario.id, { onDelete: "set null" }),
+    criadoEm: timestamp("criado_em", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.eventoId, table.pessoaId] }), index("hospedagem_pessoa_pessoa_idx").on(table.pessoaId), index("hospedagem_pessoa_criado_por_idx").on(table.criadoPor)],
 );

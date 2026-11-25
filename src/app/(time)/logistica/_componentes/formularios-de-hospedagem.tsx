@@ -182,14 +182,14 @@ export function BotaoDefinirHospedagem({
 export function BotaoPeriodoDoOcupante({
   acao,
   quartoId,
-  convocacaoId,
+  pessoaId,
   nome,
   hospedagem,
   proprio,
 }: {
   acao: AcaoDoFormulario;
   quartoId: string;
-  convocacaoId: string;
+  pessoaId: string;
   nome: string;
   hospedagem: { checkIn: string; checkOut: string };
   proprio: { checkIn: string; checkOut: string } | null;
@@ -205,7 +205,7 @@ export function BotaoPeriodoDoOcupante({
         <form action={despachar} aria-label={`Período de ${nome}`}>
           <ErroDoFormulario estado={estado} />
           <input type="hidden" name="quartoId" value={quartoId} />
-          <input type="hidden" name="convocacaoId" value={convocacaoId} />
+          <input type="hidden" name="pessoaId" value={pessoaId} />
           <Aviso tom="neutro" className="mb-4">
             Use quando a pessoa chega depois ou sai antes do grupo. Com as mesmas datas da hospedagem, ela volta a seguir o período do grupo.
           </Aviso>

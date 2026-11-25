@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import {
+  acrescentarHospede,
   adicionarQuarto,
   aprovarPagamento,
   desfazerAprovacao,
@@ -15,6 +16,7 @@ import {
   criarCarona,
   criarHospedagem,
   definirCarona,
+  definirHotelDoVoo,
   definirPeriodoDoOcupante,
   dispensarLogisticaDoEvento,
   porNoQuarto,
@@ -27,6 +29,7 @@ import {
   removerQuarto,
   tirarDaCarona,
   tirarDoQuarto,
+  tirarHospede,
   trocarDeQuarto,
 } from "@/fluxos/logistica";
 import {
@@ -40,7 +43,9 @@ import {
   criarCaronaSchema,
   criarHospedagemSchema,
   definirCaronaSchema,
+  definirHotelDoVooSchema,
   definirPeriodoDoOcupanteSchema,
+  hospedeDoEventoSchema,
   dispensarLogisticaDoEventoSchema,
   moverDeQuartoSchema,
   porNoQuartoSchema,
@@ -78,7 +83,7 @@ export async function registrarPedidoDeVooAcao(_estado: ResultadoAcao, form: For
     const pedido = await registrarPedidoDeVoo(dados, ator, new Date());
     revalidarLogistica(pedido.eventoId);
     const destino = destinoDoPedido.parse(form.get("destino"));
-    redirect(`${destino}?${destino === "/logistica/voos" ? `evento=${pedido.eventoId}&` : ""}ref=${pedido.referencia}&registrado=1`);
+    redirect(`${destino}?${destino === "/logistica/voos" ? `evento=${pedido.eventoId}&` : ""}ref=${pedido.referencia}&registrado=1${pedido.precisaHotel ? "&hotel=1" : ""}`);
   });
 }
 
@@ -106,7 +111,37 @@ export async function cancelarPedidoAcao(_estado: ResultadoAcao, form: FormData)
   return executarAcao(form, cancelarPedidoSchema, "logistica.gerir", async (dados, ator) => {
     const pedido = await cancelarPedido(dados, ator, new Date());
     revalidarLogistica(pedido.eventoId);
-    return `Pedido ${pedido.referencia} cancelado. Avise a SDC pelo canal de sempre.`;
+    const quarto = pedido.mantidaNoQuarto ? " A pessoa continua no quarto: tire em Hospedagem se ela não for mais dormir no hotel." : "";
+    return `Pedido ${pedido.referencia} cancelado. Avise a SDC pelo canal de sempre.${quarto}`;
+  });
+}
+
+/** "Também precisa de hotel" num pedido de voo que já existe. */
+export async function definirHotelDoVooAcao(_estado: ResultadoAcao, form: FormData): Promise<ResultadoAcao> {
+  return executarAcao(form, definirHotelDoVooSchema, "logistica.gerir", async (dados, ator) => {
+    const pedido = await definirHotelDoVoo(dados, ator, new Date());
+    revalidarLogistica(pedido.eventoId);
+    if (dados.precisaHotel) return `Hotel marcado no pedido ${pedido.referencia}: a pessoa entrou na lista de quem precisa de hotel. Monte o quarto em Hospedagem.`;
+    return pedido.continuaNaLista
+      ? `Hotel desmarcado no pedido ${pedido.referencia}. A pessoa continua na lista de hotel por outra origem (escala, outro voo ou acrescentada na Hospedagem).`
+      : `Hotel desmarcado no pedido ${pedido.referencia}: a pessoa saiu da lista de quem precisa de hotel.`;
+  });
+}
+
+/** Hospedagem: acrescenta alguém à lista de quem precisa de hotel, sem escala nem voo. */
+export async function acrescentarHospedeAcao(_estado: ResultadoAcao, form: FormData): Promise<ResultadoAcao> {
+  return executarAcao(form, hospedeDoEventoSchema, "logistica.gerir", async (dados, ator) => {
+    const { nome } = await acrescentarHospede(dados, ator, new Date());
+    revalidarLogistica(dados.eventoId);
+    return `${nome} entrou na lista de quem precisa de hotel. Coloque num quarto.`;
+  });
+}
+
+export async function tirarHospedeAcao(_estado: ResultadoAcao, form: FormData): Promise<ResultadoAcao> {
+  return executarAcao(form, hospedeDoEventoSchema, "logistica.gerir", async (dados, ator) => {
+    const { nome, continuaNaLista } = await tirarHospede(dados, ator, new Date());
+    revalidarLogistica(dados.eventoId);
+    return continuaNaLista ? `${nome} deixou de constar como acrescentada aqui, mas continua na lista pela escala ou pelo pedido de voo.` : `${nome} saiu da lista de quem precisa de hotel.`;
   });
 }
 

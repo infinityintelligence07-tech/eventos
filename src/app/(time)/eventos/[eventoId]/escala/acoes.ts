@@ -83,9 +83,10 @@ export async function porNaVaga(_estado: ResultadoAcao, form: FormData): Promise
 
 export async function tirarDaVaga(_estado: ResultadoAcao, form: FormData): Promise<ResultadoAcao> {
   return executarAcao(form, tirarDaVagaSchema, "escala.montar", async (dados, ator) => {
-    const { nome, jaAvisada } = await fluxo.tirarDaVaga(dados, quem(ator));
+    const { nome, jaAvisada, mantidaNoQuarto } = await fluxo.tirarDaVaga(dados, quem(ator));
     atualizarTelas(dados.eventoId);
-    return jaAvisada ? `${nome} saiu da escala. Avise a pessoa.` : `${nome} saiu da escala.`;
+    const quarto = mantidaNoQuarto ? " Ela continua no quarto: tire em Hospedagem se não for mais dormir no hotel." : "";
+    return `${jaAvisada ? `${nome} saiu da escala. Avise a pessoa.` : `${nome} saiu da escala.`}${quarto}`;
   });
 }
 

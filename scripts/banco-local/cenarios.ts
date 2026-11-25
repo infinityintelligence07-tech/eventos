@@ -390,8 +390,12 @@ async function semearLogistica(db: Executor, evento: EventoCenario, voando: Conv
     const quarto = quartos.find((q) => q.vagas > 0 && q.sexo === c.pessoa.sexo) ?? quartos.find((q) => q.vagas > 0 && q.sexo === null);
     if (!quarto) continue;
     quarto.vagas -= 1;
-    await db.query(`INSERT INTO eventos.quarto_ocupante (quarto_id, convocacao_id) VALUES ($1, $2)`, [quarto.id, c.id]);
-    // A Hospedagem só aloca quem o time marcou "precisa de hotel" na escala.
+    // O ocupante é a pessoa no evento; a convocação é só o vínculo com a escala.
+    await db.query(
+      `INSERT INTO eventos.quarto_ocupante (quarto_id, evento_id, pessoa_id, convocacao_id) SELECT $1, $2, c.pessoa_id, c.id FROM eventos.convocacao c WHERE c.id = $3`,
+      [quarto.id, evento.id, c.id],
+    );
+    // Uma das origens de "precisa de hotel": a caixa Hotel da escala.
     await db.query(`UPDATE eventos.convocacao SET precisa_hotel = true WHERE id = $1`, [c.id]);
   }
 }

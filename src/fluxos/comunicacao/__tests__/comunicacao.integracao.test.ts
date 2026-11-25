@@ -116,7 +116,11 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da Comunicação no banco", () => {
       [eventoId, hotel],
     );
     const { id: quartoId } = await um(`insert into eventos.quarto (hospedagem_id, nome, capacidade, sexo) values ($1, 'Quarto 1', 2, 'F') returning id`, [hospedagemId]);
-    await banco().sql(`insert into eventos.quarto_ocupante (quarto_id, convocacao_id) values ($1, $2), ($1, $3)`, [quartoId, ana, carla]);
+    await banco().sql(`insert into eventos.quarto_ocupante (quarto_id, evento_id, pessoa_id, convocacao_id) select q.id, h.evento_id, c.pessoa_id, c.id from eventos.quarto q join eventos.hospedagem h on h.id = q.hospedagem_id, eventos.convocacao c where q.id = $1 and c.id = any($2::uuid[])`, [quartoId, [ana, carla]]);
+
+    // Uma das duas entrou no quarto antes de entrar na escala (hotel pedido junto com o voo): o ocupante não tem o
+    // vínculo com a convocação, e a copy acha o quarto pela pessoa no evento.
+    await banco().sql(`update eventos.quarto_ocupante set convocacao_id = null where convocacao_id = $1`, [carla]);
 
     await salvarLinkDeCustos("https://exemplo.test/custos", ator(), agora);
     modeloEscalacao = (await um(`select id from eventos.modelo_copy where tipo = 'ESCALACAO'`)).id!;

@@ -69,6 +69,10 @@ export {
   type AlterarPedido,
   type AprovarPagamento,
   aprovarPagamentoSchema,
+  type DefinirHotelDoVoo,
+  definirHotelDoVooSchema,
+  type HospedeDoEvento,
+  hospedeDoEventoSchema,
   type DefinirAcessoDaSdc,
   definirAcessoDaSdcSchema,
   desfazerAprovacaoSchema,
@@ -143,8 +147,10 @@ export {
   type HospedagemDoEvento,
   type LocalDeHospedagem,
   type OcupanteDoQuarto,
-  type PessoaDaEquipe,
+  type PessoaParaHospedar,
   type QuartoDaHospedagem,
 } from "./repository/hospedagem-repository";
 export { type CaronaDoEvento, criarRepositorioCaronas, type PessoaDaCarona } from "./repository/caronas-repository";
 export { transferirLogisticaDaConvocacao, vincularPedidosDeVooDaPessoa } from "./repository/comum";
+export { manterNoQuartoSemOrigem, origensDoHotel, vincularHotelDaPessoa } from "./repository/hospedagem-repository";
+export { ORIGENS_DO_HOTEL, type OrigemDoHotel, podeTirarOrigem, precisaManterComoAvulsa, rotuloDaOrigemDoHotel } from "./domain/hotel";

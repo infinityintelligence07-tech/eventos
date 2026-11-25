@@ -4,6 +4,7 @@ export {
   cancelarPedido,
   carregarPedido,
   carregarVoos,
+  definirHotelDoVoo,
   type FiltroDeVoos,
   type LinhaDeVoo,
   type PedidoCarregado,
@@ -16,6 +17,7 @@ export {
 } from "./voos";
 export { dispensarLogisticaDoEvento } from "./dispensa";
 export {
+  acrescentarHospede,
   adicionarQuarto,
   alterarHospedagem,
   aplicarRoomingSugerido,
@@ -31,6 +33,7 @@ export {
   removerHospedagem,
   removerQuarto,
   tirarDoQuarto,
+  tirarHospede,
   trocarDeQuarto,
 } from "./hospedagem";
 export { type CaronasCarregadas, carregarCaronas, criarCarona, definirCarona, removerCarona, tirarDaCarona } from "./caronas";

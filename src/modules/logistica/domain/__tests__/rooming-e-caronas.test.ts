@@ -22,7 +22,7 @@ const quarto = (id: string, capacidade: number, sexo: "F" | "M" | null, ocupante
   id,
   capacidade,
   sexo,
-  ocupantes: ocupantes.map((sexoDoOcupante, indice) => ({ convocacaoId: `${id}-${indice}`, sexo: sexoDoOcupante })),
+  ocupantes: ocupantes.map((sexoDoOcupante, indice) => ({ pessoaId: `${id}-${indice}`, sexo: sexoDoOcupante })),
 });
 
 describe("podeOcupar", () => {
@@ -34,11 +34,11 @@ describe("podeOcupar", () => {
     ["misto aceita qualquer um", quarto("q", 3, null, ["F"]), "M", { ok: true }],
     ["misto aceita sem sexo", quarto("q", 3, null), null, { ok: true }],
   ])("%s", (_caso, alvo, sexo, esperado) => {
-    expect(podeOcupar(alvo, { convocacaoId: "nova", sexo })).toEqual(esperado);
+    expect(podeOcupar(alvo, { pessoaId: "nova", sexo })).toEqual(esperado);
   });
 
   it("quem já está no quarto não ocupa duas camas", () => {
-    expect(podeOcupar(quarto("q", 1, "F", ["F"]), { convocacaoId: "q-0", sexo: "F" })).toEqual({ ok: true });
+    expect(podeOcupar(quarto("q", 1, "F", ["F"]), { pessoaId: "q-0", sexo: "F" })).toEqual({ ok: true });
   });
 
   it("mistura de sexos ignora quem está sem sexo", () => {
@@ -71,12 +71,12 @@ describe("podeTrocar (duas pessoas trocam de lugar em um passo)", () => {
     const convocacao = "018f4e2a-0000-7000-8000-000000000002";
     const outroQuarto = "018f4e2a-0000-7000-8000-000000000003";
     const outraPessoa = "018f4e2a-0000-7000-8000-000000000004";
-    const ler = (destino: unknown) => moverDeQuartoSchema.safeParse({ quartoId: quartoAtual, convocacaoId: convocacao, destino });
+    const ler = (destino: unknown) => moverDeQuartoSchema.safeParse({ quartoId: quartoAtual, pessoaId: convocacao, destino });
 
-    expect(ler(destinoNoQuarto(outroQuarto))).toEqual({ success: true, data: { mover: { quartoId: outroQuarto, convocacaoId: convocacao } } });
+    expect(ler(destinoNoQuarto(outroQuarto))).toEqual({ success: true, data: { mover: { quartoId: outroQuarto, pessoaId: convocacao } } });
     expect(ler(destinoDaTroca(outroQuarto, outraPessoa))).toEqual({
       success: true,
-      data: { trocar: { quartoId: quartoAtual, convocacaoId: convocacao, comQuartoId: outroQuarto, comConvocacaoId: outraPessoa } },
+      data: { trocar: { quartoId: quartoAtual, pessoaId: convocacao, comQuartoId: outroQuarto, comPessoaId: outraPessoa } },
     });
     for (const invalido of [undefined, "", outroQuarto, `quarto:${outroQuarto}:${outraPessoa}`, `troca:${outroQuarto}`, "troca:a:b", `outro:${outroQuarto}`]) {
       expect(ler(invalido).success).toBe(false);
@@ -106,7 +106,7 @@ describe("período próprio do ocupante", () => {
   });
 
   it("o formulário exige as duas datas ou nenhuma, com check-out depois do check-in", () => {
-    const ids = { quartoId: "018f4e2a-0000-7000-8000-000000000001", convocacaoId: "018f4e2a-0000-7000-8000-000000000002" };
+    const ids = { quartoId: "018f4e2a-0000-7000-8000-000000000001", pessoaId: "018f4e2a-0000-7000-8000-000000000002" };
     expect(definirPeriodoDoOcupanteSchema.safeParse(ids).success).toBe(true);
     expect(definirPeriodoDoOcupanteSchema.safeParse({ ...ids, checkIn: "2026-12-15", checkOut: "2026-12-17" }).success).toBe(true);
     expect(definirPeriodoDoOcupanteSchema.safeParse({ ...ids, checkIn: "2026-12-15" }).success).toBe(false);
@@ -119,18 +119,18 @@ describe("sugerirRooming por sexo", () => {
     const quartos = [quarto("f1", 2, "F"), quarto("f2", 2, "F", ["F"]), quarto("m1", 2, "M"), quarto("x1", 3, null, ["M"]), quarto("x2", 2, null)];
     const resultado = sugerirRooming(
       [
-        { convocacaoId: "ana", sexo: "F" },
-        { convocacaoId: "bia", sexo: "F" },
-        { convocacaoId: "caio", sexo: "M" },
-        { convocacaoId: "sem", sexo: null },
+        { pessoaId: "ana", sexo: "F" },
+        { pessoaId: "bia", sexo: "F" },
+        { pessoaId: "caio", sexo: "M" },
+        { pessoaId: "sem", sexo: null },
       ],
       quartos,
     );
     expect(resultado.alocacoes).toEqual([
-      { convocacaoId: "ana", quartoId: "f2" },
-      { convocacaoId: "bia", quartoId: "f1" },
-      { convocacaoId: "caio", quartoId: "m1" },
-      { convocacaoId: "sem", quartoId: "x2" },
+      { pessoaId: "ana", quartoId: "f2" },
+      { pessoaId: "bia", quartoId: "f1" },
+      { pessoaId: "caio", quartoId: "m1" },
+      { pessoaId: "sem", quartoId: "x2" },
     ]);
     expect(resultado.semLugar).toEqual([]);
   });
@@ -138,12 +138,12 @@ describe("sugerirRooming por sexo", () => {
   it("quem não cabe fica de fora, sem misturar sexos em quarto separado", () => {
     const resultado = sugerirRooming(
       [
-        { convocacaoId: "ana", sexo: "F" },
-        { convocacaoId: "caio", sexo: "M" },
+        { pessoaId: "ana", sexo: "F" },
+        { pessoaId: "caio", sexo: "M" },
       ],
       [quarto("f1", 1, "F"), quarto("x1", 2, null, ["F"])],
     );
-    expect(resultado).toEqual({ alocacoes: [{ convocacaoId: "ana", quartoId: "f1" }], semLugar: ["caio"] });
+    expect(resultado).toEqual({ alocacoes: [{ pessoaId: "ana", quartoId: "f1" }], semLugar: ["caio"] });
   });
 });
 

@@ -36,6 +36,7 @@ import {
   dispensarLogisticaDoEventoAcao,
   registrarPedidoDeVooAcao,
   registrarRetornoDeVooAcao,
+  definirHotelDoVooAcao,
 } from "../acoes";
 import {
   BotaoAprovarPagamento,
@@ -53,7 +54,7 @@ import { ChipDoVoo, enderecoCom, paraCampoDeDataEHora, paraCampoDeDinheiro } fro
 // compra e o time registra o retorno. O pedido não depende da escala: "Novo pedido" vale para qualquer evento futuro e
 // qualquer pessoa ativa do staff.
 
-export type ParametrosDeVoos = { evento?: string; situacao?: string; ref?: string; modo?: string; novo?: string; pessoa?: string; registrado?: string };
+export type ParametrosDeVoos = { evento?: string; situacao?: string; ref?: string; modo?: string; novo?: string; pessoa?: string; registrado?: string; hotel?: string };
 
 function textoDoVoo(trecho: TrechoDoPedido): string | null {
   if (!trecho.companhia || !trecho.numeroVoo) return null;
@@ -108,7 +109,7 @@ function LinhaDoVoo({ linha, base, parametros, escrita, diasDoAtraso }: { linha:
   const trajeto = trajetoDosTrechos(trechos.map((trecho) => trecho.sentido));
   const companhias = distintos(trechos.map((trecho) => (trecho.companhia ? [trecho.companhia, trecho.numeroVoo].filter(Boolean).join(" ") : null)));
   const reservas = distintos(trechos.map((trecho) => trecho.localizador));
-  const abrir = (mudancas: Record<string, string | null>) => enderecoCom(base, parametros, { ref: null, modo: null, novo: null, pessoa: null, registrado: null, ...mudancas });
+  const abrir = (mudancas: Record<string, string | null>) => enderecoCom(base, parametros, { ref: null, modo: null, novo: null, pessoa: null, registrado: null, hotel: null, ...mudancas });
   return (
     <LinhaDaTabela>
       <CelulaDaTabela cabecalhoDaLinha>
@@ -198,12 +199,40 @@ function TabelaDoEvento({ evento, linhas, base, parametros, escrita, diasDoAtras
   );
 }
 
-function DetalheDoPedido({ pedido, registrado }: { pedido: PedidoCarregado; registrado: boolean }) {
+/** Marca ou desmarca "Também precisa de hotel" num pedido de voo que já existe. */
+function BotaoHotelDoVoo({ pedidoId, precisaHotel }: { pedidoId: string; precisaHotel: boolean }) {
+  const rotulo = precisaHotel ? "Não precisa de hotel" : "Também precisa de hotel";
+  return (
+    <FormularioDeAcao acao={definirHotelDoVooAcao} aria-label={rotulo}>
+      <input type="hidden" name="pedidoId" value={pedidoId} />
+      <input type="hidden" name="precisaHotel" value={precisaHotel ? "false" : "true"} />
+      <BotaoDeEnvio tamanho="pequeno" variante="texto">
+        {precisaHotel ? "Desmarcar" : "Marcar"}
+      </BotaoDeEnvio>
+    </FormularioDeAcao>
+  );
+}
+
+function DetalheDoPedido({ pedido, registrado, comHotel = false, escrita = false }: { pedido: PedidoCarregado; registrado: boolean; comHotel?: boolean; escrita?: boolean }) {
+  const hospedagemHref = `/logistica/hospedagem?evento=${pedido.evento.id}`;
   return (
     <div className="flex flex-col gap-4 text-[14px]">
       {registrado && (
         <Aviso tom="sucesso" titulo={`Pedido ${pedido.referencia} registrado.`}>
           A SDC ainda não tem portal: copie o pedido e envie pelo canal de sempre.
+        </Aviso>
+      )}
+      {registrado && comHotel && pedido.precisaHotel && (
+        <Aviso
+          tom="informacao"
+          titulo={`${pedido.pessoaNome ?? "A pessoa"} entrou na lista de quem precisa de hotel`}
+          acao={
+            <Link href={hospedagemHref} className="font-medium text-[var(--ds-tint-text)] hover:underline">
+              Montar os quartos
+            </Link>
+          }
+        >
+          O hotel é pedido à SDC junto com o voo. Coloque a pessoa num quarto em Hospedagem, mesmo antes de a escala existir.
         </Aviso>
       )}
       {pedido.situacao === "ALTERADO" && <Aviso tom="atencao">O time alterou este pedido depois da emissão. Registre o novo voo quando a SDC responder.</Aviso>}
@@ -237,6 +266,24 @@ function DetalheDoPedido({ pedido, registrado }: { pedido: PedidoCarregado; regi
           <>
             <dt className="text-[var(--ds-label-2)]">Passageiro</dt>
             <dd>{pedido.pessoaNome}</dd>
+          </>
+        )}
+        {pedido.tipo === "VOO" && (
+          <>
+            <dt className="text-[var(--ds-label-2)]">Hotel</dt>
+            <dd className="flex flex-wrap items-center gap-2">
+              {pedido.precisaHotel ? (
+                <>
+                  Também precisa de hotel
+                  <Link href={hospedagemHref} className="text-[13px] font-medium text-[var(--ds-tint-text)] hover:underline">
+                    Ver quartos
+                  </Link>
+                </>
+              ) : (
+                "Não precisa de hotel por este pedido"
+              )}
+              {escrita && pedido.situacao !== "CANCELADO" && <BotaoHotelDoVoo pedidoId={pedido.id} precisaHotel={pedido.precisaHotel} />}
+            </dd>
           </>
         )}
         <dt className="text-[var(--ds-label-2)]">Solicitado em</dt>
@@ -288,8 +335,8 @@ function DetalheDoPedido({ pedido, registrado }: { pedido: PedidoCarregado; regi
 }
 
 function PainelDoPedido({ pedido, base, parametros, escrita }: { pedido: PedidoCarregado; base: string; parametros: ParametrosDeVoos; escrita: boolean }) {
-  const fechar = enderecoCom(base, parametros, { ref: null, modo: null, registrado: null });
-  const voltar = enderecoCom(base, parametros, { modo: null, registrado: null });
+  const fechar = enderecoCom(base, parametros, { ref: null, modo: null, registrado: null, hotel: null });
+  const voltar = enderecoCom(base, parametros, { modo: null, registrado: null, hotel: null });
   const subtitulo = [pedido.pessoaNome ?? "Hospedagem", pedido.evento.codigo ?? pedido.evento.nome].join(" · ");
   const modo = escrita ? parametros.modo : undefined;
 
@@ -366,12 +413,12 @@ function PainelDoPedido({ pedido, base, parametros, escrita }: { pedido: PedidoC
           </div>
           <div className="flex flex-wrap gap-2">
             {escrita && ativo && (
-              <BotaoLink href={enderecoCom(base, parametros, { modo: "alterar", registrado: null })} scroll={false}>
+              <BotaoLink href={enderecoCom(base, parametros, { modo: "alterar", registrado: null, hotel: null })} scroll={false}>
                 Alterar pedido
               </BotaoLink>
             )}
             {escrita && pedido.situacao === "EMITIDO" && (
-              <BotaoLink href={enderecoCom(base, parametros, { modo: "registrar", registrado: null })} scroll={false}>
+              <BotaoLink href={enderecoCom(base, parametros, { modo: "registrar", registrado: null, hotel: null })} scroll={false}>
                 Corrigir compra
               </BotaoLink>
             )}
@@ -380,7 +427,7 @@ function PainelDoPedido({ pedido, base, parametros, escrita }: { pedido: PedidoC
               <BotaoAprovarPagamento acao={aprovarPagamentoAcao} pedidoId={pedido.id} referencia={pedido.referencia} valor={dinheiro(pedido.valorCentavos ?? 0)} valorCentavos={pedido.valorCentavos ?? 0} atualizadoEm={pedido.atualizadoEm} tamanho="normal" />
             )}
             {escrita && aguardandoSdc(pedido.situacao) && (
-              <BotaoLink variante="primario" href={enderecoCom(base, parametros, { modo: "registrar", registrado: null })} scroll={false}>
+              <BotaoLink variante="primario" href={enderecoCom(base, parametros, { modo: "registrar", registrado: null, hotel: null })} scroll={false}>
                 Registrar voo
               </BotaoLink>
             )}
@@ -388,7 +435,7 @@ function PainelDoPedido({ pedido, base, parametros, escrita }: { pedido: PedidoC
         </div>
       }
     >
-      <DetalheDoPedido pedido={pedido} registrado={parametros.registrado === "1"} />
+      <DetalheDoPedido pedido={pedido} registrado={parametros.registrado === "1"} comHotel={parametros.hotel === "1"} escrita={escrita} />
     </PainelPelaUrl>
   );
 }
@@ -414,7 +461,7 @@ function BotaoSemVoo({ eventoId, dispensar, rotulo, descricao }: { eventoId: str
  */
 function AvisoDeCompra({ aviso, base, parametros, escrita }: { aviso: VoosCarregados["avisoDeCompra"]; base: string; parametros: ParametrosDeVoos; escrita: boolean }) {
   if (aviso.eventos.length === 0) return null;
-  const limpo = { ref: null, modo: null, pessoa: null, registrado: null, situacao: null };
+  const limpo = { ref: null, modo: null, pessoa: null, registrado: null, hotel: null, situacao: null };
   return (
     <Aviso tom="atencao" className="mb-4" titulo={aviso.eventos.length === 1 ? "1 evento no prazo ainda sem pedido de voo" : `${aviso.eventos.length} eventos no prazo ainda sem pedido de voo`}>
       <ul className="mt-1 flex flex-col gap-1">
@@ -474,7 +521,7 @@ export function SecaoDeVoos({
   comSeletorDeEvento: boolean;
 }) {
   const { contagens, eventoDoFiltro } = dados;
-  const limpo = { ref: null, modo: null, pessoa: null, registrado: null };
+  const limpo = { ref: null, modo: null, pessoa: null, registrado: null, hotel: null };
   const novoHref = enderecoCom(base, parametros, { ...limpo, novo: "1" });
   const diasDoAtraso = dados.avisoDeCompra.diasDoAtraso;
   // Na aba do evento o formulário já sabe o evento; na tela geral vale o do filtro (ou o do atalho que abriu o painel).
@@ -496,6 +543,28 @@ export function SecaoDeVoos({
       </div>
       {!escrita && <FaixaSomenteLeitura />}
       <AvisoDeCompra aviso={dados.avisoDeCompra} base={base} parametros={parametros} escrita={escrita} />
+      {dados.hotelSemQuarto.length > 0 && (
+        <Aviso
+          tom="informacao"
+          className="mb-4"
+          titulo={(() => {
+            const total = dados.hotelSemQuarto.reduce((soma, item) => soma + item.pessoas, 0);
+            return total === 1 ? "1 pessoa com voo pedido e sem quarto" : `${total} pessoas com voo pedido e sem quarto`;
+          })()}
+        >
+          <p>Quem voa e também precisa de hotel já está na lista da Hospedagem. Monte os quartos para pedir o hotel à SDC junto com o voo.</p>
+          <ul className="mt-1 flex flex-col gap-1">
+            {dados.hotelSemQuarto.map(({ evento, pessoas }) => (
+              <li key={evento.id}>
+                <Link href={`/logistica/hospedagem?evento=${evento.id}`} className="font-medium text-[var(--ds-tint-text)] hover:underline">
+                  {evento.codigo ?? evento.nome} · {dataCurta(evento.dataInicio)}
+                </Link>{" "}
+                · {pessoas === 1 ? "1 pessoa sem quarto" : `${pessoas} pessoas sem quarto`}
+              </li>
+            ))}
+          </ul>
+        </Aviso>
+      )}
       <TotaisDoPagamentoNaTela totais={dados.totais} />
       <BarraDeFiltros resultado={dados.total === 1 ? "1 linha" : `${dados.total} linhas`}>
         {comSeletorDeEvento && (

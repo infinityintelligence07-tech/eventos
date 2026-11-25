@@ -21,7 +21,7 @@ export async function registrarRespostaDoStaff(
     instante: Date;
     aoTrocarPrincipal?: AoTrocarPrincipal;
   },
-): Promise<{ nome: string }> {
+): Promise<{ nome: string; pessoaId: string }> {
   const evento = await repo.travarEvento(entrada.eventoId);
   if (!evento) throw new NaoEncontradoError("Evento não encontrado.");
   if (eventoEncerrado(evento.status)) throw new EscalaTravadaError("O evento foi cancelado ou já terminou. A escala fica só para consulta.");
@@ -62,5 +62,5 @@ export async function registrarRespostaDoStaff(
     emNomeDePessoaId: convocacao.pessoaId,
     usuarioId: entrada.usuarioId,
   });
-  return { nome: convocacao.nome };
+  return { nome: convocacao.nome, pessoaId: convocacao.pessoaId };
 }

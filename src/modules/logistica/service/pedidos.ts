@@ -18,6 +18,7 @@ import {
   type QuemMexeNaCompra,
 } from "../domain/pagamento";
 import { dataEmSaoPaulo, instanteDeSaoPaulo } from "../domain/datas";
+import type { OrigemDoHotel } from "../domain/hotel";
 import type {
   AlterarPedido,
   CancelarPedido,
@@ -51,6 +52,8 @@ export type PedidoTravado = {
   situacao: SituacaoDoPedido;
   eventoId: string;
   pessoaId: string | null;
+  /** Só no voo: "também precisa de hotel". */
+  precisaHotel: boolean;
   valorCentavos: number | null;
   /** Preenchido = pagamento aprovado pelo time. */
   aprovadoEm: Date | null;
@@ -95,9 +98,15 @@ export type RepositorioPedidos = {
     pessoaId: string | null;
     convocacaoId: string | null;
     observacaoTime: string | null;
+    /** Só no voo: "também precisa de hotel". */
+    precisaHotel?: boolean;
     usuarioId: string;
     instante: Date;
   }): Promise<{ id: string; referencia: string }>;
+  /** Grava "também precisa de hotel" no pedido de voo. */
+  definirPrecisaHotel(pedidoId: string, precisaHotel: boolean, instante: Date): Promise<void>;
+  /** Como está o hotel da pessoa no evento agora: origens de "precisa de hotel" e se ela ocupa um quarto. */
+  hotelDaPessoaNoEvento(eventoId: string, pessoaId: string): Promise<{ origens: OrigemDoHotel[]; noQuarto: boolean }>;
   substituirTrechosDesejados(pedidoId: string, trechos: TrechoDesejado[], instante: Date): Promise<void>;
   travarPedido(pedidoId: string): Promise<PedidoTravado | null>;
   /**
@@ -174,7 +183,7 @@ export async function registrarPedidoDeVoo(
   repo: RepositorioPedidos,
   entrada: RegistrarPedidoDeVoo,
   { usuarioId, instante }: ContextoDaAcao,
-): Promise<{ id: string; referencia: string; eventoId: string; outrosAtivos: string[] }> {
+): Promise<{ id: string; referencia: string; eventoId: string; outrosAtivos: string[]; precisaHotel: boolean }> {
   const evento = await repo.travarEvento(entrada.eventoId);
   if (!evento) throw new ErroDaLogistica("Evento não encontrado. Recarregue a página.");
   if (evento.cancelado) throw new ErroDaLogistica("Este evento foi cancelado: não dá para pedir voo para ele.");
@@ -196,6 +205,7 @@ export async function registrarPedidoDeVoo(
     pessoaId: pessoa.pessoaId,
     convocacaoId: await repo.convocacaoPrincipal(evento.id, pessoa.pessoaId),
     observacaoTime: entrada.observacaoTime ?? null,
+    precisaHotel: entrada.precisaHotel === true,
     usuarioId,
     instante,
   });
@@ -206,9 +216,15 @@ export async function registrarPedidoDeVoo(
     acao: "PEDIDO_REGISTRADO",
     statusPara: "PEDIDO",
     usuarioId,
-    dados: { referencia: pedido.referencia, tipo: "VOO", trechos: entrada.trechos.map((trecho) => trecho.sentido), ...(outrosAtivos.length > 0 ? { outrosAtivos } : {}) },
+    dados: {
+      referencia: pedido.referencia,
+      tipo: "VOO",
+      trechos: entrada.trechos.map((trecho) => trecho.sentido),
+      ...(entrada.precisaHotel === true ? { precisaHotel: true } : {}),
+      ...(outrosAtivos.length > 0 ? { outrosAtivos } : {}),
+    },
   });
-  return { ...pedido, eventoId: evento.id, outrosAtivos };
+  return { ...pedido, eventoId: evento.id, outrosAtivos, precisaHotel: entrada.precisaHotel === true };
 }
 
 function trechoDesejado(trecho: RegistrarPedidoDeVoo["trechos"][number]): TrechoDesejado {
@@ -219,6 +235,39 @@ function trechoDesejado(trecho: RegistrarPedidoDeVoo["trechos"][number]): Trecho
     dataDesejada: trecho.dataDesejada,
     preferenciaHorario: trecho.preferenciaHorario ?? null,
   };
+}
+
+/**
+ * "Também precisa de hotel" num pedido de voo que já existe. Marcar põe a pessoa na lista de quem precisa de hotel do
+ * evento. Desmarcar tira esta origem: se a pessoa também está na lista pela escala, por outro pedido de voo ou porque
+ * foi acrescentada na Hospedagem, continua nela (e no quarto); se era a única origem e ela está num quarto, é recusado.
+ */
+export async function definirHotelDoVoo(
+  repo: RepositorioPedidos,
+  entrada: { pedidoId: string; precisaHotel: boolean },
+  { usuarioId, instante }: ContextoDaAcao,
+): Promise<PedidoTravado & { continuaNaLista: boolean }> {
+  const pedido = await pedidoTravado(repo, entrada.pedidoId);
+  if (pedido.tipo !== "VOO" || !pedido.pessoaId) throw new ErroDaLogistica("Só o pedido de voo diz se a pessoa também precisa de hotel.");
+  if (pedido.situacao === "CANCELADO") throw new ErroDaLogistica("Este pedido foi cancelado: não dá para mudar o hotel por ele.");
+  if (pedido.precisaHotel === entrada.precisaHotel) {
+    throw new ErroDaLogistica(entrada.precisaHotel ? "Este pedido já está marcado com hotel. Recarregue a página." : "Este pedido já está sem hotel. Recarregue a página.");
+  }
+
+  await repo.definirPrecisaHotel(pedido.id, entrada.precisaHotel, instante);
+  // Lido depois de gravar: outro pedido de voo da mesma pessoa no evento continua valendo como origem.
+  const hotel = await repo.hotelDaPessoaNoEvento(pedido.eventoId, pedido.pessoaId);
+  if (!entrada.precisaHotel && hotel.noQuarto && hotel.origens.length === 0) {
+    throw new ErroDaLogistica("Esta pessoa já está num quarto. Tire a pessoa do quarto em Hospedagem antes de desmarcar o hotel.");
+  }
+  await repo.registrar({
+    pedidoId: pedido.id,
+    eventoId: pedido.eventoId,
+    acao: entrada.precisaHotel ? "HOTEL_MARCADO" : "HOTEL_DESMARCADO",
+    usuarioId,
+    dados: { referencia: pedido.referencia, origens: hotel.origens },
+  });
+  return { ...pedido, precisaHotel: entrada.precisaHotel, continuaNaLista: hotel.origens.length > 0 };
 }
 
 export async function alterarPedido(repo: RepositorioPedidos, entrada: AlterarPedido, { usuarioId, instante }: ContextoDaAcao): Promise<PedidoTravado> {

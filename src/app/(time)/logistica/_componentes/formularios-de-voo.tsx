@@ -208,6 +208,14 @@ export function FormularioNovoPedido({
           volta: evento ? { data: evento.dataFim, preferencia: "" } : null,
         }}
       />
+      {/* Marcada por padrão: quem vai de avião quase sempre dorme no hotel, e o hotel é pedido à SDC junto com o voo. */}
+      <CaixaDeMarcar
+        name="precisaHotel"
+        defaultChecked
+        className="mt-4"
+        rotulo="Também precisa de hotel"
+        ajuda="A pessoa entra na lista de quem precisa de hotel neste evento, mesmo sem escala. Os quartos são montados em Hospedagem. Desmarque se ela não vai dormir no hotel."
+      />
       <CampoDeTextoLongo className="mt-4" nome="observacaoTime" rotulo="Observação para a SDC" maxLength={500} placeholder="Horário preferido, bagagem…" erros={erros("observacaoTime")} />
       <div className="mt-5 flex justify-end">
         <BotaoDeEnvio icone={<Send size={18} aria-hidden />} textoCarregando="Registrando…">

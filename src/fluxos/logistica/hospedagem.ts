@@ -14,7 +14,8 @@ import {
   misturaSexos,
   nomeComPeriodo,
   type NovoHotel,
-  type PessoaDaEquipe,
+  type HospedeDoEvento,
+  type PessoaParaHospedar,
   type PorNoQuarto,
   type RegistrarPedidoDeHospedagem,
   type RegistrarRetornoDeHospedagem,
@@ -43,10 +44,17 @@ export type HospedagemDoEventoCarregada = {
   evento: EventoDaLogistica | null;
   hospedagens: HospedagemCarregada[];
   locais: LocalDeHospedagem[];
-  /** Quem o time marcou para hotel na escala do evento (só essas pessoas entram em quarto). */
-  equipe: PessoaDaEquipe[];
-  semQuarto: PessoaDaEquipe[];
-  /** Pessoas ativas na escala do evento que não estão marcadas para hotel (para lembrar de conferir a escala). */
+  /**
+   * Quem precisa de hotel no evento: a união das origens (escala, pedido de voo, acrescentada aqui), uma linha por
+   * pessoa. Só essas pessoas entram em quarto; a escala não é exigida.
+   */
+  equipe: PessoaParaHospedar[];
+  semQuarto: PessoaParaHospedar[];
+  /** Pessoas ativas do cadastro de staff que ainda não estão na lista: quem dá para acrescentar por aqui. */
+  staffParaAcrescentar: { pessoaId: string; nome: string }[];
+  /** O evento ainda aceita acrescentar gente (não foi cancelado nem terminou). */
+  podeAcrescentar: boolean;
+  /** Pessoas ativas na escala do evento que não estão na lista de hotel (para lembrar de conferir). */
   naEscalaSemHotel: number;
   /** Quantas pessoas sem quarto a sugestão por sexo consegue alocar. */
   sugestaoAloca: number;
@@ -68,14 +76,31 @@ export async function carregarHospedagem(eventoId: string | null, agora: Date): 
   const db = await bancoParaLeitura();
   const pedidos = criarRepositorioPedidos(db);
   const repo = criarRepositorioHospedagem(db);
-  const [eventos, locais] = await Promise.all([pedidos.eventosDaLogistica({ desde: dataEmSaoPaulo(agora) }), repo.locaisDeHospedagem()]);
+  const hoje = dataEmSaoPaulo(agora);
+  // O seletor traz todos os eventos de hoje em diante, com ou sem escala (o hotel é pedido antes dela). Sem evento
+  // escolhido, abre o próximo que já tem o que montar: gente na escala ou na lista de hotel, ou hospedagem aberta.
+  const [eventos, comEquipe, comHotel, locais] = await Promise.all([
+    pedidos.eventosFuturos({ desde: hoje }),
+    pedidos.eventosDaLogistica({ desde: hoje }),
+    repo.eventosComHotel({ desde: hoje }),
+    repo.locaisDeHospedagem(),
+  ]);
+  const comTrabalho = new Set([...comEquipe.map((item) => item.id), ...comHotel]);
+  const candidatos = eventos.filter((item) => comTrabalho.has(item.id));
   const evento = eventoId
     ? (eventos.find((item) => item.id === eventoId) ?? (await pedidos.eventoPorId(eventoId)))
-    : (eventos.find((item) => !item.semHospedagem) ?? eventos[0] ?? null);
-  if (!evento) return { eventos, evento: null, hospedagens: [], locais, equipe: [], semQuarto: [], naEscalaSemHotel: 0, sugestaoAloca: 0 };
+    : (candidatos.find((item) => !item.semHospedagem) ?? candidatos[0] ?? eventos[0] ?? null);
+  if (!evento) return { eventos, evento: null, hospedagens: [], locais, equipe: [], semQuarto: [], staffParaAcrescentar: [], podeAcrescentar: false, naEscalaSemHotel: 0, sugestaoAloca: 0 };
 
-  const [hospedagens, equipe, naEscalaSemHotel] = await Promise.all([repo.hospedagensDoEvento(evento.id), repo.equipeDoEvento(evento.id), repo.naEscalaSemHotel(evento.id)]);
+  const [hospedagens, equipe, naEscalaSemHotel, staff, situacao] = await Promise.all([
+    repo.hospedagensDoEvento(evento.id),
+    repo.precisamDeHotel(evento.id),
+    repo.naEscalaSemHotel(evento.id),
+    pedidos.staffAtivoPorNome(),
+    repo.eventoParaHospedar(evento.id),
+  ]);
   const semQuarto = equipe.filter((pessoa) => pessoa.quartoId === null);
+  const naLista = new Set(equipe.map((pessoa) => pessoa.pessoaId));
   const quartos = hospedagens.flatMap((hospedagem) =>
     hospedagem.quartos.map((quarto) => ({ id: quarto.id, capacidade: quarto.capacidade, sexo: quarto.sexo, ocupantes: quarto.ocupantes })),
   );
@@ -85,6 +110,8 @@ export async function carregarHospedagem(eventoId: string | null, agora: Date): 
     locais,
     equipe,
     semQuarto,
+    staffParaAcrescentar: staff.filter((pessoa) => !naLista.has(pessoa.pessoaId)),
+    podeAcrescentar: situacao !== null && !situacao.cancelado && situacao.dataFim >= dataEmSaoPaulo(agora),
     naEscalaSemHotel,
     sugestaoAloca: sugerirRooming(semQuarto, quartos).alocacoes.length,
     hospedagens: hospedagens.map((hospedagem) => {
@@ -215,6 +242,26 @@ export function registrarRetornoDeHospedagemPelaSdc(retorno: Omit<RegistrarRetor
       return servicoDePedidos.registrarRetornoDeHospedagem(criarRepositorioPedidos(tx), { ...resto, localId: hotelId }, { autor, instante: agora });
     }),
   );
+}
+
+/** Acrescenta alguém à lista de quem precisa de hotel no evento, sem escala nem pedido de voo. Desfaz o "sem hospedagem". */
+export function acrescentarHospede(entrada: HospedeDoEvento, ator: AtorDaEscrita, agora: Date) {
+  return traduzirErros(() =>
+    transacao(ator, async (tx) => {
+      const resultado = await servicoDeHospedagem.acrescentarHospede(criarRepositorioHospedagem(tx), entrada, contexto(ator.usuarioId, agora));
+      if (resultado.mudou) await desfazerDispensa(tx, entrada.eventoId, "HOSPEDAGEM", ator.usuarioId);
+      else {
+        // Nada mudou: a transação precisa de um registro para não ser desfeita; quem já estava acrescentada é recusada com clareza.
+        throw new RegraDeNegocioError(`${resultado.nome} já foi acrescentada à lista deste evento.`);
+      }
+      return resultado;
+    }),
+  );
+}
+
+/** Tira da lista quem foi acrescentado por aqui (se não estiver num quarto só por esta origem). */
+export function tirarHospede(entrada: HospedeDoEvento, ator: AtorDaEscrita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDeHospedagem.tirarHospede(criarRepositorioHospedagem(tx), entrada, contexto(ator.usuarioId, agora))));
 }
 
 export function adicionarQuarto(entrada: AdicionarQuarto, ator: AtorDaEscrita, agora: Date) {

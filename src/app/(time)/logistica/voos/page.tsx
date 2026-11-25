@@ -26,6 +26,7 @@ export default async function PaginaVoos({ searchParams }: { searchParams: Promi
     novo: parametro(busca.novo),
     pessoa: z.uuid().safeParse(parametro(busca.pessoa)).data,
     registrado: parametro(busca.registrado),
+    hotel: parametro(busca.hotel),
   };
   const agora = new Date();
   const [dados, pedido, escrita] = await Promise.all([

@@ -335,46 +335,46 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
     expect(nomes(carregada.semQuarto)).toEqual(expect.arrayContaining(["Bia Quarto", "Duda Quarto", "Edu Quarto"]));
     expect(nomes(carregada.equipe)).not.toContain("Nara Sem Hotel");
     expect(nomes(carregada.semQuarto)).not.toContain("Nara Sem Hotel");
-    const semMarca = porNoQuarto({ quartoId: quarto2!.id, convocacaoId: nara.convocacaoId }, ator(), agora);
+    const semMarca = porNoQuarto({ quartoId: quarto2!.id, pessoaId: nara.pessoaId }, ator(), agora);
     await expect(semMarca).rejects.toBeInstanceOf(RegraDeNegocioError);
-    await expect(semMarca).rejects.toThrow(/não está marcada para hotel/);
-    await expect(porNoQuarto({ quartoId: quarto1!.id, convocacaoId: edu.convocacaoId }, ator(), agora)).rejects.toThrow(/outro sexo/);
-    await porNoQuarto({ quartoId: quarto1!.id, convocacaoId: bia.convocacaoId }, ator(), agora);
-    await expect(porNoQuarto({ quartoId: quarto1!.id, convocacaoId: duda.convocacaoId }, ator(), agora)).rejects.toThrow(/todas as camas/);
+    await expect(semMarca).rejects.toThrow(/não está na lista de quem precisa de hotel/);
+    await expect(porNoQuarto({ quartoId: quarto1!.id, pessoaId: edu.pessoaId }, ator(), agora)).rejects.toThrow(/outro sexo/);
+    await porNoQuarto({ quartoId: quarto1!.id, pessoaId: bia.pessoaId }, ator(), agora);
+    await expect(porNoQuarto({ quartoId: quarto1!.id, pessoaId: duda.pessoaId }, ator(), agora)).rejects.toThrow(/todas as camas/);
 
     // "Mover para…": Bia sai do Quarto 1 e vai para o Quarto 2 (uma cama por convocação).
-    const movida = await porNoQuarto({ quartoId: quarto2!.id, convocacaoId: bia.convocacaoId }, ator(), agora);
+    const movida = await porNoQuarto({ quartoId: quarto2!.id, pessoaId: bia.pessoaId }, ator(), agora);
     expect(movida.mudou).toBe(true);
     expect(await teste.sql(`select quarto_id from eventos.quarto_ocupante where convocacao_id = $1`, [bia.convocacaoId])).toEqual([{ quarto_id: quarto2!.id }]);
 
     // Período próprio (planilha GESTÃO HOSP): Bia chega um dia depois e sai um dia antes.
     const periodoDaBia = () => um(`select check_in::text, check_out::text from eventos.quarto_ocupante where convocacao_id = $1`, [bia.convocacaoId]);
-    await definirPeriodoDoOcupante({ quartoId: quarto2!.id, convocacaoId: bia.convocacaoId, checkIn: "2026-12-15", checkOut: "2026-12-17" }, ator(), agora);
+    await definirPeriodoDoOcupante({ quartoId: quarto2!.id, pessoaId: bia.pessoaId, checkIn: "2026-12-15", checkOut: "2026-12-17" }, ator(), agora);
     expect(await periodoDaBia()).toEqual({ check_in: "2026-12-15", check_out: "2026-12-17" });
     await expect(
-      definirPeriodoDoOcupante({ quartoId: quarto2!.id, convocacaoId: bia.convocacaoId, checkIn: "2026-12-13", checkOut: "2026-12-17" }, ator(), agora),
+      definirPeriodoDoOcupante({ quartoId: quarto2!.id, pessoaId: bia.pessoaId, checkIn: "2026-12-13", checkOut: "2026-12-17" }, ator(), agora),
     ).rejects.toThrow(/dentro da hospedagem/);
     await expect(
-      definirPeriodoDoOcupante({ quartoId: quarto1!.id, convocacaoId: bia.convocacaoId, checkIn: "2026-12-15", checkOut: "2026-12-17" }, ator(), agora),
+      definirPeriodoDoOcupante({ quartoId: quarto1!.id, pessoaId: bia.pessoaId, checkIn: "2026-12-15", checkOut: "2026-12-17" }, ator(), agora),
     ).rejects.toBeInstanceOf(ConflitoDeVersaoError);
     const comPeriodo = await carregarHospedagem(eventoId, agora);
     expect(comPeriodo.hospedagens[0]!.textoDoRooming).toContain("Bia Quarto (15/12 a 17/12)");
     // Mudar de quarto na mesma hospedagem mantém o período.
-    await porNoQuarto({ quartoId: quarto1!.id, convocacaoId: bia.convocacaoId }, ator(), agora);
+    await porNoQuarto({ quartoId: quarto1!.id, pessoaId: bia.pessoaId }, ator(), agora);
     expect(await periodoDaBia()).toEqual({ check_in: "2026-12-15", check_out: "2026-12-17" });
-    await porNoQuarto({ quartoId: quarto2!.id, convocacaoId: bia.convocacaoId }, ator(), agora);
+    await porNoQuarto({ quartoId: quarto2!.id, pessoaId: bia.pessoaId }, ator(), agora);
     // Encurtar a hospedagem deixando o período de alguém de fora é recusado.
     const versao = comPeriodo.hospedagens[0]!.atualizadoEm;
     await expect(alterarHospedagem({ hospedagemId, localId: hotelId!, checkIn: "2026-12-16", checkOut: "2026-12-18", atualizadoEm: versao }, ator(), agora)).rejects.toThrow(
       /período próprio fora das novas datas/,
     );
     // Com as datas da hospedagem, volta a segui-la.
-    await definirPeriodoDoOcupante({ quartoId: quarto2!.id, convocacaoId: bia.convocacaoId, checkIn: "2026-12-14", checkOut: "2026-12-18" }, ator(), agora);
+    await definirPeriodoDoOcupante({ quartoId: quarto2!.id, pessoaId: bia.pessoaId, checkIn: "2026-12-14", checkOut: "2026-12-18" }, ator(), agora);
     expect(await periodoDaBia()).toEqual({ check_in: null, check_out: null });
     expect(await um(`select count(*)::int as n from eventos.registro_acao where entidade_id = $1 and acao = 'PERIODO_DO_OCUPANTE_DEFINIDO'`, [hospedagemId])).toEqual({ n: 2 });
 
-    await tirarDoQuarto({ quartoId: quarto2!.id, convocacaoId: bia.convocacaoId }, ator(), agora);
-    await expect(tirarDoQuarto({ quartoId: quarto2!.id, convocacaoId: bia.convocacaoId }, ator(), agora)).rejects.toBeInstanceOf(ConflitoDeVersaoError);
+    await tirarDoQuarto({ quartoId: quarto2!.id, pessoaId: bia.pessoaId }, ator(), agora);
+    await expect(tirarDoQuarto({ quartoId: quarto2!.id, pessoaId: bia.pessoaId }, ator(), agora)).rejects.toBeInstanceOf(ConflitoDeVersaoError);
 
     const resultado = await aplicarRoomingSugerido(eventoId, ator(), agora);
     expect(resultado.alocadas).toBeGreaterThanOrEqual(3);
@@ -390,10 +390,12 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
     await teste.sql(`update eventos.convocacao set precisa_hotel = true where id = $1`, [nara.convocacaoId]);
     expect(nomes((await carregarHospedagem(eventoId, agora)).semQuarto)).toContain("Nara Sem Hotel");
     // Quem já está num quarto continua aparecendo no quarto, mesmo que a marca seja tirada por fora da tela.
-    const [ocupante] = (await teste.sql(`select convocacao_id from eventos.quarto_ocupante limit 1`)) as { convocacao_id: string }[];
+    const [ocupante] = (await teste.sql(`select convocacao_id, pessoa_id from eventos.quarto_ocupante limit 1`)) as { convocacao_id: string; pessoa_id: string }[];
     await teste.sql(`update eventos.convocacao set precisa_hotel = false where id = $1`, [ocupante!.convocacao_id]);
     const comDesmarcada = await carregarHospedagem(eventoId, agora);
-    expect(comDesmarcada.hospedagens[0]!.quartos.flatMap((quarto) => quarto.ocupantes.map((pessoa) => pessoa.convocacaoId))).toContain(ocupante!.convocacao_id);
+    expect(comDesmarcada.hospedagens[0]!.quartos.flatMap((quarto) => quarto.ocupantes.map((pessoa) => pessoa.pessoaId))).toContain(ocupante!.pessoa_id);
+    // E continua na lista (sem origem), para a tela mostrar que precisa de conferência.
+    expect(comDesmarcada.equipe.find((pessoa) => pessoa.pessoaId === ocupante!.pessoa_id)).toMatchObject({ origens: [], quartoId: expect.any(String) });
     await teste.sql(`update eventos.convocacao set precisa_hotel = true where id = $1`, [ocupante!.convocacao_id]);
   });
 
@@ -441,15 +443,13 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
 
     const daIara = <T extends { pessoaId: string }>(lista: T[]) => lista.filter((pessoa) => pessoa.pessoaId === iara.pessoaId);
     const hospedagem = await carregarHospedagem(eventoId, agora);
-    expect(daIara(hospedagem.equipe).map((pessoa) => pessoa.convocacaoId)).toEqual([iara.convocacaoId]);
+    expect(daIara(hospedagem.equipe)).toMatchObject([{ pessoaId: iara.pessoaId, origens: ["ESCALA"], naEscala: true }]);
     const caronas = await carregarCaronas(eventoId, agora);
     expect(daIara([...caronas.semCarona, ...caronas.candidatosAMotorista, ...caronas.candidatosAPassageiro]).every((pessoa) => pessoa.convocacaoId === iara.convocacaoId)).toBe(true);
     const voos = await carregarVoos({ eventoId }, agora);
     expect(linhasDe(voos).filter((linha) => linha.passageiro.pessoaId === iara.pessoaId)).toHaveLength(1);
 
-    // Quarto, carona e voo só pela principal.
-    const quarto = hospedagem.hospedagens[0]!.quartos.find((item) => item.nome === "Quarto 2")!;
-    await expect(porNoQuarto({ quartoId: quarto.id, convocacaoId: segunda! }, ator(), agora)).rejects.toBeInstanceOf(RegraDeNegocioError);
+    // Carona e voo só pela principal (o quarto é da pessoa no evento: não há como pôr "a segunda função" num quarto).
     await expect(criarCarona({ eventoId, motoristaConvocacaoId: segunda! }, ator(), agora)).rejects.toBeInstanceOf(RegraDeNegocioError);
     // O pedido de voo é da pessoa no evento: o vínculo com a escala vai para a convocação principal.
     const daIaraVoo = await registrarPedidoDeVoo({ eventoId, pessoaId: iara.pessoaId, trechos: [ida] }, ator(), agora);
@@ -476,17 +476,17 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
     await adicionarQuarto({ hospedagemId, nome: "Quarto A", capacidade: 2, sexo: "F" }, ator(), agora);
     await adicionarQuarto({ hospedagemId, nome: "Quarto B", capacidade: 2 }, ator(), agora);
     const [quartoA, quartoB] = (await carregarHospedagem(evento.id, agora)).hospedagens[0]!.quartos;
-    await porNoQuarto({ quartoId: quartoA!.id, convocacaoId: ana.convocacaoId }, ator(), agora);
-    await porNoQuarto({ quartoId: quartoA!.id, convocacaoId: bel.convocacaoId }, ator(), agora);
-    await porNoQuarto({ quartoId: quartoB!.id, convocacaoId: caio.convocacaoId }, ator(), agora);
-    await porNoQuarto({ quartoId: quartoB!.id, convocacaoId: dani.convocacaoId }, ator(), agora);
-    await definirPeriodoDoOcupante({ quartoId: quartoA!.id, convocacaoId: bel.convocacaoId, checkIn: "2026-12-20", checkOut: "2026-12-21" }, ator(), agora);
+    await porNoQuarto({ quartoId: quartoA!.id, pessoaId: ana.pessoaId }, ator(), agora);
+    await porNoQuarto({ quartoId: quartoA!.id, pessoaId: bel.pessoaId }, ator(), agora);
+    await porNoQuarto({ quartoId: quartoB!.id, pessoaId: caio.pessoaId }, ator(), agora);
+    await porNoQuarto({ quartoId: quartoB!.id, pessoaId: dani.pessoaId }, ator(), agora);
+    await definirPeriodoDoOcupante({ quartoId: quartoA!.id, pessoaId: bel.pessoaId, checkIn: "2026-12-20", checkOut: "2026-12-21" }, ator(), agora);
 
     // Os dois quartos estão cheios: "Mover para" não cabe, a troca sim.
-    await expect(porNoQuarto({ quartoId: quartoB!.id, convocacaoId: bel.convocacaoId }, ator(), agora)).rejects.toThrow(/todas as camas/);
+    await expect(porNoQuarto({ quartoId: quartoB!.id, pessoaId: bel.pessoaId }, ator(), agora)).rejects.toThrow(/todas as camas/);
     const quartoDe = async (convocacaoId: string) => (await um(`select quarto_id from eventos.quarto_ocupante where convocacao_id = $1`, [convocacaoId])).quarto_id;
-    const troca = (de: { convocacaoId: string }, quartoId: string, com: { convocacaoId: string }, comQuartoId: string) =>
-      trocarDeQuarto({ quartoId, convocacaoId: de.convocacaoId, comQuartoId, comConvocacaoId: com.convocacaoId }, ator(), agora);
+    const troca = (de: { pessoaId: string }, quartoId: string, com: { pessoaId: string }, comQuartoId: string) =>
+      trocarDeQuarto({ quartoId, pessoaId: de.pessoaId, comQuartoId, comPessoaId: com.pessoaId }, ator(), agora);
 
     // Caio (M) não pode ir para o quarto feminino: nada muda.
     const recusada = troca(bel, quartoA!.id, caio, quartoB!.id);
@@ -494,7 +494,7 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
     await expect(recusada).rejects.toThrow(/Quarto A é de outro sexo/);
     await expect(troca(ana, quartoA!.id, bel, quartoA!.id)).rejects.toThrow(/já estão no mesmo quarto/);
     // Tela desatualizada: a tela diz que Bel está no Quarto B e Dani no A, mas é o contrário.
-    await expect(trocarDeQuarto({ quartoId: quartoB!.id, convocacaoId: bel.convocacaoId, comQuartoId: quartoA!.id, comConvocacaoId: dani.convocacaoId }, ator(), agora)).rejects.toBeInstanceOf(
+    await expect(trocarDeQuarto({ quartoId: quartoB!.id, pessoaId: bel.pessoaId, comQuartoId: quartoA!.id, comPessoaId: dani.pessoaId }, ator(), agora)).rejects.toBeInstanceOf(
       ConflitoDeVersaoError,
     );
     expect([await quartoDe(bel.convocacaoId), await quartoDe(dani.convocacaoId)]).toEqual([quartoA!.id, quartoB!.id]);
@@ -516,13 +516,13 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
       {
         acao: "OCUPANTES_TROCADOS",
         usuario_id: usuarioId,
-        dados: { convocacaoId: bel.convocacaoId, quartoId: quartoB!.id, comConvocacaoId: dani.convocacaoId, comQuartoId: quartoA!.id },
+        dados: { pessoaId: bel.pessoaId, quartoId: quartoB!.id, comPessoaId: dani.pessoaId, comQuartoId: quartoA!.id },
       },
     ]);
 
     // Quem saiu da marca de hotel não troca de lugar (o mesmo que vale para pôr no quarto).
     await teste.sql(`update eventos.convocacao set precisa_hotel = false where id = $1`, [caio.convocacaoId]);
-    await expect(troca(caio, quartoB!.id, ana, quartoA!.id)).rejects.toThrow(/não está marcada para hotel/);
+    await expect(troca(caio, quartoB!.id, ana, quartoA!.id)).rejects.toThrow(/saiu da lista de quem precisa de hotel/);
   });
 
   it("aviso de voos por evento: prazo configurável, evento sem pedido entra, com pedido ou marcado como sem voo sai", async () => {
@@ -643,10 +643,10 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
     // Sem evento escolhido, a tela pula o evento marcado e abre o próximo (o marcado continua no seletor).
     const maisTarde = new Date("2026-12-24T15:00:00Z");
     const padrao = await carregarHospedagem(null, maisTarde);
-    expect(padrao.eventos.map((item) => [item.codigo, item.semHospedagem])).toEqual([
-      ["CASA_AM_904", true],
-      ["DEPOIS_AM_905", false],
-    ]);
+    // O seletor traz todos os eventos de hoje em diante, com ou sem escala (o hotel é pedido antes dela).
+    const noSeletor = padrao.eventos.map((item) => [item.codigo, item.semHospedagem]);
+    expect(noSeletor).toEqual(expect.arrayContaining([["CASA_AM_904", true], ["DEPOIS_AM_905", false]]));
+    expect(noSeletor.findIndex(([codigo]) => codigo === "CASA_AM_904")).toBeLessThan(noSeletor.findIndex(([codigo]) => codigo === "DEPOIS_AM_905"));
     expect(padrao.evento?.codigo).toBe("DEPOIS_AM_905");
     await dispensarLogisticaDoEvento({ eventoId: evento.id, item: "HOSPEDAGEM", dispensar: false }, ator());
     expect((await carregarHospedagem(null, maisTarde)).evento?.codigo).toBe("CASA_AM_904");

@@ -92,7 +92,7 @@ describe.skipIf(!TEST_DATABASE_URL)("migration 0013 sobre dados existentes", () 
       [eventoId, hotelId],
     );
     const { id: quartoId } = await um(`insert into eventos.quarto (hospedagem_id, nome, capacidade) values ($1, 'Quarto 1', 2) returning id`, [hospedagemId]);
-    await banco.sql(`insert into eventos.quarto_ocupante (quarto_id, convocacao_id) values ($1, $2)`, [quartoId, aceita.convocacaoId]);
+    await banco.sql(`insert into eventos.quarto_ocupante (quarto_id, evento_id, pessoa_id, convocacao_id) select q.id, h.evento_id, c.pessoa_id, c.id from eventos.quarto q join eventos.hospedagem h on h.id = q.hospedagem_id, eventos.convocacao c where q.id = $1 and c.id = $2`, [quartoId, aceita.convocacaoId]);
 
     await subir();
 

@@ -280,13 +280,21 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da escala no banco", () => {
     const { id: hotelId } = await um(`insert into eventos.local (nome, tipo, cidade, uf) values ('Hotel da Ana', 'HOTEL', 'Porto Alegre', 'RS') returning id`);
     const { id: hospedagemId } = await um(`insert into eventos.hospedagem (evento_id, local_id, check_in, check_out) values ($1, $2, '2026-11-11', '2026-11-16') returning id`, [eventoId, hotelId]);
     const { id: quartoId } = await um(`insert into eventos.quarto (hospedagem_id, nome, capacidade) values ($1, 'Quarto 1', 2) returning id`, [hospedagemId]);
-    await banco.sql(`insert into eventos.quarto_ocupante (quarto_id, convocacao_id) values ($1, $2)`, [quartoId, ana.convocacaoId]);
+    await banco.sql(`insert into eventos.quarto_ocupante (quarto_id, evento_id, pessoa_id, convocacao_id) select q.id, h.evento_id, c.pessoa_id, c.id from eventos.quarto q join eventos.hospedagem h on h.id = q.hospedagem_id, eventos.convocacao c where q.id = $1 and c.id = $2`, [quartoId, ana.convocacaoId]);
     for (const convocacaoId of [ana.convocacaoId, anaDj.convocacaoId]) {
       const recusa = escalas.atualizarConvocacao({ eventoId, convocacaoId, mudanca: { campo: "hotel", precisaHotel: false } }, quem());
       await expect(recusa).rejects.toBeInstanceOf(RegraDeNegocioError);
       await expect(recusa).rejects.toThrow(/já está num quarto/);
     }
     expect(await naVaga(ana.convocacaoId)).toMatchObject({ precisa_hotel: true });
+    // Com outra origem do hotel (acrescentada na Hospedagem ou "também precisa de hotel" no voo), desmarcar na escala
+    // passa: a pessoa continua na lista e no quarto por essa origem.
+    await banco.sql(`insert into eventos.hospedagem_pessoa (evento_id, pessoa_id) values ($1, $2)`, [eventoId, pessoas["Ana Perto"]]);
+    await escalas.atualizarConvocacao({ eventoId, convocacaoId: ana.convocacaoId, mudanca: { campo: "hotel", precisaHotel: false } }, quem());
+    expect(await naVaga(ana.convocacaoId)).toMatchObject({ precisa_hotel: false });
+    expect(await banco.sql(`select 1 as ok from eventos.quarto_ocupante where quarto_id = $1 and pessoa_id = $2`, [quartoId, pessoas["Ana Perto"]])).toEqual([{ ok: 1 }]);
+    await escalas.atualizarConvocacao({ eventoId, convocacaoId: ana.convocacaoId, mudanca: { campo: "hotel", precisaHotel: true } }, quem());
+    await banco.sql(`delete from eventos.hospedagem_pessoa where evento_id = $1 and pessoa_id = $2`, [eventoId, pessoas["Ana Perto"]]);
     // Ana sai de Staff e continua DJ: o DJ herda a principal, com o deslocamento, o hotel, o quarto e a solicitação de custo.
     await escalas.tirarDaVaga({ eventoId, convocacaoId: ana.convocacaoId }, quem());
     expect(await naVaga(anaDj.convocacaoId)).toEqual({ principal: true, deslocamento: "CARONA", precisa_hotel: true });
@@ -294,13 +302,19 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da escala no banco", () => {
     expect(await um(`select dados from eventos.registro_acao where entidade_id = $1 and dados->'campos' ? 'principal'`, [anaDj.convocacaoId])).toEqual({
       dados: { campos: ["principal"], herdouDe: ana.convocacaoId },
     });
+    // Ana sai da escala de vez, com a escala como única origem do hotel: ninguém é arrancado do quarto. Ela continua
+    // nele, sem vínculo com a escala, e passa a constar como acrescentada na Hospedagem (com registro).
+    await expect(escalas.tirarDaVaga({ eventoId, convocacaoId: anaDj.convocacaoId }, quem())).resolves.toMatchObject({ nome: "Ana Perto", mantidaNoQuarto: true });
+    expect(await banco.sql(`select convocacao_id from eventos.quarto_ocupante where quarto_id = $1 and pessoa_id = $2`, [quartoId, pessoas["Ana Perto"]])).toEqual([{ convocacao_id: null }]);
+    expect(await banco.sql(`select criado_por from eventos.hospedagem_pessoa where evento_id = $1 and pessoa_id = $2`, [eventoId, pessoas["Ana Perto"]])).toHaveLength(1);
+    expect(
+      await um(`select acao, dados->>'motivo' as motivo from eventos.registro_acao where entidade = 'EVENTO' and entidade_id = $1 and em_nome_de_pessoa_id = $2`, [eventoId, pessoas["Ana Perto"]]),
+    ).toEqual({ acao: "HOSPEDE_MANTIDO_NO_QUARTO", motivo: "SAIU_DA_ESCALA" });
     // Volta ao cenário dos próximos testes: Ana só como Staff, sem hospedagem.
-    await banco.sql(`delete from eventos.hospedagem where id = $1`, [hospedagemId]).catch(async () => {
-      await banco.sql(`delete from eventos.quarto_ocupante where quarto_id = $1`, [quartoId]);
-      await banco.sql(`delete from eventos.quarto where id = $1`, [quartoId]);
-      await banco.sql(`delete from eventos.hospedagem where id = $1`, [hospedagemId]);
-    });
-    await escalas.tirarDaVaga({ eventoId, convocacaoId: anaDj.convocacaoId }, quem());
+    await banco.sql(`delete from eventos.quarto_ocupante where quarto_id = $1`, [quartoId]);
+    await banco.sql(`delete from eventos.hospedagem_pessoa where evento_id = $1`, [eventoId]);
+    await banco.sql(`delete from eventos.quarto where id = $1`, [quartoId]);
+    await banco.sql(`delete from eventos.hospedagem where id = $1`, [hospedagemId]);
     await escalas.porNaVaga({ eventoId, escalaId: staff.id, pessoaId: pessoas["Ana Perto"]!, sugestaoScore: 90 }, quem());
 
     await escalas.tirarDaVaga({ eventoId, convocacaoId: bia.convocacaoId }, quem());
@@ -320,7 +334,7 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da escala no banco", () => {
     expect(bia).toMatchObject({ status: "ACEITA", com_data: false });
 
     // Nunca avisada: a linha some.
-    await expect(escalas.tirarDaVaga({ eventoId, convocacaoId: bia!.id }, quem())).resolves.toEqual({ nome: "Bia Longe", jaAvisada: false });
+    await expect(escalas.tirarDaVaga({ eventoId, convocacaoId: bia!.id }, quem())).resolves.toMatchObject({ nome: "Bia Longe", jaAvisada: false, mantidaNoQuarto: false });
     expect(await daBia()).toEqual([]);
 
     // Recebeu a copy de escalação (a Comunicação grava a mensagem e a data do aviso): fica CANCELADA, com o histórico.
@@ -332,7 +346,7 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da escala no banco", () => {
     );
     const naTela = async () => (await escalas.carregarMontagem(eventoId))!.linhas.flatMap((linha) => linha.convocacoes).find((convocacao) => convocacao.id === convocacaoId);
     expect(await naTela()).toMatchObject({ status: "ACEITA", avisada: true });
-    await expect(escalas.tirarDaVaga({ eventoId, convocacaoId }, quem())).resolves.toEqual({ nome: "Bia Longe", jaAvisada: true });
+    await expect(escalas.tirarDaVaga({ eventoId, convocacaoId }, quem())).resolves.toMatchObject({ nome: "Bia Longe", jaAvisada: true, mantidaNoQuarto: false });
     expect(await daBia()).toEqual([{ id: convocacaoId, status: "CANCELADA", com_data: false }]);
     expect(await banco.sql(`select 1 as tem from eventos.mensagem where convocacao_id = $1`, [convocacaoId])).toEqual([{ tem: 1 }]);
     expect(await um(`select status_de, status_para from eventos.registro_acao where entidade_id = $1 and acao = 'CANCELADA'`, [convocacaoId])).toEqual({
