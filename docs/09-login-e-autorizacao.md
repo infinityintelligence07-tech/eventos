@@ -7,7 +7,8 @@ Não contém código de produção: os trechos de código são contratos e pseud
   regras 6 e 7: um papel de banco por app e login único pelo mesmo Supabase Auth).
 - **Referência de login:** GH-System (`src/middleware.ts`, `src/core/auth/*`, `src/core/authz/*`, `src/app/login`,
   `src/app/auth/callback`), que usa o mesmo projeto Supabase `iam-pessoas` e, portanto, os mesmos usuários.
-- **Escopo:** só o time de eventos. Staff, SDC e financeiro continuam sem login nesta rodada.
+- **Escopo:** o time de eventos e, desde 25/11/2026, a SDC (agência de viagens), com uma área própria e mínima (§15).
+  Financeiro continua sem login.
 
 **Sumário**
 
@@ -24,6 +25,8 @@ Não contém código de produção: os trechos de código são contratos e pseud
 11. Ações manuais (Vitor e Lucas)
 12. Riscos
 13. Decisões pendentes
+14. Acesso do time pela tela
+15. Acesso da SDC e aprovação do pagamento
 
 ---
 
@@ -117,6 +120,11 @@ acesso**: sem `core.usuario` ativo com o mesmo e-mail, o Eventos encerra a sess�
 fechado) — decisão do Vitor com o Lucas, porque vale para os dois apps (§11). O cadastro do staff no primeiro acesso
 (doc 04) fica para a rodada do portal do staff e reabre essa discussão.
 
+**Desde o acesso da SDC (§15) esta recomendação muda:** quem é da SDC entra com uma conta Google de fora da empresa e
+não tem `core.usuario`. Para ela conseguir entrar, ou o cadastro do Supabase fica aberto ("Allow new users to sign up"
+ligado), ou alguém cria o usuário dela no Supabase Auth antes (painel ou API admin). Com o cadastro fechado e sem o
+usuário criado, o Google devolve erro e a pessoa da SDC não entra. Decisão manual do Vitor com o Lucas (§15.8).
+
 ---
 
 ## 3. Ator, perfis e quem fica sem acesso
@@ -199,9 +207,9 @@ fluxos. Não conhece módulos; só nomes de permissão.
 type Permissao =
   | "evento.editar" | "escala.montar" | "escala.registrar_resposta" | "escala.aprovar" | "escala.reabrir"
   | "comunicacao.enviar" | "disponibilidade.gerir" | "disponibilidade.registrar_resposta" | "pessoas.editar"
-  | "logistica.gerir" | "logistica.registrar_retorno_sdc" | "custos.registrar" | "custos.auditar"
+  | "logistica.gerir" | "logistica.registrar_retorno_sdc" | "logistica.aprovar_pagamento" | "custos.registrar" | "custos.auditar"
   | "custos.reabrir_auditoria" | "config.locais" | "config.modelos_copy" | "config.link_custos"
-  | "config.aviso_de_voos" | "config.regras_vagas" | "config.regras_custo";
+  | "config.aviso_de_voos" | "config.regras_vagas" | "config.regras_custo" | "config.acesso_do_time" | "config.acesso_da_sdc";
 pode(ator: Pick<Ator, "perfis">, permissao: Permissao): boolean   // switch exaustivo por perfil
 class AcessoNegadoError extends Error {}                            // traduzida por mensagemDoErro
 ```
@@ -223,6 +231,7 @@ A leitura de todas as telas vale para os dois perfis. Não há permissão só de
 | `pessoas.editar` | ✓ | ✓ | — |
 | `logistica.gerir` | ✓ | ✓ | — |
 | `logistica.registrar_retorno_sdc` | ✓ | ✓ | grava `retorno_registrado_por` (já existe) |
+| `logistica.aprovar_pagamento` (aprovar e desfazer) | ✓ | ✓ | só compra registrada com valor; cancelado não; grava `aprovado_por` (§15.5) |
 | `custos.registrar` | ✓ | ✓ | grava `registrado_por` (já existe) |
 | `custos.auditar` (aprovar e reprovar) | ✓ | ✓ | **SoD-2:** não registrou nem corrigiu a solicitação; **SoD-3:** não é a pessoa da solicitação |
 | `custos.reabrir_auditoria` | — | ✓ | SoD-3 |
@@ -232,8 +241,12 @@ A leitura de todas as telas vale para os dois perfis. Não há permissão só de
 | `config.aviso_de_voos` | — | ✓ | muda quando o aviso de passagens a pedir aparece para todo o time |
 | `config.regras_vagas` | — | ✓ | — |
 | `config.regras_custo` | — | ✓ | dinheiro |
+| `config.acesso_do_time` | — | ✓ | quem entra no sistema do time (§14) |
+| `config.acesso_da_sdc` | — | ✓ | quem da SDC entra na área dela (§15) |
 
-### 4.3 Todas as server actions (15 arquivos, `rg -l "use server" src/app`)
+A SDC **não tem perfil nem permissão desta matriz**: ela não é um `Ator` (§15.2).
+
+### 4.3 Todas as server actions do time (16 arquivos em `src/app/(time)`, `rg -l "use server" src/app`)
 
 | Arquivo | Action → permissão |
 |---|---|
@@ -244,8 +257,10 @@ A leitura de todas as telas vale para os dois perfis. Não há permissão só de
 | `disponibilidade/nova/acoes.ts` | `abrirEnqueteAcao` → `disponibilidade.gerir` |
 | `disponibilidade/[enqueteId]/acoes.ts` | `encerrarEnqueteAcao`, `reabrirEnqueteAcao` → `disponibilidade.gerir`; `registrarRespostaAcao` → `disponibilidade.registrar_resposta` |
 | `pessoas/[pessoaId]/acoes.ts` | `salvarPerfilAcao`, `definirFuncoesAcao`, `salvarVeiculoAcao`, `salvarCoordenadasAcao` → `pessoas.editar` |
-| `logistica/acoes.ts` | `registrarPedidoDeVooAcao`, `dispensarLogisticaDoEventoAcao`, `alterarPedidoAcao`, `cancelarPedidoAcao`, `criarHospedagemAcao`, `alterarHospedagemAcao`, `removerHospedagemAcao`, `registrarPedidoDeHospedagemAcao`, `adicionarQuartoAcao`, `removerQuartoAcao`, `porNoQuartoAcao`, `moverDeQuartoAcao`, `tirarDoQuartoAcao`, `definirPeriodoDoOcupanteAcao`, `aplicarRoomingSugeridoAcao`, `criarCaronaAcao`, `removerCaronaAcao`, `definirCaronaAcao`, `tirarDaCaronaAcao` → `logistica.gerir`; `registrarRetornoDeVooAcao`, `registrarRetornoDeHospedagemAcao` → `logistica.registrar_retorno_sdc` |
+| `logistica/acoes.ts` | `registrarPedidoDeVooAcao`, `dispensarLogisticaDoEventoAcao`, `alterarPedidoAcao`, `cancelarPedidoAcao`, `criarHospedagemAcao`, `alterarHospedagemAcao`, `removerHospedagemAcao`, `registrarPedidoDeHospedagemAcao`, `adicionarQuartoAcao`, `removerQuartoAcao`, `porNoQuartoAcao`, `moverDeQuartoAcao`, `tirarDoQuartoAcao`, `definirPeriodoDoOcupanteAcao`, `aplicarRoomingSugeridoAcao`, `criarCaronaAcao`, `removerCaronaAcao`, `definirCaronaAcao`, `tirarDaCaronaAcao` → `logistica.gerir`; `registrarRetornoDeVooAcao`, `registrarRetornoDeHospedagemAcao` → `logistica.registrar_retorno_sdc`; `aprovarPagamentoAcao`, `desfazerAprovacaoAcao` → `logistica.aprovar_pagamento` |
 | `custos/acoes.ts` | `registrarSolicitacaoAcao`, `corrigirSolicitacaoAcao`, `calcularPreviaAcao` (não grava) → `custos.registrar`; `aprovarSolicitacaoAcao`, `reprovarSolicitacaoAcao` → `custos.auditar`; `reabrirAuditoriaAcao` → `custos.reabrir_auditoria` |
+| `configuracoes/acesso/acoes.ts` | `definirAcessoAcao` → `config.acesso_do_time` |
+| `configuracoes/acesso-da-sdc/acoes.ts` | `incluirAcessoDaSdcAcao`, `definirAcessoDaSdcAcao` → `config.acesso_da_sdc` |
 | `configuracoes/locais/acoes.ts` | `salvarLocalAcao`, `arquivarLocalAcao` → `config.locais` |
 | `configuracoes/modelos-de-copy/acoes.ts` | `salvarModeloAcao`, `definirModeloAtivoAcao`, `previaDoModeloAcao` (não grava) → `config.modelos_copy`; `salvarLinkDeCustosAcao` → `config.link_custos` |
 | `configuracoes/voos/acoes.ts` | `salvarAvisoDeVoosAcao` → `config.aviso_de_voos` |
@@ -255,6 +270,8 @@ A leitura de todas as telas vale para os dois perfis. Não há permissão só de
 Actions que não gravam (`calcularPreviaAcao`, `previaDoModeloAcao`) continuam exigindo login e permissão (gastam CPU e
 leem dados), mas não passam pela guarda de escrita. Action nova sem permissão não compila (parâmetro obrigatório) e um
 teste lista os `acoes.ts` e confere que todo `export async function` chama `executarAcao`.
+
+As duas actions da SDC ficam fora de `(time)`, em `src/app/sdc/acoes.ts`, e passam por `executarAcaoDaSdc` (§15.4).
 
 ### 4.4 Segregação de funções (regras de objeto)
 
@@ -698,3 +715,135 @@ Agora a líder faz isso em **Configurações › Acesso do time**.
   `app_eventos`), que só mexe nos dois perfis do Eventos com escopo `GLOBAL` e confere de novo que quem pede é líder.
 - **Para o GH (Lucas):** a função escreve numa tabela do `core`. Ela fica no schema `eventos` e não toca em perfis de
   outros sistemas (teste: `src/fluxos/pessoas/__tests__/acesso.integracao.test.ts`).
+
+## 15. Acesso da SDC e aprovação do pagamento (25/11/2026)
+
+A SDC (agência de viagens) passa a entrar no sistema para fazer o que antes fazia na planilha: **o time solicita, a SDC
+compra e registra o valor, o time aprova o pagamento dizendo que usou**. Ela vê **só** os pedidos de voo e de hospedagem.
+
+### 15.1 Quem é a SDC: uma lista própria, nada no cadastro do GH
+
+- Tabela `eventos.acesso_sdc` (migration `0016`): `email` (único, sempre em minúsculas, com `CHECK`), `nome`, `ativo`,
+  `criado_por`. A líder mantém a lista em **Configurações › Acesso da SDC** (permissão `config.acesso_da_sdc`; o time vê
+  a lista sem controles). Incluir, desativar e reativar gravam `registro_acao` (`CONFIGURACAO`, ações
+  `ACESSO_SDC_INCLUIDO`, `ACESSO_SDC_DESATIVADO`, `ACESSO_SDC_REATIVADO`, sem e-mail nem nome em `dados`).
+- **Nada no `core`:** a pessoa da SDC não é funcionária. Não se cria perfil em `core.perfil`, nem linha em
+  `core.usuario` ou `core.usuario_perfil` (o teste do fluxo confere que as três continuam como estavam).
+- O e-mail não se edita (para trocar, desativa-se um e inclui-se outro) e a linha não se apaga: o histórico aponta
+  para ela (`ON DELETE RESTRICT`).
+
+### 15.2 Resolução de quem entrou
+
+`situacaoDoAtor()` ganhou um sexto resultado, `{ situacao: "SDC", sdc: AtorSdc }`. A decisão é uma função pura
+(`decidirQuemEntrou`, `src/core/auth/sdc.ts`), lida do banco a cada requisição:
+
+1. **O time vem primeiro.** Resolve-se o ator do time como antes (§3.2). Se deu `OK`, é do time e acabou: quem é do
+   time continua sendo do time mesmo que o e-mail também esteja na lista da SDC.
+2. Só quando **não** é do time (`SEM_CADASTRO` ou `SEM_PERFIL`) a lista da SDC é consultada, pelo e-mail em minúsculas
+   e sem espaços. Linha `ativo = true` → SDC. Sem linha ou desativada → o resultado do passo 1, sem mudança.
+3. **Desativar corta no próximo clique:** não há sessão própria da SDC nem cache entre requisições; a linha é lida de
+   novo em cada página e em cada action.
+
+Onde a lista é consultada: no login pelo **Google** (Supabase, com e-mail confirmado pelo provedor) e, no modo local,
+pelo cookie do "Entrar como" (que guarda o id da linha de `acesso_sdc`). **Não** é consultada na sessão por e-mail e
+senha do IAM Control (docs/10): aquele caminho só resolve o time.
+
+`AtorSdc = { acessoSdcId, nome, email, origem }` é um tipo **separado** de `Ator`: não tem `usuarioId` nem `perfis`,
+então não serve em `pode()`, em `executarAcao` nem em nenhum fluxo do time. O compilador recusa a troca.
+
+### 15.3 As duas áreas não se cruzam
+
+| Porta | Quem é do time | Quem é da SDC | Sem acesso |
+|---|---|---|---|
+| `exigirAtor()` (toda página e layout de `(time)`) | passa | `redirect("/sdc")` | login / sem acesso |
+| `obterAtor()` → `executarAcao` / `executarLeitura` (toda action do time) | passa, com a permissão | recusada ("Sua sessão terminou"), o trabalho não roda | recusada |
+| `exigirAtorSdc()` (toda página e layout de `/sdc`) | `redirect("/inicio")` | passa | login / sem acesso |
+| `obterAtorSdc()` → `executarAcaoDaSdc` (as actions de `/sdc`) | recusada, o trabalho não roda | passa | recusada |
+
+Os `switch` das duas portas são exaustivos (situação nova não compila; situação desconhecida em tempo de execução
+lança erro). Testes: `src/app/sdc/__tests__/barreiras.test.ts` roda as portas de verdade para SDC, time, líder, sem
+cadastro e sem perfil, com todas as permissões da matriz; `paginas-e-acoes-da-sdc.test.ts` varre `src/app/sdc` (toda
+página começa com `await exigirAtorSdc()`, toda action usa `executarAcaoDaSdc`, nada importa as portas ou os fluxos do
+time nem o banco).
+
+### 15.4 O que a SDC vê e faz
+
+- **Vê** (decisão 4 do Vitor): pedidos de voo e de hospedagem com o evento (código, nome, datas, cidade e local), nomes
+  dos passageiros, trechos, observação do time e, na hospedagem, datas, quantidades e quartos com os nomes. As leituras
+  são próprias (`criarRepositorioDaSdc`), escolhem coluna por coluna e não reaproveitam os objetos das telas do time.
+  **Não sai:** telefone, e-mail, documento, endereço, função, escala, custos, histórico, motivo de cancelamento, quem
+  do time pediu ou aprovou, observação da aprovação, nem ids internos (o pedido é identificado pela referência `SDC-…`;
+  o evento ganha uma chave "e1, e2…" que só vale dentro da resposta). O teste "não vaza dado"
+  (`src/fluxos/sdc/__tests__/sdc.integracao.test.ts`) grava esses dados ao lado dos pedidos, confere que nenhum aparece
+  no que a SDC recebe, que não há nenhum uuid, e fecha a **lista de campos** (campo novo quebra o teste).
+- **Faz:** registrar ou corrigir a compra de um pedido que já existe, enquanto o time não aprovou
+  (`registrarCompraDeVooAcao`, `registrarReservaAcao`). Voo: companhia, número do voo, código da reserva, horários e
+  valor. Hospedagem: o hotel (nome, cidade, UF; cria o local `HOTEL` se não existir, reaproveita se já existir), número
+  da reserva, valor e forma de pagamento. As regras são as mesmas do registro feito pelo time (mesmo serviço).
+- **Não faz:** criar, alterar ou cancelar pedido, mexer em quartos, aprovar. Não há action para isso em `/sdc`, e as do
+  time recusam a SDC (§15.3). Pedido cancelado ou já aprovado é recusado pelo serviço.
+
+### 15.5 Aprovação do pagamento (o time aprova depois da compra)
+
+Estado derivado, função pura `situacaoDoPagamento` (`src/modules/logistica/domain/pagamento.ts`):
+`SEM_COMPRA` → `A_APROVAR` (pedido `EMITIDO` com valor) → `APROVADO` (`aprovado_em` preenchido); `CANCELADO` à parte.
+
+- Só se aprova compra registrada **com valor**; cancelado não se aprova. A tela pede a confirmação "Confirmo que usamos
+  e que este valor pode ser pago" (obrigatória no schema) e aceita uma observação.
+- A aprovação **cai sozinha** quando o time corrige a compra, altera ou cancela o pedido (registro `APROVACAO_DESFEITA`).
+- Com o pagamento aprovado a SDC não altera mais nada. O time pode desfazer a aprovação.
+- Permissão `logistica.aprovar_pagamento`, dos dois perfis. O banco reforça: `aprovado_em` só com `situacao = 'EMITIDO'`
+  e `valor_centavos` preenchido (`pedido_sdc_aprovacao_check`).
+- Não há segregação entre quem pediu e quem aprova (o time é pequeno; a outra ponta é a SDC). Registrado em §15.9.
+
+### 15.6 Como a escrita da SDC passa pelas guardas e fica no histórico
+
+- A guarda de escrita (§5) não foi afrouxada. `transacao(ator, …)` passou a aceitar `QuemEscreve = AtorDaEscrita |
+  AtorSdcDaEscrita`; a trava 4 (`verificarAtor`) confere a **origem** do login como antes (`SESSAO` em produção;
+  `LOCAL` só no modo local; `DEMO` nunca). As outras três travas e "sem registro, desfaz" valem igual.
+- O histórico diz qual e-mail da SDC fez o quê: `registro_acao.origem = 'SDC'` com `acesso_sdc_id` (FK para a lista).
+  `CHECK` de autoria: `USUARIO` ⇔ `usuario_id` preenchido **e** `SDC` ⇔ `acesso_sdc_id` preenchido (uma ação nunca tem
+  os dois nem fica sem dono). O pedido guarda `retorno_registrado_pela_sdc`; se o time corrige depois, passa a
+  `retorno_registrado_por` e o da SDC é limpo.
+- O hotel criado pela SDC fica com `LOCAL_CRIADO` de origem `SDC`.
+
+### 15.7 Banco (migration `0016_acesso-da-sdc`)
+
+Só acrescenta; nenhuma linha existente muda. Os pedidos já emitidos ficam "a aprovar" (`aprovado_em` vazio).
+
+| Objeto | O que muda |
+|---|---|
+| `eventos.acesso_sdc` (nova) | RLS ligada. `app_eventos`: `SELECT, INSERT` e `UPDATE (nome, ativo, atualizado_em)`; sem `DELETE`, sem trocar e-mail. `app_eventos_leitura`: `SELECT`. `app_eventos_copia` e `app_eventos_worker`: nada. |
+| `eventos.pedido_sdc` | `retorno_registrado_pela_sdc`, `aprovado_em`, `aprovado_por`, `observacao_aprovacao` + dois `CHECK`s. |
+| `eventos.registro_acao` | `acesso_sdc_id`; origem `SDC`; `CHECK` de autoria novo (as linhas antigas continuam válidas). |
+
+O `.down.sql` **para** se o histórico já tiver ação de origem `SDC` (voltar apagaria quem fez). Teste:
+`src/core/db/__tests__/acesso-da-sdc.integracao.test.ts` (down → dados antigos → up; privilégios por papel).
+
+**O banco não separa SDC de time:** as duas áreas usam os mesmos papéis (`app_eventos_leitura` e `app_eventos`). A
+separação é feita no servidor do app (§15.3 e §15.4). Ver §15.9.
+
+### 15.8 Ações manuais antes de liberar para a SDC
+
+1. Aplicar a migration `0016` em produção (com o resto do deploy).
+2. Supabase Auth: garantir que a conta Google da SDC consegue criar sessão (cadastro aberto **ou** usuário criado antes
+   pelo painel; §2.4). **Isto não foi testado com um e-mail de fora de verdade.**
+3. A líder inclui os e-mails em Configurações › Acesso da SDC e pede um teste de entrada à agência.
+4. Contrato com a SDC como operadora de dados (§9.2): agora ela vê nomes de quem viaja dentro do sistema.
+
+### 15.9 Riscos conhecidos
+
+- **Separação só no app:** um erro de programação numa página de `/sdc` (ex.: importar uma leitura do time) exporia
+  dado, porque o papel de banco é o mesmo. Mitigação: repositório próprio, teste de varredura dos imports e teste de
+  lista fechada de campos. Passo seguinte possível: um papel de banco só da SDC, com `SELECT` por coluna.
+- **Cadastro aberto no Supabase** (se for esse o caminho do item 2): qualquer conta Google cria um `auth.users`. Isso
+  não dá acesso (sem `core.usuario` do time nem linha ativa na lista, a sessão é encerrada), mas o projeto é dividido
+  com o GH.
+- **E-mail é a identidade:** quem controla a caixa do e-mail listado entra como SDC. Vale o e-mail confirmado pelo
+  Google; e-mail compartilhado da agência = várias pessoas com o mesmo nome no histórico. Preferir um e-mail por pessoa.
+- **Conta da IAM sem perfil do Eventos que esteja na lista** entra como SDC (por desenho: a lista é a decisão da líder).
+- **Sem limite de valor nem dupla aprovação:** qualquer pessoa do time aprova qualquer valor, inclusive de um pedido
+  que ela mesma fez.
+- **Textos livres da SDC** (observação, nome do hotel, forma de pagamento) aparecem nas telas do time; saem escapados
+  pelo React e têm limite de tamanho, mas são conteúdo de terceiros.
+- **Sem limite de tentativas** próprio nas actions da SDC (além do que o provedor e o Next oferecem).

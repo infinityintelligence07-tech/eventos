@@ -134,6 +134,7 @@ O import do cliente do banco continua **sob demanda** (`await import("@/core/db/
 | `disponibilidade` (novo) | `enquete`, `enquete_evento`, `disponibilidade` | `evento`, `core.pessoa`, `pessoa_evento` |
 | `pessoas` (novo) | `pessoa_evento`, `pessoa_funcao`, `pessoa_veiculo` | `core.pessoa`, `convocacao` (histórico) |
 | `logistica` (novo) | `pedido_sdc`, `trecho_voo`, `hospedagem`, `quarto`, `quarto_ocupante`, `carona`, `convocacao.carona_id` | `convocacao`, `evento`, `local`, `pessoa_evento` |
+| `logistica` — acesso da SDC (0016) | `acesso_sdc` (a lista de e-mails da agência, pelo fluxo `@/fluxos/sdc`; só a líder); a SDC, na área dela, escreve em `pedido_sdc`, `trecho_voo`, `hospedagem` e cria `local` do tipo `HOTEL`, sempre pelo mesmo serviço do retorno | só `pedido_sdc`, `trecho_voo`, `hospedagem`, `quarto*`, `evento`, `local` e os **nomes** de `core.pessoa` (consultas próprias, docs/09 §15.4) |
 | `custos` (novo) | `regra_custo`, `solicitacao_custo`, `deslocamento`, `custo_item`, `rota_cache`, `protocolo_sequencia` (pela função `eventos.proximo_protocolo()`) | `convocacao`, `evento`, `pessoa_veiculo`, `tipo_evento` |
 | `src/core/db/registro-acao.ts` (infra) | `registro_acao` (chamado pelos repositórios de cada módulo, dentro da mesma transação) | — |
 
@@ -399,6 +400,35 @@ stateDiagram-v2
   pedido de voo ou abrir a hospedagem do evento desfaz o marcador correspondente.
 - Cancelar não apaga: o pedido continua na lista da SDC e na conciliação futura da fatura.
 
+**Compra pela SDC e aprovação do pagamento (25/11/2026, migration 0016; docs/09 §15).** O fluxo da planilha: o time
+solicita, a SDC registra a compra e o valor, o time aprova depois dizendo que usou.
+
+- **Quem registra o retorno:** o time, em nome da SDC (como antes), ou a própria SDC na área `/sdc`
+  (`registrarRetornoDeVooPelaSdc`, `registrarRetornoDeHospedagemPelaSdc`, mesmo serviço e mesmas validações). O serviço
+  recebe `{ autor: { usuarioId } | { acessoSdcId }, instante }`; o pedido guarda `retorno_registrado_por` **ou**
+  `retorno_registrado_pela_sdc`.
+- **Corrigir a compra:** `EMITIDO` + registrar retorno continua `EMITIDO` (antes era recusado). Vale para a SDC enquanto
+  o pagamento não foi aprovado e para o time sempre.
+- **Pagamento** é um estado derivado (função pura `situacaoDoPagamento`, `domain/pagamento.ts`), não uma coluna:
+
+```mermaid
+stateDiagram-v2
+  SEM_COMPRA --> A_APROVAR: compra registrada com valor (pedido EMITIDO)
+  A_APROVAR --> A_APROVAR: SDC ou time corrige a compra
+  A_APROVAR --> APROVADO: time aprova ("usamos, pode pagar")
+  APROVADO --> A_APROVAR: time desfaz a aprovação ou corrige a compra
+  APROVADO --> SEM_COMPRA: time altera o pedido (volta para a SDC comprar)
+  A_APROVAR --> SEM_COMPRA: time altera o pedido
+  SEM_COMPRA --> CANCELADO: cancelar
+  A_APROVAR --> CANCELADO: cancelar
+  APROVADO --> CANCELADO: cancelar (a aprovação cai)
+```
+
+- `podeAprovarPagamento`: só `A_APROVAR` (recusas `SEM_COMPRA`, `CANCELADO`, `JA_APROVADO`). `efeitoNaAprovacao(pedido,
+  "TIME" | "SDC")`: com o pagamento aprovado a SDC não mexe; quando o time mexe, a aprovação cai e o serviço grava
+  `APROVACAO_DESFEITA` além do registro da própria mudança. `aprovarPagamento` grava `PAGAMENTO_APROVADO`.
+- `totaisDoPagamento`: quantidade e soma "a aprovar" e "aprovado" (Voos do time, área da SDC).
+
 ---
 
 ## 5. Mudanças de banco (migration 0004, só no banco local)
@@ -485,11 +515,20 @@ hotel, que a fatura da SDC vai citar). Formato a confirmar (§11).
 | `cancelado_por` | uuid → `core.usuario` ON DELETE SET NULL | |
 | `motivo_cancelamento` | text | |
 | `forma_pagamento` | text | 0015. Informada no retorno da SDC (ex.: "Faturado SDC"); `CHECK` de 1 a 60 caracteres. Hoje só a hospedagem preenche |
+| `retorno_registrado_pela_sdc` | uuid → `acesso_sdc` ON DELETE RESTRICT | 0016. Quem da SDC lançou a compra; vazio quando foi o time (`retorno_registrado_por`) |
+| `aprovado_em` | timestamptz | 0016. Preenchido = pagamento aprovado pelo time. `CHECK`: só com `situacao = 'EMITIDO'` e `valor_centavos` preenchido |
+| `aprovado_por` | uuid → `core.usuario` ON DELETE SET NULL | 0016 |
+| `observacao_aprovacao` | text | 0016. Até 500 caracteres, só junto da aprovação |
 | `criado_em`, `atualizado_em` | timestamptz not null default now() | |
 
 Índices: `evento_id`, `pessoa_id`, `convocacao_id`, `solicitado_por`, `retorno_registrado_por`, `cancelado_por`,
 `situacao`. O único parcial `pedido_sdc_voo_ativo_unique` (um pedido de voo ativo por pessoa por evento) **saiu na 0015**:
 a planilha do time tem mais de uma compra da mesma pessoa no mesmo evento.
+
+**`eventos.acesso_sdc` (0016):** `id`, `email` (único; `CHECK` minúsculas, sem espaços, formato e até 254), `nome` (2 a 120),
+`ativo` (default true), `criado_por` → `core.usuario` (SET NULL), `criado_em`, `atualizado_em`. RLS e privilégios em
+docs/09 §15.7. **`eventos.registro_acao` (0016):** coluna `acesso_sdc_id` → `acesso_sdc` (RESTRICT), origem `'SDC'` e
+`CHECK` de autoria `(origem = 'USUARIO') = (usuario_id IS NOT NULL) AND (origem = 'SDC') = (acesso_sdc_id IS NOT NULL)`.
 
 **`eventos.trecho_voo`** — ida e volta de um pedido de voo.
 
@@ -701,8 +740,12 @@ Server actions (Zod):
 | `adicionarQuarto` / `removerQuarto` | `{ hospedagemId, nome, capacidade: 1..4, sexo?, valorDiariaCentavos? }` / `{ quartoId }` (só vazio) |
 | `porNoQuarto` / `tirarDoQuarto` | `{ quartoId, convocacaoId }` / `{ quartoId, convocacaoId }` |
 
-A SDC ainda não tem portal: depois de registrar o pedido, a tela oferece "Copiar pedido" (texto pronto para o canal de
-hoje). Toda mudança de voo/quarto muda o `dados_hash` da copy de hospedagem → a Comunicação mostra "Desatualizada".
+**Desde 25/11/2026 a SDC tem uma área própria** (`/sdc/voos`, `/sdc/hospedagem`, fora de `(time)`; fluxos em
+`@/fluxos/sdc`: `carregarVoosDaSdc`, `carregarHospedagensDaSdc`, `registrarCompraDeVoo`, `registrarReservaDeHospedagem`,
+`listarAcessoDaSdc`, `incluirAcessoDaSdc`, `definirAcessoDaSdc`; repositórios `sdc-repository.ts` e
+`acesso-sdc-repository.ts`). A SDC identifica o pedido pela referência `SDC-…`, nunca por id. No time, as actions novas
+são `aprovarPagamentoAcao` (`{ pedidoId, confirmo: true, observacao? }`) e `desfazerAprovacaoAcao` (`{ pedidoId }`).
+"Copiar pedido" (texto pronto para o canal de hoje) continua, para quando a agência preferir receber por fora. Toda mudança de voo/quarto muda o `dados_hash` da copy de hospedagem → a Comunicação mostra "Desatualizada".
 
 ### 6.7 Custos — `/custos`, `/custos/nova`, `/eventos/[eventoId]/custos`
 
@@ -823,6 +866,7 @@ type ItemDoInicio = { chave: string; titulo: string; quantidade: number; href: s
 | `eventos` (B) | eventos sem código (reaproveita `pendenciasDosEventos`). "Confronto sem fila" saiu do Início em 24/11/2026; a falta da fila aparece só na escala do evento |
 | `comunicacao` (C) | copys com falta de dado, copys desatualizadas |
 | `logistica` (D) | eventos no prazo do aviso (padrão D-90, configurável) ainda sem nenhum pedido de voo, fora os marcados como "não precisa de voo" e as Masterclasses: por evento, dias que faltam; pedidos alterados sem novo retorno da SDC |
+| `logistica` (D), desde 25/11/2026 | "Compras da SDC a aprovar" (`compras-a-aprovar`): pedidos de voo e de hospedagem com compra registrada e pagamento ainda não aprovado, inclusive de eventos que já passaram: referência, passageiro (ou "Hospedagem"), evento e valor |
 | `custos` (D) | solicitações para auditar (destaque para as críticas) |
 | `disponibilidade` (A) | enquetes que fecham em até 3 dias |
 
@@ -1008,6 +1052,7 @@ Onde a doc 08 diverge, vale o que está aqui.
 | Motivo em custos | Obrigatório para reprovar e para aprovar com alerta crítico; opcional no resto. |
 | Item 7, janela de voo (24/11/2026) | O D-90 virou configurável em Configurações › Aviso de voos (7 a 365 dias, padrão 90). O "atrasado" deixou de ser 60 fixo: é dois terços do aviso, no máximo 60 (§4.5). O aviso é só na tela, para a líder e o time. |
 | Voos e hotel pela SDC (24/11/2026, migration 0015) | "Nós solicitamos e eles compram." Voo: pedido por evento + pessoa do staff, sem depender da escala; mais de um pedido ativo por pessoa no evento, com confirmação; tela agrupada por mês e evento como a planilha; aviso por evento, com "não precisa de voo". Hospedagem: o time monta os quartos sem hotel, pede à SDC e registra no retorno o hotel, a reserva, o valor e a forma de pagamento; apartamento da IAM continua sem pedido; "sem hospedagem" por evento. Datas de solicitação e de compra são as do registro no sistema. Sem login nem perfil para a SDC (não decidido). |
+| Acesso da SDC e aprovação do pagamento (25/11/2026, migration 0016) | "Time solicita, SDC coloca o valor e nosso time aprova falando que usamos." A SDC entra pelo Google com um e-mail da lista mantida pela líder (nada no cadastro do GH), vê só pedidos de voo e de hospedagem e registra tudo da compra. O time aprova **depois** da compra; a aprovação cai se a compra mudar. Detalhes e riscos em docs/09 §15. |
 | Formulário de custo do staff (24/11/2026) | `/solicitar-custo` substitui o Google Forms: aberto do primeiro dia do evento até 5 dias depois do último (inclusive, fuso de São Paulo); fora do prazo, só o time registra. A pessoa informa só deslocamento e despesas; remuneração e alimentação são fixas e entram sozinhas pela regra (quantidade 1, como a tela do time sugere). Tipo de combustível e data do evento ficam de fora. Correção pelo staff só da reprovada, até 5 dias depois da reprovação. Detalhe na doc 08 §11.4. |
 | Comprovante do custo (24/11/2026) | Anexo no formulário do staff: até 3 arquivos de 8 MB (JPEG, PNG, WebP ou PDF, conferidos pelos bytes), obrigatório quando há deslocamento ou despesa. Storage do Supabase, bucket privado `eventos-comprovantes`, pelo protocolo S3 com chave de acesso S3 (nunca a `service_role`); leitura por rota autenticada que redireciona para URL pré-assinada de 5 minutos. Sem as variáveis, o anexo fica desligado e o formulário funciona sem o campo. |
 | Custo aprovado (24/11/2026) | Mensagem pronta para copiar e mandar no WhatsApp (primeiro nome, evento, protocolo, valor). O sistema não envia. **Construção futura:** envio automático pelo WhatsApp. |

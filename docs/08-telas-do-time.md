@@ -105,6 +105,7 @@ O logo passa a levar para `/inicio` quando a tela Início existir.
 | Hospedagem | `/logistica/hospedagem` (quartos e caronas) | `/logistica/creditos`; `/logistica/caronas` redireciona para a Hospedagem, na seção de caronas |
 | Custos | `/custos` | `/custos/nova`; detalhe em painel lateral com `?protocolo=STF-…` |
 | Configurações | `/configuracoes/regras-de-custo` | `/configuracoes/vagas`, `/configuracoes/modelos-de-copy`, `/configuracoes/locais`, `/configuracoes/voos` |
+| (fora do menu do time) **Área da SDC** | `/sdc` → `/sdc/voos` | `/sdc/hospedagem`. Só para quem está na lista da SDC (§10.5); o time é levado para `/inicio` |
 | (sem item no menu) | `/eventos/[eventoId]` | `/eventos/[eventoId]/escala`, `/comunicacao`, `/logistica`, `/custos` |
 
 **Regra de ouro:** o trabalho de um evento acontece sempre em `/eventos/[eventoId]/…`. As abas do menu (Escalas,
@@ -441,6 +442,7 @@ Acrescentar `scroll-padding-bottom` no `main` com a altura da barra, para o foco
 | Pendências da sincronização | "Eventos sem polo cadastrado ou com código repetido no IAM Control." | código ou nome da turma · motivo | Evento · Resumo |
 | Custos para auditar | "Solicitações de custo esperando aprovação do time." | protocolo · nome · chip "Crítico"/"Alerta" | Custos, com o painel aberto |
 | Eventos sem pedido de voo | "Eventos em 90 dias ou menos que ainda não têm nenhum pedido de voo à SDC. Se o evento não precisa de voo, marque isso em Voos e ele sai daqui." (os dias são os de Configurações › Aviso de voos, §12.5) | por evento no prazo: código · "faltam 75 dias" (ou "atrasado · faltam 48 dias"); o contador é o número de eventos | Voos, filtrado pelo evento. Aparece para a líder e para o time; é o aviso de voos, só na tela. Ficam de fora os eventos com pelo menos um pedido, os marcados como "não precisa de voo", as Masterclasses e os eventos do polo de casa (Americana) |
+| Compras da SDC a aprovar | "A SDC registrou a compra e o valor. Confira e aprove o pagamento, confirmando que a passagem ou o hotel foi usado." | `SDC-000012 · [Staff 07]` (ou "Hospedagem") · código do evento · valor | Voos (o pedido aberto) ou a Hospedagem do evento |
 
    Cartão com contador 0 continua visível, com a pílula verde "0" e o texto "Nada pendente." — mostra que está tudo em dia.
    Ordem dentro de cada cartão: o mais urgente primeiro (data do evento mais próxima; críticos antes de alertas).
@@ -913,6 +915,14 @@ Toast: "Voo do pedido SDC-000013 registrado. A copy de hospedagem da pessoa foi 
 
 **Alterar e cancelar** continuam como eram (alterar depois de emitido deixa "Alterado pelo time" até o novo retorno). Cancelar: confirmação "Cancelar o pedido SDC-000013?" — "Avise a SDC pelo canal de sempre. O voo some da copy da pessoa." Pedido cancelado não conta como "já tem pedido".
 
+**Pagamento: time solicita, SDC registra o valor, time aprova (25/11/2026).** Desde que a SDC tem acesso (§10.5), a compra pode ser registrada **por ela** ou, como antes, pelo time em nome dela. A linha mostra quem registrou ("Compra registrada pela SDC ([nome da lista])" ou o selo "Registrado pelo time").
+- **Chip de pagamento** ao lado do preço: "A aprovar" (compra registrada com valor), "Aprovado para pagamento" (com a data) ou nada (sem compra). Cancelado não tem pagamento.
+- **"Aprovar pagamento"** (na linha e no painel do pedido, só quando está "a aprovar"): confirmação com o resumo do pedido e do valor, a caixa obrigatória **"Confirmo que usamos e que este valor pode ser pago"** e uma observação opcional. Toast: "Pagamento do pedido SDC-000013 aprovado. A SDC já vê como aprovado."
+- **"Desfazer aprovação"** (quando aprovado): volta para "a aprovar" e a SDC pode corrigir a compra.
+- **"Corrigir compra"**: com a compra registrada, o time pode corrigir os dados; se o pagamento estava aprovado, a aprovação cai e precisa ser dada de novo. O mesmo vale para alterar ou cancelar o pedido.
+- **Totais** no topo da tela: "Pagamento a aprovar: R$ … · N compras" e "Aprovado para pagamento: R$ … · N compras", como a soma da planilha. Compras "a aprovar" de eventos que já passaram continuam na lista até serem aprovadas.
+- Os dois perfis aprovam (`logistica.aprovar_pagamento`).
+
 ### 10.2 Hospedagem (rooming list)
 
 **Nós montamos os quartos; a SDC escolhe e reserva o hotel.** A tela parte de quem o time marcou com "Hotel" na escala do
@@ -966,6 +976,28 @@ Vazio: "Nenhum crédito de hotel registrado."
 **Estados gerais da Logística:** carregando (esqueleto da tabela ou dos cartões); erro (padrão); vazio por evento sem ninguém escalado: "A escala deste evento ainda não tem pessoas." + "Ir para a escala".
 
 **Acessibilidade:** cartões de quarto e de motorista são `section` com título; contadores "2 de 4 lugares" em texto; seletores com rótulo completo ("Mover [Staff 05] para o quarto").
+
+---
+
+### 10.5 Área da SDC (`/sdc`)
+
+**Objetivo:** a agência faz no sistema o que fazia na planilha: vê o que o time pediu e registra a compra e o valor. Ela só enxerga pedidos de voo e de hospedagem (docs/09 §15).
+
+**Quem entra:** os e-mails que a líder incluiu em Configurações › Acesso da SDC (§12.6), pelo mesmo `/login`, com o Google. Quem é da SDC cai direto em `/sdc/voos`; qualquer rota do time a devolve para `/sdc`.
+
+**Moldura própria** (não é o painel do time): cabeçalho com "Eventos IAM · SDC", o nome e o e-mail de quem entrou, as duas abas **Voos | Hospedagem** e "Sair". Pensada para celular: uma coluna, cartões em vez de tabela larga, botões de toque inteiro.
+
+**Voos (`/sdc/voos`)** — "Passagens pedidas pelo time de eventos. Registre a compra e o valor de cada pedido; o time confere e aprova o pagamento."
+- Totais ("Pagamento a aprovar" e "Aprovado para pagamento") e filtro por situação: **A comprar | Aguardando aprovação | Aprovado | Cancelado | Todos**.
+- Pedidos por mês e por evento ("16 a 18/12 · IPR_POA_12 · Imersão · Centro de Eventos — Porto Alegre (RS)"). Cada pedido: referência `SDC-…`, nome do passageiro, o que o time pediu por trecho ("Ida: VCP → POA em 14/12 (manhã)"), a observação do time e, depois da compra, companhia, voo, horários, reserva e valor.
+- **"Registrar compra"** (a comprar) ou **"Corrigir compra"** (aguardando aprovação): por trecho, Companhia, Número do voo, Código da reserva (localizador), Partida e Chegada; "Valor total da compra (R$)" e "Observação para o time (opcional)".
+- Situação: "A comprar", "Aguardando aprovação do time", "Aprovado para pagamento em dd/mm" (só leitura), "Cancelado" (só leitura). Pedido alterado pelo time depois da compra: "O time alterou este pedido depois da compra. Confira o trecho e registre a compra de novo."
+
+**Hospedagem (`/sdc/hospedagem`)** — cada pedido mostra o evento, check-in e check-out, quantos quartos e pessoas e a lista de quartos com os nomes de quem divide. **"Registrar reserva"** (ou "Corrigir reserva"): o hotel (Nome, Cidade, UF e, se quiser, rua, número e bairro), Número da reserva, Valor total e Forma de pagamento (padrão "Faturado SDC").
+
+**O que não aparece para a SDC:** telefone, e-mail, documento, endereço, função, escala, custos, histórico, quem do time pediu ou aprovou. Ela não cria, não altera e não cancela pedido, nem mexe nos quartos.
+
+**Vazio:** "Nenhum pedido de voo por enquanto." / "Nenhum pedido de hospedagem por enquanto." (com filtro: "… com esse filtro.").
 
 ---
 
@@ -1137,7 +1169,7 @@ mostra o endereço do formulário do sistema para copiar e salvar em `link_custo
 
 **Objetivo:** editar o que muda as contas do sistema sem mexer no código: regras de custo, regras de vagas, modelos de copy, locais e hotéis.
 
-**Rotas e abas:** **Regras de custo | Vagas por tipo de evento | Modelos de copy | Locais e hotéis | Aviso de voos | Acesso do time**.
+**Rotas e abas:** **Regras de custo | Vagas por tipo de evento | Modelos de copy | Locais e hotéis | Aviso de voos | Acesso do time | Acesso da SDC**.
 Cabeçalho: "Configurações" / "Valores e modelos usados pelo sistema. Mudanças valem dali em diante." Sem permissão (quando houver login): `SemPermissao`.
 
 ### 12.1 Regras de custo
@@ -1181,6 +1213,13 @@ Cabeçalho: "Configurações" / "Valores e modelos usados pelo sistema. Mudança
 - **O aviso é por evento** (desde 24/11/2026): entra o evento que chegou ao prazo e ainda não tem nenhum pedido de voo; sai quando o primeiro pedido é registrado ou quando o time marca "não precisa de voo" (§10.1). Não depende de ninguém estar marcado como Avião na escala, porque o voo é pedido antes dela. Os eventos do polo de casa (Americana, código `AM`) nunca entram no aviso, porque a equipe é de lá; o pedido de voo continua liberado para eles.
 - O aviso é só na tela (Início e topo de Voos, §4 e §10.1), para a líder e para o time; não manda e-mail nem WhatsApp. Mudar o prazo vale dali em diante e fica no histórico (`registro_acao`, `CONFIGURACAO_ALTERADA`).
 - Toast: "Aviso de voos salvo: começa 120 dias antes do evento e o pedido conta como atrasado a partir de 60 dias." Erros no campo: "Use um número inteiro de dias, sem vírgula." / "Use de 7 a 365 dias."
+
+### 12.6 Acesso da SDC (`/configuracoes/acesso-da-sdc`)
+
+- Cartão "Pessoas da SDC com acesso à área de voos e hospedagem": tabela com Nome, E-mail, situação (chip "Ativo" ou "Desativado: não entra") e, para a líder, "Desativar" / "Reativar". O time vê a lista sem controles ("A líder inclui os e-mails da agência.").
+- Cartão "Incluir alguém da SDC" (só a líder, `config.acesso_da_sdc`): **Nome** e **E-mail (conta Google)** ("O mesmo e-mail com que a pessoa entra no Google."). Ajuda: "A pessoa não precisa de cadastro na IAM: basta o e-mail da conta Google dela. O e-mail não muda depois; para trocar, desative este e inclua o novo."
+- Desativar corta o acesso no próximo clique da pessoa. E-mail repetido é recusado ("Este e-mail já está na lista da SDC."; se estiver desativado, a mensagem manda reativar).
+- Vazio: "Ninguém da SDC tem acesso ainda." / "Inclua abaixo o e-mail de quem cuida dos pedidos na agência."
 
 **Estados (Configurações):** carregando e erro padrão; vazio por aba ("Nenhum modelo de copy." + "Novo modelo"; "Nenhum local cadastrado." + "Novo local").
 
