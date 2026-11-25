@@ -153,4 +153,15 @@ export {
 export { type CaronaDoEvento, criarRepositorioCaronas, type PessoaDaCarona } from "./repository/caronas-repository";
 export { transferirLogisticaDaConvocacao, vincularPedidosDeVooDaPessoa } from "./repository/comum";
 export { manterNoQuartoSemOrigem, origensDoHotel, vincularHotelDaPessoa } from "./repository/hospedagem-repository";
+export {
+  dataRealDoLancamento,
+  type EventoDaTurne,
+  localDaPalestra,
+  mensagemDaRecusaDaTurne,
+  noRecorte,
+  type RecorteDaLogistica,
+  recorteDaLogistica,
+  RECORTES_DA_LOGISTICA,
+  validarTurne,
+} from "./domain/turne";
 export { ORIGENS_DO_HOTEL, type OrigemDoHotel, podeTirarOrigem, precisaManterComoAvulsa, rotuloDaOrigemDoHotel } from "./domain/hotel";

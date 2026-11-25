@@ -40,6 +40,9 @@ export const pedidoSdc = eventosSchema.table(
     // Passageiro: obrigatório no voo, vazio na hospedagem.
     pessoaId: uuid("pessoa_id").references(() => pessoa.id, { onDelete: "restrict" }),
     convocacaoId: uuid("convocacao_id").references(() => convocacao.id, { onDelete: "set null" }),
+    // Só no voo de Masterclass: a viagem é uma turnê. O pedido é da primeira palestra (evento_id, onde a ida chega) e
+    // este é o evento da última, de onde a volta sai. Vazio = ida e volta pelo mesmo evento.
+    eventoVoltaId: uuid("evento_volta_id").references(() => evento.id, { onDelete: "restrict" }),
     // Só no voo: "também precisa de hotel". Põe o passageiro na lista de quem precisa de hotel do evento (uma das três
     // origens, com a escala e o acréscimo direto na Hospedagem), enquanto o pedido não for cancelado.
     precisaHotel: boolean("precisa_hotel").notNull().default(false),
@@ -49,6 +52,13 @@ export const pedidoSdc = eventosSchema.table(
     observacaoSdc: text("observacao_sdc"),
     solicitadoPor: uuid("solicitado_por").references(() => usuario.id, { onDelete: "set null" }),
     solicitadoEm: timestamp("solicitado_em", { withTimezone: true }).notNull().defaultNow(),
+    // Datas de negócio, informadas pelo time (compra antiga da planilha, compra feita fora do sistema): o dia em que o
+    // pedido foi feito à SDC e o dia em que ela comprou. Por padrão, o dia do lançamento. Os instantes (solicitado_em,
+    // emitido_em) e o histórico continuam com a hora real em que foi lançado no sistema.
+    dataSolicitacao: date("data_solicitacao")
+      .notNull()
+      .default(sql`(now() AT TIME ZONE 'America/Sao_Paulo')::date`),
+    dataCompra: date("data_compra"),
     // Em ALTERADO fica o emitido_em da emissão anterior.
     emitidoEm: timestamp("emitido_em", { withTimezone: true }),
     // Quem lançou a compra: alguém do time em nome da SDC (retorno_registrado_por) ou a própria SDC, pela área dela.
@@ -70,6 +80,7 @@ export const pedidoSdc = eventosSchema.table(
     index("pedido_sdc_evento_idx").on(table.eventoId),
     index("pedido_sdc_pessoa_idx").on(table.pessoaId),
     index("pedido_sdc_convocacao_idx").on(table.convocacaoId),
+    index("pedido_sdc_evento_volta_idx").on(table.eventoVoltaId),
     index("pedido_sdc_solicitado_por_idx").on(table.solicitadoPor),
     index("pedido_sdc_retorno_registrado_por_idx").on(table.retornoRegistradoPor),
     index("pedido_sdc_retorno_pela_sdc_idx").on(table.retornoRegistradoPelaSdc),
@@ -88,6 +99,10 @@ export const pedidoSdc = eventosSchema.table(
     check("pedido_sdc_aprovacao_obs_check", sql`${table.observacaoAprovacao} IS NULL OR (${table.aprovadoEm} IS NOT NULL AND length(${table.observacaoAprovacao}) <= 500)`),
     // A compra é de um autor só: alguém do time (em nome da SDC) OU a própria SDC; nunca os dois.
     check("pedido_sdc_retorno_autor_check", sql`${table.retornoRegistradoPor} IS NULL OR ${table.retornoRegistradoPelaSdc} IS NULL`),
+    // A turnê (evento da volta) só existe no voo, e a volta é de outra palestra (a mesma = vazio).
+    check("pedido_sdc_evento_volta_check", sql`${table.eventoVoltaId} IS NULL OR (${table.tipo} = 'VOO' AND ${table.eventoVoltaId} <> ${table.eventoId})`),
+    // A compra não acontece antes do pedido.
+    check("pedido_sdc_data_compra_check", sql`${table.dataCompra} IS NULL OR ${table.dataCompra} >= ${table.dataSolicitacao}`),
     check("pedido_sdc_forma_pagamento_check", sql`${table.formaPagamento} IS NULL OR length(${table.formaPagamento}) BETWEEN 1 AND 60`),
   ],
 );

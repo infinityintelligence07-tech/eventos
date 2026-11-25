@@ -335,7 +335,7 @@ A SDC **não tem perfil nem permissão desta matriz**: ela não é um `Ator` (§
 | `disponibilidade/nova/acoes.ts` | `abrirEnqueteAcao` → `disponibilidade.gerir` |
 | `disponibilidade/[enqueteId]/acoes.ts` | `encerrarEnqueteAcao`, `reabrirEnqueteAcao` → `disponibilidade.gerir`; `registrarRespostaAcao` → `disponibilidade.registrar_resposta` |
 | `pessoas/[pessoaId]/acoes.ts` | `salvarPerfilAcao`, `definirFuncoesAcao`, `salvarVeiculoAcao`, `salvarCoordenadasAcao` → `pessoas.editar` |
-| `logistica/acoes.ts` | `registrarPedidoDeVooAcao`, `dispensarLogisticaDoEventoAcao`, `alterarPedidoAcao`, `cancelarPedidoAcao`, `criarHospedagemAcao`, `alterarHospedagemAcao`, `removerHospedagemAcao`, `registrarPedidoDeHospedagemAcao`, `adicionarQuartoAcao`, `removerQuartoAcao`, `porNoQuartoAcao`, `moverDeQuartoAcao`, `tirarDoQuartoAcao`, `definirPeriodoDoOcupanteAcao`, `aplicarRoomingSugeridoAcao`, `criarCaronaAcao`, `removerCaronaAcao`, `definirCaronaAcao`, `tirarDaCaronaAcao` → `logistica.gerir`; `registrarRetornoDeVooAcao`, `registrarRetornoDeHospedagemAcao` → `logistica.registrar_retorno_sdc`; `aprovarPagamentoAcao`, `desfazerAprovacaoAcao` → `logistica.aprovar_pagamento` |
+| `logistica/acoes.ts` | `registrarPedidoDeVooAcao`, `dispensarLogisticaDoEventoAcao`, `alterarPedidoAcao`, `cancelarPedidoAcao`, `definirHotelDoVooAcao`, `acrescentarHospedeAcao`, `tirarHospedeAcao`, `criarHospedagemAcao`, `alterarHospedagemAcao`, `removerHospedagemAcao`, `registrarPedidoDeHospedagemAcao`, `adicionarQuartoAcao`, `removerQuartoAcao`, `porNoQuartoAcao`, `moverDeQuartoAcao`, `tirarDoQuartoAcao`, `definirPeriodoDoOcupanteAcao`, `aplicarRoomingSugeridoAcao`, `criarCaronaAcao`, `removerCaronaAcao`, `definirCaronaAcao`, `tirarDaCaronaAcao` → `logistica.gerir`; `registrarRetornoDeVooAcao`, `registrarRetornoDeHospedagemAcao` → `logistica.registrar_retorno_sdc`; `aprovarPagamentoAcao`, `desfazerAprovacaoAcao` → `logistica.aprovar_pagamento` |
 | `custos/acoes.ts` | `registrarSolicitacaoAcao`, `corrigirSolicitacaoAcao`, `calcularPreviaAcao` (não grava) → `custos.registrar`; `aprovarSolicitacaoAcao`, `reprovarSolicitacaoAcao` → `custos.auditar`; `reabrirAuditoriaAcao` → `custos.reabrir_auditoria` |
 | `configuracoes/acesso/acoes.ts` | `definirAcessoAcao` → `config.acesso_do_time` |
 | `configuracoes/acesso-da-sdc/acoes.ts` | `incluirAcessoDaSdcAcao`, `definirAcessoDaSdcAcao` → `config.acesso_da_sdc` |
@@ -344,6 +344,11 @@ A SDC **não tem perfil nem permissão desta matriz**: ela não é um `Ator` (§
 | `configuracoes/voos/acoes.ts` | `salvarAvisoDeVoosAcao` → `config.aviso_de_voos` |
 | `configuracoes/vagas/acoes.ts` | `salvarRegraDeVagas`, `recalcularVagasDoTipo` → `config.regras_vagas` |
 | `configuracoes/regras-de-custo/acoes.ts` | `criarVigenciaDeRegraAcao`, `desativarRegraAcao` → `config.regras_custo` |
+
+As 26 actions de `logistica/acoes.ts` estão todas na linha acima (conferido com o arquivo em 25/11/2026: as três da
+lista de hotel sem escala — `definirHotelDoVooAcao`, `acrescentarHospedeAcao`, `tirarHospedeAcao` — faltavam aqui). A
+rodada de Masterclass e data real não criou action: os campos novos (evento da volta, datas, forma de pagamento no voo)
+entram nas actions que já existiam, com as mesmas permissões. O teste `acoes-com-permissao.test.ts` é a fonte da contagem.
 
 Actions que não gravam (`calcularPreviaAcao`, `previaDoModeloAcao`) continuam exigindo login e permissão (gastam CPU e
 leem dados), mas não passam pela guarda de escrita. Action nova sem permissão não compila (parâmetro obrigatório) e um
@@ -871,9 +876,16 @@ time nem o banco).
   o evento ganha uma chave "e1, e2…" que só vale dentro da resposta). O teste "não vaza dado"
   (`src/fluxos/sdc/__tests__/sdc.integracao.test.ts`) grava esses dados ao lado dos pedidos, confere que nenhum aparece
   no que a SDC recebe, que não há nenhum uuid, e fecha a **lista de campos** (campo novo quebra o teste).
+- **Campos que mudaram no que ela recebe (rodada 6, lista fechada atualizada de propósito):** `dataSolicitacao` e
+  `dataCompra` (dias, no lugar de `solicitadoEm` e `compradoEm`: a mesma informação, com a data real); `formaPagamento`
+  também no voo; `evento.masterclass` (para a tela separar Eventos de Masterclass); `eventoDaVolta` no voo (a última
+  palestra da turnê, com os mesmos campos do evento e sem id interno). Na turnê, o recorte de período vale pela data da
+  última palestra, na leitura e na escrita.
 - **Faz:** registrar ou corrigir a compra de um pedido que já existe, enquanto o time não aprovou
   (`registrarCompraDeVooAcao`, `registrarReservaAcao`). Voo: companhia, número do voo, código da reserva, horários e
-  valor. Hospedagem: o hotel (nome, cidade, UF), número da reserva, valor e forma de pagamento. As regras de transição
+  valor, e desde a 0019 a forma de pagamento e a **data da compra** (hoje por padrão; não futura nem antes do pedido
+  do time; a data da solicitação é só do time). Hospedagem: o hotel (nome, cidade, UF), número da reserva, valor,
+  forma de pagamento e a data da reserva. As regras de transição
   são as mesmas do registro feito pelo time (mesmo serviço), com um schema próprio e mais estreito:
   - **Lista fechada de campos.** O trecho da SDC tem só sentido, companhia, número do voo, localizador, partida e
     chegada. **Não tem o link do cartão de embarque**: a SDC não grava nem apaga `cartao_embarque_url` (só o time põe

@@ -477,6 +477,46 @@ casa a convocação com o quarto pela pessoa e pelo evento, e os colegas de quar
 `HOSPEDE_ACRESCENTADO` / `HOSPEDE_RETIRADO` / `HOSPEDE_MANTIDO_NO_QUARTO` são do evento (entidade `EVENTO`, com a
 pessoa em `em_nome_de_pessoa_id`); `HOTEL_MARCADO` / `HOTEL_DESMARCADO` são do pedido de voo.
 
+### 4.7 Masterclass (turnê) e data real da solicitação e da compra (25/11/2026, migration 0019)
+
+A planilha do time tem abas próprias para Masterclass (VOOS MASTERCLASS e HOSPEDAGEM MASTERCLASS). Masterclass é evento do
+tipo `MC` (uma palestra); o que muda é o voo.
+
+**Turnê: o menor modelo.** Na Masterclass a pessoa vai para a **primeira** palestra e volta da **última**, passando por
+várias no meio. O pedido de voo **continua sendo de um evento** — a primeira palestra (`pedido_sdc.evento_id`, onde a ida
+chega) — e ganha um **evento da volta opcional** (`pedido_sdc.evento_volta_id`, a última palestra, de onde a volta sai).
+Uma palestra só (ou a mesma na ida e na volta) = sem evento da volta. As palestras do meio não entram no pedido. Tudo o
+mais (trechos, situação, compra, aprovação, "também precisa de hotel", que vale para a primeira palestra) é igual ao voo
+de evento. Função pura `validarTurne` (`domain/turne.ts`): com volta por outra palestra, as duas pontas são Masterclass,
+a última não vem antes da primeira e não está cancelada. O banco reforça: evento da volta só em pedido de voo e
+diferente do evento do pedido (`pedido_sdc_evento_volta_check`). `alterarPedido` não troca a última palestra (para
+isso, cancela-se e pede-se de novo).
+
+- **Recorte "Eventos | Masterclass"** (`recorteDaLogistica`, `?recorte=masterclass`; `EventoDaLogistica.masterclass`):
+  Voos, Hospedagem e as duas telas da SDC separam os dois lados, como as abas da planilha. Com um evento escolhido,
+  vale o recorte dele. Em Voos, o recorte de Masterclass mostra uma tabela por mês (pela data da primeira palestra) com
+  "Local 1ª palestra" e "Local última palestra" no lugar da escala/evento e a coluna "Pagamento".
+- **Período:** na turnê vale a data da **última** palestra: o pedido fica nas listas (do time e da SDC) e aceita a
+  compra da SDC até ela passar. Filtrando por evento, a turnê aparece na primeira e na última palestra.
+- **Aviso de voos por evento:** continua sem as Masterclasses (nada mudou).
+- **Hospedagem de Masterclass:** já funcionava com o que existe desde a 0017 e continua sem modelo próprio — uma
+  hospedagem por palestra (datas de entrada e saída), quem dorme entra pela lista de hotel sem escala ("Acrescentar
+  pessoa" ou "Também precisa de hotel" no voo), pedido à SDC e retorno com hotel, valor e forma de pagamento. O
+  palestrante precisa estar no cadastro de staff (a mesma regra do voo). A **"pré-reserva"** da planilha é a situação
+  `PEDIDO` (pedido feito à SDC, ainda sem emissão): não há situação nova.
+
+**Data real.** "Solicitação" e "Compra" eram sempre a hora do lançamento. Agora cada pedido tem `data_solicitacao`
+(dia em que foi feito à SDC) e `data_compra` (dia em que ela comprou), informados por quem lança, para compras antigas
+(da planilha) e compras feitas fora do sistema. `dataRealDoLancamento` (pura): sem data informada vale hoje (fuso de São
+Paulo); **não aceita data futura**; a **compra não pode ser antes da solicitação** (também `CHECK` no banco). O time
+informa as duas; a SDC, só a da compra. `solicitado_em`, `emitido_em` e o `registro_acao` continuam com a hora real do
+lançamento (a data informada vai em `dados.dataSolicitacao` / `dados.dataCompra`). Corrigir a compra regrava a data;
+pedido `ALTERADO` guarda a data da compra anterior (como o `emitido_em`), e a SDC a vê vazia.
+
+**Forma de pagamento também no voo** (a planilha anota "Faturado SDC" por voo): `pedido_sdc.forma_pagamento` passa a
+ser gravada no retorno de voo (opcional; obrigatória só na hospedagem), pelo time e pela SDC, com a mesma validação de
+texto (uma linha, sem link).
+
 ---
 
 ## 5. Mudanças de banco (migration 0004, só no banco local)
@@ -562,7 +602,10 @@ hotel, que a fatura da SDC vai citar). Formato a confirmar (§11).
 | `cancelado_em` | timestamptz | `CHECK ((situacao = 'CANCELADO') = (cancelado_em IS NOT NULL))` |
 | `cancelado_por` | uuid → `core.usuario` ON DELETE SET NULL | |
 | `motivo_cancelamento` | text | |
-| `forma_pagamento` | text | 0015. Informada no retorno da SDC (ex.: "Faturado SDC"); `CHECK` de 1 a 60 caracteres. Hoje só a hospedagem preenche |
+| `forma_pagamento` | text | 0015. Informada no retorno da SDC (ex.: "Faturado SDC"); `CHECK` de 1 a 60 caracteres. Obrigatória na hospedagem; no voo, opcional desde a 0019 |
+| `evento_volta_id` | uuid → `evento` ON DELETE RESTRICT | 0019. Só no voo de Masterclass em turnê: a última palestra (a volta sai de lá). `CHECK`: nulo, ou pedido de voo e diferente de `evento_id`. Índice |
+| `data_solicitacao` | date not null default hoje (São Paulo) | 0019. Dia em que o pedido foi feito à SDC, informado por quem lança |
+| `data_compra` | date | 0019. Dia em que a SDC comprou. `CHECK`: nula ou `>= data_solicitacao` |
 | `retorno_registrado_pela_sdc` | uuid → `acesso_sdc` ON DELETE RESTRICT | 0016. Quem da SDC lançou a compra; vazio quando foi o time (`retorno_registrado_por`). `CHECK pedido_sdc_retorno_autor_check`: nunca os dois preenchidos |
 | `aprovado_em` | timestamptz | 0016. Preenchido = pagamento aprovado pelo time. `CHECK`: só com `situacao = 'EMITIDO'` e `valor_centavos` preenchido |
 | `aprovado_por` | uuid → `core.usuario` ON DELETE SET NULL | 0016 |
@@ -792,6 +835,7 @@ Server actions (Zod):
 | `alterarPedido` | `{ pedidoId, trechos?, observacaoTime?, atualizadoEm }` (EMITIDO → ALTERADO) |
 | `cancelarPedido` | `{ pedidoId, motivo: 3..500 }` |
 | `registrarRetornoDaSdc` | voo: `{ pedidoId, valorCentavos ≥ 0, observacaoSdc?, trechos: [{ sentido, companhia, numeroVoo, localizador, partidaEm, chegadaEm, cartaoEmbarqueUrl? }] }`; hotel: `{ pedidoId, valorCentavos, numeroReserva }` |
+| (desde a 0019) | `registrarPedidoDeVoo` aceita `eventoVoltaId?` (última palestra da turnê) e `dataSolicitacao?`; `registrarPedidoDeHospedagem` aceita `dataSolicitacao?`; os retornos de voo e de hospedagem aceitam `dataCompra?`, e o de voo, `formaPagamento?`. Os schemas da SDC têm `dataCompra?` e `formaPagamento` (sem `dataSolicitacao` nem `eventoVoltaId`). |
 | `criarHospedagem` / `alterarHospedagem` | `{ eventoId, localId, checkIn, checkOut, observacao? }` |
 | `registrarPedidoDeHospedagem` | `{ hospedagemId, observacaoTime? }` (cria `pedido_sdc` tipo HOSPEDAGEM e liga) |
 | `adicionarQuarto` / `removerQuarto` | `{ hospedagemId, nome, capacidade: 1..4, sexo?, valorDiariaCentavos? }` / `{ quartoId }` (só vazio) |
@@ -1183,6 +1227,7 @@ Onde a doc 08 diverge, vale o que está aqui.
 | Voos e hotel pela SDC (24/11/2026, migration 0015) | "Nós solicitamos e eles compram." Voo: pedido por evento + pessoa do staff, sem depender da escala; mais de um pedido ativo por pessoa no evento, com confirmação; tela agrupada por mês e evento como a planilha; aviso por evento, com "não precisa de voo". Hospedagem: o time monta os quartos sem hotel, pede à SDC e registra no retorno o hotel, a reserva, o valor e a forma de pagamento; apartamento da IAM continua sem pedido; "sem hospedagem" por evento. Datas de solicitação e de compra são as do registro no sistema. Sem login nem perfil para a SDC (não decidido). |
 | Acesso da SDC e aprovação do pagamento (25/11/2026, migration 0016) | "Time solicita, SDC coloca o valor e nosso time aprova falando que usamos." A SDC entra pelo Google com um e-mail da lista mantida pela líder (nada no cadastro do GH), vê só pedidos de voo e de hospedagem e registra tudo da compra. O time aprova **depois** da compra; a aprovação cai se a compra mudar. Detalhes e riscos em docs/09 §15. |
 | Hotel sem depender da escala (25/11/2026, migration 0017) | "Precisamos que os hotéis também possam ser pedidos juntos com os voos, não apenas na escala." Quem precisa de hotel é a união de três origens (escala, "Também precisa de hotel" no pedido de voo, acrescentada na Hospedagem); o ocupante do quarto passou a ser a pessoa no evento, com a convocação opcional. Regras de conflito e consumidores em §4.6. |
+| Masterclass e data real (25/11/2026, migration 0019) | O voo de Masterclass é uma turnê: o pedido é da primeira palestra e guarda a última como "evento da volta". Voos e Hospedagem (e a SDC) ganham o recorte Eventos \| Masterclass. A hospedagem de Masterclass usa o que já existia; "pré-reserva" = pedido feito e não emitido. Solicitação e compra têm data real, informada por quem lança (não futura; compra não antes da solicitação); o histórico guarda a hora do lançamento. Forma de pagamento também no voo. Detalhes em §4.7. |
 | Formulário de custo do staff (24/11/2026) | `/solicitar-custo` substitui o Google Forms: aberto do primeiro dia do evento até 5 dias depois do último (inclusive, fuso de São Paulo); fora do prazo, só o time registra. A pessoa informa só deslocamento e despesas; remuneração e alimentação são fixas e entram sozinhas pela regra (quantidade 1, como a tela do time sugere). Tipo de combustível e data do evento ficam de fora. Correção pelo staff só da reprovada, até 5 dias depois da reprovação. Detalhe na doc 08 §11.4. |
 | Comprovante do custo (24/11/2026) | Anexo no formulário do staff: até 3 arquivos de 8 MB (JPEG, PNG, WebP ou PDF, conferidos pelos bytes), obrigatório quando há deslocamento ou despesa. Storage do Supabase, bucket privado `eventos-comprovantes`, pelo protocolo S3 com chave de acesso S3 (nunca a `service_role`); leitura por rota autenticada que redireciona para URL pré-assinada de 5 minutos. Sem as variáveis, o anexo fica desligado e o formulário funciona sem o campo. |
 | Custo aprovado (24/11/2026) | Mensagem pronta para copiar e mandar no WhatsApp (primeiro nome, evento, protocolo, valor). O sistema não envia. **Construção futura:** envio automático pelo WhatsApp. |

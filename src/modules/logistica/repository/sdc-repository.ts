@@ -25,6 +25,8 @@ export type EventoParaASdc = {
   local: string | null;
   cidade: string | null;
   uf: string | null;
+  /** Evento do tipo Masterclass (palestra): a tela da SDC separa "Eventos" de "Masterclass", como a planilha. */
+  masterclass: boolean;
 };
 
 export type TrechoParaASdc = {
@@ -44,19 +46,30 @@ type PedidoParaASdc = {
   referencia: string;
   situacao: SituacaoDoPedido;
   evento: EventoParaASdc;
-  solicitadoEm: Date;
+  /** Dia em que o time fez o pedido (AAAA-MM-DD). */
+  dataSolicitacao: string;
   /** O que o time escreveu para a SDC. */
   observacaoTime: string | null;
   /** O que a SDC respondeu. */
   observacaoSdc: string | null;
   valorCentavos: number | null;
-  /** Quando a compra foi registrada. */
-  compradoEm: Date | null;
+  /** Dia em que a SDC comprou (AAAA-MM-DD), informado por quem registrou a compra. Nulo = sem compra válida. */
+  dataCompra: string | null;
+  /** Como a compra é paga (ex.: "Faturado SDC"). */
+  formaPagamento: string | null;
   /** Preenchido = o time aprovou o pagamento. */
   aprovadoEm: Date | null;
 };
 
-export type VooParaASdc = PedidoParaASdc & { passageiro: string; trechos: TrechoParaASdc[] };
+export type VooParaASdc = PedidoParaASdc & {
+  passageiro: string;
+  trechos: TrechoParaASdc[];
+  /**
+   * Só na turnê de Masterclass: a última palestra, de onde a volta sai (`evento` é a primeira, onde a ida chega).
+   * Nulo = ida e volta pelo mesmo evento.
+   */
+  eventoDaVolta: EventoParaASdc | null;
+};
 
 export type HospedagemParaASdc = PedidoParaASdc & {
   /** Nulos quando o pedido foi cancelado (a hospedagem deixa de estar ligada a ele). */
@@ -66,7 +79,6 @@ export type HospedagemParaASdc = PedidoParaASdc & {
   /** O hotel que a própria SDC informou. */
   hotel: { nome: string; cidade: string; uf: string; logradouro: string | null; numero: string | null; bairro: string | null } | null;
   numeroReserva: string | null;
-  formaPagamento: string | null;
 };
 
 const COLUNAS_DO_PEDIDO = {
@@ -81,11 +93,13 @@ const COLUNAS_DO_PEDIDO = {
   localNome: local.nome,
   cidade: local.cidade,
   uf: local.uf,
-  solicitadoEm: pedidoSdc.solicitadoEm,
+  dataSolicitacao: pedidoSdc.dataSolicitacao,
+  dataCompra: pedidoSdc.dataCompra,
+  formaPagamento: pedidoSdc.formaPagamento,
+  masterclass: sql<boolean>`coalesce((select t.sigla = 'MC' from eventos.tipo_evento t where t.id = ${evento.tipoEventoId}), false)`,
   observacaoTime: pedidoSdc.observacaoTime,
   observacaoSdc: pedidoSdc.observacaoSdc,
   valorCentavos: pedidoSdc.valorCentavos,
-  emitidoEm: pedidoSdc.emitidoEm,
   aprovadoEm: pedidoSdc.aprovadoEm,
 };
 
@@ -101,16 +115,23 @@ type LinhaDoPedido = {
   localNome: string | null;
   cidade: string | null;
   uf: string | null;
-  solicitadoEm: Date;
+  dataSolicitacao: string;
+  dataCompra: string | null;
+  formaPagamento: string | null;
+  masterclass: boolean;
   observacaoTime: string | null;
   observacaoSdc: string | null;
   valorCentavos: number | null;
-  emitidoEm: Date | null;
   aprovadoEm: Date | null;
 };
 
 /** Evento terminou a partir deste dia (AAAA-MM-DD), no fuso de São Paulo. */
-const eventoDesde = (dia: string) => sql`(${evento.fim} at time zone 'America/Sao_Paulo')::date >= ${dia}::date`;
+/** A última palestra da turnê de Masterclass (a volta sai de lá). */
+const eventoDaVolta = alias(evento, "evento_volta");
+const localDaVolta = alias(local, "local_volta");
+
+/** Na turnê, vale a data da última palestra: o pedido fica na lista (e aceita a compra) até ela passar. */
+const eventoDesde = (dia: string) => sql`(coalesce(${eventoDaVolta.fim}, ${evento.fim}) at time zone 'America/Sao_Paulo')::date >= ${dia}::date`;
 
 function paraASdc(linha: LinhaDoPedido, chaves: Map<string, string>): PedidoParaASdc {
   if (!chaves.has(linha.eventoId)) chaves.set(linha.eventoId, `e${chaves.size + 1}`);
@@ -127,13 +148,15 @@ function paraASdc(linha: LinhaDoPedido, chaves: Map<string, string>): PedidoPara
       local: linha.localNome,
       cidade: linha.cidade,
       uf: linha.uf,
+      masterclass: linha.masterclass === true,
     },
-    solicitadoEm: linha.solicitadoEm,
+    dataSolicitacao: linha.dataSolicitacao,
     observacaoTime: linha.observacaoTime,
     observacaoSdc: linha.observacaoSdc,
     valorCentavos: linha.valorCentavos,
-    // Em ALTERADO o emitido_em é da compra anterior, que não vale mais.
-    compradoEm: linha.situacao === "EMITIDO" ? linha.emitidoEm : null,
+    // Em ALTERADO a data é da compra anterior, que não vale mais.
+    dataCompra: linha.situacao === "EMITIDO" ? linha.dataCompra : null,
+    formaPagamento: linha.formaPagamento,
     aprovadoEm: linha.aprovadoEm,
   };
 }
@@ -143,10 +166,23 @@ export function criarRepositorioDaSdc(executor: Executor) {
     /** Pedidos de voo dos eventos que terminam de `desde` em diante, pela data do evento e depois pelo passageiro. */
     async voos({ desde }: { desde: string }): Promise<VooParaASdc[]> {
       const linhas = await executor
-        .select({ ...COLUNAS_DO_PEDIDO, passageiro: nomeDaPessoa })
+        .select({
+          ...COLUNAS_DO_PEDIDO,
+          passageiro: nomeDaPessoa,
+          voltaId: eventoDaVolta.id,
+          voltaCodigo: eventoDaVolta.codigo,
+          voltaNome: eventoDaVolta.nome,
+          voltaInicio: sql<string | null>`to_char(${eventoDaVolta.inicio} at time zone 'America/Sao_Paulo', 'YYYY-MM-DD')`,
+          voltaFim: sql<string | null>`to_char(${eventoDaVolta.fim} at time zone 'America/Sao_Paulo', 'YYYY-MM-DD')`,
+          voltaLocal: localDaVolta.nome,
+          voltaCidade: localDaVolta.cidade,
+          voltaUf: localDaVolta.uf,
+        })
         .from(pedidoSdc)
         .innerJoin(evento, eq(evento.id, pedidoSdc.eventoId))
         .leftJoin(local, eq(local.id, evento.localId))
+        .leftJoin(eventoDaVolta, eq(eventoDaVolta.id, pedidoSdc.eventoVoltaId))
+        .leftJoin(localDaVolta, eq(localDaVolta.id, eventoDaVolta.localId))
         .innerJoin(pessoa, eq(pessoa.id, pedidoSdc.pessoaId))
         .where(and(eq(pedidoSdc.tipo, "VOO"), eventoDesde(desde)))
         .orderBy(asc(inicioDoEvento), asc(evento.id), asc(nomeDaPessoa), asc(pedidoSdc.referencia));
@@ -175,8 +211,27 @@ export function criarRepositorioDaSdc(executor: Executor) {
             .orderBy(asc(trechoVoo.sentido))
         : [];
       const chaves = new Map<string, string>();
-      return linhas.map((linha) => ({
-        ...paraASdc(linha, chaves),
+      return linhas.map((linha) => {
+        const pedido = paraASdc(linha, chaves);
+        // A última palestra da turnê ganha a própria chave de agrupamento (só depois da do evento do pedido).
+        if (linha.voltaId && !chaves.has(linha.voltaId)) chaves.set(linha.voltaId, `e${chaves.size + 1}`);
+        return {
+        ...pedido,
+        eventoDaVolta:
+          linha.voltaId && linha.voltaNome && linha.voltaInicio && linha.voltaFim
+            ? {
+                chave: chaves.get(linha.voltaId)!,
+                codigo: linha.voltaCodigo,
+                nome: linha.voltaNome,
+                dataInicio: linha.voltaInicio,
+                dataFim: linha.voltaFim,
+                local: linha.voltaLocal,
+                cidade: linha.voltaCidade,
+                uf: linha.voltaUf,
+                // A volta por outra palestra só existe na Masterclass.
+                masterclass: true,
+              }
+            : null,
         passageiro: linha.passageiro,
         trechos: trechos
           .filter((trecho) => trecho.pedidoId === linha.pedidoId)
@@ -193,7 +248,8 @@ export function criarRepositorioDaSdc(executor: Executor) {
             partidaEm: trecho.partidaEm,
             chegadaEm: trecho.chegadaEm,
           })),
-      }));
+      };
+      });
     },
 
     /** Pedidos de hospedagem dos eventos que terminam de `desde` em diante, com os quartos e os nomes de quem divide. */
@@ -207,7 +263,6 @@ export function criarRepositorioDaSdc(executor: Executor) {
           checkIn: hospedagem.checkIn,
           checkOut: hospedagem.checkOut,
           numeroReserva: hospedagem.numeroReserva,
-          formaPagamento: pedidoSdc.formaPagamento,
           hotelNome: hotel.nome,
           hotelCidade: hotel.cidade,
           hotelUf: hotel.uf,
@@ -218,6 +273,7 @@ export function criarRepositorioDaSdc(executor: Executor) {
         .from(pedidoSdc)
         .innerJoin(evento, eq(evento.id, pedidoSdc.eventoId))
         .leftJoin(local, eq(local.id, evento.localId))
+        .leftJoin(eventoDaVolta, eq(eventoDaVolta.id, pedidoSdc.eventoVoltaId))
         .leftJoin(hospedagem, eq(hospedagem.pedidoId, pedidoSdc.id))
         .leftJoin(hotel, eq(hotel.id, hospedagem.localId))
         .where(and(eq(pedidoSdc.tipo, "HOSPEDAGEM"), eventoDesde(desde)))
@@ -258,7 +314,6 @@ export function criarRepositorioDaSdc(executor: Executor) {
             ? { nome: linha.hotelNome, cidade: linha.hotelCidade, uf: linha.hotelUf, logradouro: linha.hotelLogradouro, numero: linha.hotelNumero, bairro: linha.hotelBairro }
             : null,
         numeroReserva: linha.numeroReserva,
-        formaPagamento: linha.formaPagamento,
       }));
     },
 
@@ -271,6 +326,7 @@ export function criarRepositorioDaSdc(executor: Executor) {
         .select({ id: pedidoSdc.id })
         .from(pedidoSdc)
         .innerJoin(evento, eq(evento.id, pedidoSdc.eventoId))
+        .leftJoin(eventoDaVolta, eq(eventoDaVolta.id, pedidoSdc.eventoVoltaId))
         .where(and(eq(pedidoSdc.referencia, referencia), eq(pedidoSdc.tipo, tipo), eventoDesde(desde)));
       return linha?.id ?? null;
     },

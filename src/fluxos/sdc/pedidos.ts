@@ -7,6 +7,8 @@ import {
   type EventoParaASdc,
   type GrupoDoMes,
   type HospedagemParaASdc,
+  noRecorte,
+  type RecorteDaLogistica,
   type RegistrarCompraDeVooPelaSdc,
   type RegistrarReservaPelaSdc,
   type SituacaoDoPagamento,
@@ -29,7 +31,8 @@ const DIAS_PARA_TRAS = 120;
 export type SituacaoParaASdc = "A_COMPRAR" | "AGUARDANDO_APROVACAO" | "APROVADO" | "CANCELADO";
 export const SITUACOES_DA_SDC: readonly SituacaoParaASdc[] = ["A_COMPRAR", "AGUARDANDO_APROVACAO", "APROVADO", "CANCELADO"];
 
-export type FiltroDaSdc = { situacao?: SituacaoParaASdc };
+/** `recorte`: Eventos (padrão) ou Masterclass, como as abas da planilha da agência. */
+export type FiltroDaSdc = { situacao?: SituacaoParaASdc; recorte?: RecorteDaLogistica };
 
 function paraASdc(pagamento: SituacaoDoPagamento): SituacaoParaASdc {
   switch (pagamento) {
@@ -61,6 +64,9 @@ type ListaDaSdc<T extends { evento: EventoParaASdc }> = {
   /** Mês → evento → pedidos, como na planilha. Já com o filtro de situação. */
   grupos: GrupoDoMes<EventoParaASdc & { id: string }, T & { evento: EventoParaASdc & { id: string } }>[];
   total: number;
+  recorte: RecorteDaLogistica;
+  /** Quantos pedidos há em cada recorte (antes do filtro de situação), para os atalhos "Eventos | Masterclass". */
+  pedidosPorRecorte: Record<RecorteDaLogistica, number>;
   contagens: Record<SituacaoParaASdc, number>;
   /** Somas dos pedidos listados antes do filtro de situação: a aprovar pelo time e já aprovado para pagamento. */
   totais: TotaisDoPagamento;
@@ -69,7 +75,9 @@ type ListaDaSdc<T extends { evento: EventoParaASdc }> = {
 export type VoosDaSdc = ListaDaSdc<VooDaSdc>;
 export type HospedagensDaSdc = ListaDaSdc<HospedagemDaSdc>;
 
-function montar<T extends VooParaASdc | HospedagemParaASdc>(pedidos: T[], filtro: FiltroDaSdc): ListaDaSdc<ComSituacao<T>> {
+function montar<T extends VooParaASdc | HospedagemParaASdc>(todos: T[], filtro: FiltroDaSdc): ListaDaSdc<ComSituacao<T>> {
+  const recorte = filtro.recorte ?? "EVENTOS";
+  const pedidos = todos.filter((pedido) => noRecorte(recorte, pedido.evento));
   const comSituacao = pedidos.map((pedido) => {
     const situacao = paraASdc(situacaoDoPagamento(pedido));
     return { ...pedido, paraASdc: situacao, podeRegistrar: situacao === "A_COMPRAR" || situacao === "AGUARDANDO_APROVACAO" };
@@ -79,6 +87,8 @@ function montar<T extends VooParaASdc | HospedagemParaASdc>(pedidos: T[], filtro
     // A chave do evento (só de agrupamento) faz o papel de id para agrupar.
     grupos: agruparPorMesEEvento(filtrados.map((pedido) => ({ ...pedido, evento: { ...pedido.evento, id: pedido.evento.chave } }))),
     total: filtrados.length,
+    recorte,
+    pedidosPorRecorte: { EVENTOS: todos.filter((pedido) => !pedido.evento.masterclass).length, MASTERCLASS: todos.filter((pedido) => pedido.evento.masterclass).length },
     contagens: Object.fromEntries(SITUACOES_DA_SDC.map((situacao) => [situacao, comSituacao.filter((pedido) => pedido.paraASdc === situacao).length])) as Record<SituacaoParaASdc, number>,
     totais: totaisDoPagamento(pedidos),
   };

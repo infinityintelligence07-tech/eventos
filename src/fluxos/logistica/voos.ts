@@ -16,7 +16,10 @@ import {
   type GrupoDoMes,
   type JanelaDeCompra,
   janelaDeCompra,
+  localDaPalestra,
   manterNoQuartoSemOrigem,
+  noRecorte,
+  type RecorteDaLogistica,
   type PedidoDaSdc,
   pedidoAtivo,
   type RegistrarPedidoDeVoo,
@@ -48,12 +51,21 @@ export type LinhaDeVoo = {
   pedido: PedidoDaSdc | null;
 };
 
-export type FiltroDeVoos = { eventoId?: string; situacao?: SituacaoDoVoo };
+/** `recorte`: Eventos (padrão) ou Masterclass, como as abas da planilha. Com `eventoId`, vale o recorte do evento. */
+export type FiltroDeVoos = { eventoId?: string; situacao?: SituacaoDoVoo; recorte?: RecorteDaLogistica };
 
 export type AvisoDeVoosPorEvento = { diasDoAviso: number; diasDoAtraso: number; eventos: EventoSemPedidoDeVoo[] };
 
 export type VoosCarregados = {
-  /** Eventos de hoje em diante, com ou sem escala: o filtro da tela e o evento do "Novo pedido". */
+  /** O recorte em vigor e quantas linhas (pedidos e lembretes) há em cada um, para os atalhos "Eventos | Masterclass". */
+  recorte: RecorteDaLogistica;
+  linhasPorRecorte: Record<RecorteDaLogistica, number>;
+  /** Hoje em São Paulo (AAAA-MM-DD): os campos de data real dos formulários não passam daqui. */
+  hoje: string;
+  /**
+   * Eventos de hoje em diante, com ou sem escala, dos DOIS recortes (cada um diz se é Masterclass): o filtro da tela
+   * mostra os do recorte em vigor; o "Novo pedido" deixa escolher o recorte antes do evento.
+   */
   eventos: EventoDaLogistica[];
   /** O evento do filtro (ou o da aba Logística do evento), mesmo que já tenha passado. */
   eventoDoFiltro: EventoDaLogistica | null;
@@ -144,7 +156,9 @@ export async function carregarVoos(filtro: FiltroDeVoos, agora: Date): Promise<V
 
   const ativos = pedidos.filter((pedido) => pedidoAtivo(pedido.situacao));
   const comPedidoAtivo = new Set(ativos.map((pedido) => par(pedido.evento.id, pedido.pessoaId)));
-  const linhas: LinhaDeVoo[] = [
+  // Com um evento escolhido, o recorte é o dele (a aba Logística de uma Masterclass mostra os voos de Masterclass).
+  const recorte: RecorteDaLogistica = eventoDoFiltro ? (eventoDoFiltro.masterclass ? "MASTERCLASS" : "EVENTOS") : (filtro.recorte ?? "EVENTOS");
+  const todas: LinhaDeVoo[] = [
     ...pedidos.map((pedido) => ({
       chave: pedido.id,
       situacao: pedido.situacao,
@@ -165,6 +179,9 @@ export async function carregarVoos(filtro: FiltroDeVoos, agora: Date): Promise<V
         pedido: null,
       })),
   ];
+  const linhas = todas.filter((linha) => noRecorte(recorte, linha.evento));
+  const linhasPorRecorte = { EVENTOS: todas.filter((linha) => !linha.evento.masterclass).length, MASTERCLASS: todas.filter((linha) => linha.evento.masterclass).length };
+  const pedidosDoRecorte = pedidos.filter((pedido) => noRecorte(recorte, pedido.evento));
   // Dentro do evento: por passageiro (as compras da mesma pessoa ficam juntas, a mais antiga primeiro); lembretes no fim.
   linhas.sort(
     (a, b) =>
@@ -175,18 +192,23 @@ export async function carregarVoos(filtro: FiltroDeVoos, agora: Date): Promise<V
   const contagens = Object.fromEntries(SITUACOES.map((situacao) => [situacao, linhas.filter((linha) => linha.situacao === situacao).length])) as Record<SituacaoDoVoo, number>;
   const filtradas = filtro.situacao ? linhas.filter((linha) => linha.situacao === filtro.situacao) : linhas;
 
+  const aviso = montarAviso({ futuros, pedidos, passageiros, diasDoAviso, hoje, eventoId: filtro.eventoId });
   return {
+    recorte,
+    linhasPorRecorte,
+    hoje,
     eventos: futuros,
     eventoDoFiltro,
     grupos: agruparPorMesEEvento(filtradas),
     total: filtradas.length,
     contagens,
-    totais: totaisDoPagamento(pedidos),
-    avisoDeCompra: montarAviso({ futuros, pedidos, passageiros, diasDoAviso, hoje, eventoId: filtro.eventoId }),
-    semVoo: futuros.filter((evento) => evento.semVoo && (!filtro.eventoId || evento.id === filtro.eventoId)),
+    totais: totaisDoPagamento(pedidosDoRecorte),
+    // O aviso por evento nunca traz Masterclass: no recorte de Masterclass ele não aparece.
+    avisoDeCompra: recorte === "EVENTOS" ? aviso : { ...aviso, eventos: [] },
+    semVoo: futuros.filter((evento) => evento.semVoo && noRecorte(recorte, evento) && (!filtro.eventoId || evento.id === filtro.eventoId)),
     hotelSemQuarto: semQuartoPeloVoo.flatMap(({ eventoId, pessoas }) => {
       const evento = futuros.find((item) => item.id === eventoId);
-      return evento ? [{ evento, pessoas }] : [];
+      return evento && noRecorte(recorte, evento) ? [{ evento, pessoas }] : [];
     }),
     staff,
     pedidosAtivos: [...ativos].sort((a, b) => a.referencia.localeCompare(b.referencia)).flatMap((pedido) =>
@@ -196,6 +218,9 @@ export async function carregarVoos(filtro: FiltroDeVoos, agora: Date): Promise<V
     ),
   };
 }
+
+/** "12/03/2027 · Hotel Central — Manaus (AM)": a palestra no texto do pedido à SDC. */
+const palestraNoTexto = (evento: EventoDaLogistica) => `${evento.dataInicio.slice(8, 10)}/${evento.dataInicio.slice(5, 7)}/${evento.dataInicio.slice(0, 4)} · ${localDaPalestra(evento)}`;
 
 export type PedidoCarregado = PedidoDaSdc & { textoParaSdc: string | null };
 
@@ -215,6 +240,9 @@ export async function carregarPedido(referencia: string): Promise<PedidoCarregad
             passageiro: pedido.pessoaNome ?? "—",
             trechos: pedido.trechos,
             observacaoTime: pedido.observacaoTime,
+            turne: pedido.evento.masterclass
+              ? { primeiraPalestra: palestraNoTexto(pedido.evento), ultimaPalestra: palestraNoTexto(pedido.eventoDaVolta ?? pedido.evento) }
+              : null,
           })
         : null,
   };

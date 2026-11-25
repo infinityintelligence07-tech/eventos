@@ -259,7 +259,7 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
     expect(acoes.map((linha) => (linha as { acao: string }).acao)).toEqual(["PEDIDO_REGISTRADO", "RETORNO_REGISTRADO", "ALTERADO", "CANCELADO"]);
     // O localizador fica só no trecho: o histórico imutável diz apenas que houve.
     expect(await um(`select dados from eventos.registro_acao where entidade_id = $1 and acao = 'RETORNO_REGISTRADO'`, [pedido.id])).toEqual({
-      dados: { emNomeDe: "SDC", valorCentavos: 98000, trechos: 2, temLocalizador: true },
+      dados: { emNomeDe: "SDC", valorCentavos: 98000, trechos: 2, temLocalizador: true, dataCompra: "2026-10-28" },
     });
     expect(await um(`select comentario, dados from eventos.registro_acao where entidade_id = $1 and acao = 'CANCELADO'`, [pedido.id])).toEqual({
       comentario: null,
@@ -311,7 +311,7 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
       forma_pagamento: "Faturado SDC",
     });
     expect(await um(`select dados from eventos.registro_acao where entidade_id = $1 and acao = 'RETORNO_REGISTRADO'`, [pedidoId])).toEqual({
-      dados: { emNomeDe: "SDC", valorCentavos: 120000, temNumeroReserva: true, localId: hotelId, formaPagamento: "Faturado SDC" },
+      dados: { emNomeDe: "SDC", valorCentavos: 120000, temNumeroReserva: true, localId: hotelId, formaPagamento: "Faturado SDC", dataCompra: "2026-10-28" },
     });
     expect(await um(`select acao, usuario_id, dados->>'origem' as origem from eventos.registro_acao where entidade = 'LOCAL' and entidade_id = $1`, [hotelId])).toEqual({
       acao: "LOCAL_CRIADO",

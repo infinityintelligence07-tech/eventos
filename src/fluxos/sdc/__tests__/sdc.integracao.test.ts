@@ -232,7 +232,7 @@ describe.skipIf(!TEST_DATABASE_URL)("a SDC no banco: lista de acesso, compra, ap
     const { atualizado_em: versao } = await um(`select atualizado_em from eventos.pedido_sdc where id = $1`, [pedido.id]);
     await alterarPedido({ pedidoId: pedido.id, atualizadoEm: (versao as Date).toISOString(), trechos: [ida, { ...volta, dataDesejada: "2026-12-18" }] }, ator(), depois);
     expect(await pedidoNoBanco(pedido.id)).toMatchObject({ situacao: "ALTERADO", aprovado_em: null, aprovado_por: null });
-    expect((await carregarVoosDaSdc({}, depois)).grupos[0]!.eventos[0]!.linhas[0]!).toMatchObject({ paraASdc: "A_COMPRAR", podeRegistrar: true, compradoEm: null });
+    expect((await carregarVoosDaSdc({}, depois)).grupos[0]!.eventos[0]!.linhas[0]!).toMatchObject({ paraASdc: "A_COMPRAR", podeRegistrar: true, dataCompra: null });
     await expect(aprovar(pedido.id, {}, depois)).rejects.toThrow(/depois que a compra estiver registrada/);
 
     // Cancelado: nem a SDC registra, nem o time aprova.
@@ -267,7 +267,7 @@ describe.skipIf(!TEST_DATABASE_URL)("a SDC no banco: lista de acesso, compra, ap
     const antes = await colunas();
     await registrarCompraDeVoo(comLink, sdc(), depois);
     const comprado = await colunas();
-    expect(mudaram(antes.pedido, comprado.pedido)).toEqual(["atualizado_em", "emitido_em", "retorno_registrado_pela_sdc", "situacao", "valor_centavos"]);
+    expect(mudaram(antes.pedido, comprado.pedido)).toEqual(["atualizado_em", "data_compra", "emitido_em", "retorno_registrado_pela_sdc", "situacao", "valor_centavos"]);
     expect(mudaram(antes.ida, comprado.ida)).toEqual(["atualizado_em", "chegada_em", "companhia", "localizador", "numero_voo", "partida_em"]);
     expect(comprado.ida.cartao_embarque_url).toBeNull();
 
@@ -464,13 +464,19 @@ describe.skipIf(!TEST_DATABASE_URL)("a SDC no banco: lista de acesso, compra, ap
     expect([...chaves].sort()).toEqual(
       [
         // pedido
-        ...["referencia", "situacao", "evento", "solicitadoEm", "observacaoTime", "observacaoSdc", "valorCentavos", "compradoEm", "aprovadoEm", "paraASdc", "podeRegistrar"],
+        // (rodada 6) dataSolicitacao e dataCompra entram no lugar de solicitadoEm e compradoEm: a mesma informação, agora
+        // com o dia real, sem a hora do lançamento. formaPagamento passou a valer também no voo.
+        ...["referencia", "situacao", "evento", "dataSolicitacao", "observacaoTime", "observacaoSdc", "valorCentavos", "dataCompra", "formaPagamento", "aprovadoEm", "paraASdc", "podeRegistrar"],
         // evento (id = a chave de agrupamento "e1", não o id do banco)
-        ...["id", "chave", "codigo", "nome", "dataInicio", "dataFim", "local", "cidade", "uf"],
+        // (rodada 6) masterclass: se o evento é uma palestra, para a tela dela separar "Eventos" de "Masterclass" como a
+        // planilha; é dado do evento, não de pessoa.
+        ...["id", "chave", "codigo", "nome", "dataInicio", "dataFim", "local", "cidade", "uf", "masterclass"],
         // voo
-        ...["passageiro", "trechos", "sentido", "origemIata", "destinoIata", "dataDesejada", "preferenciaHorario", "companhia", "numeroVoo", "localizador", "partidaEm", "chegadaEm"],
+        // (rodada 6) eventoDaVolta: na turnê de Masterclass a volta sai da última palestra; a SDC precisa saber de onde.
+        // É um evento com os mesmos campos do evento do pedido (sem id interno: só a chave de agrupamento).
+        ...["passageiro", "trechos", "eventoDaVolta", "sentido", "origemIata", "destinoIata", "dataDesejada", "preferenciaHorario", "companhia", "numeroVoo", "localizador", "partidaEm", "chegadaEm"],
         // hospedagem
-        ...["checkIn", "checkOut", "quartos", "capacidade", "ocupantes", "hotel", "logradouro", "numero", "bairro", "numeroReserva", "formaPagamento"],
+        ...["checkIn", "checkOut", "quartos", "capacidade", "ocupantes", "hotel", "logradouro", "numero", "bairro", "numeroReserva"],
         "voos",
         "hospedagens",
       ].sort(),
