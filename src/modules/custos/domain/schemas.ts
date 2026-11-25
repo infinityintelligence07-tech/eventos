@@ -104,8 +104,12 @@ export const despesaSchema = z.object({
 });
 export type EntradaDeDespesa = z.output<typeof despesaSchema>;
 
+// O preço do litro não vem do formulário do staff: o servidor usa o da regra ou o padrão (a pessoa não escolhe).
+export const deslocamentoDoStaffSchema = deslocamentoSchema.omit({ precoLitroCentavos: true });
+export type EntradaDeDeslocamentoDoStaff = z.output<typeof deslocamentoDoStaffSchema>;
+
 const linhasDoStaff = {
-  deslocamentos: z.array(deslocamentoSchema).max(10, "Até 10 deslocamentos.").default([]),
+  deslocamentos: z.array(deslocamentoDoStaffSchema).max(10, "Até 10 deslocamentos.").default([]),
   despesas: z.array(despesaSchema).max(10, "Até 10 despesas.").default([]),
 };
 // Sem deslocamento e sem despesa é válido aqui: a solicitação pode levar só os itens fixos do evento. Quem recusa o

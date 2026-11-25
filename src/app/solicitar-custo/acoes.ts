@@ -8,7 +8,7 @@ import { lerFormulario } from "@/app/(time)/_servidor/formulario";
 import { logger } from "@/core/logging";
 import { mensagemDoErro, RegraDeNegocioError } from "@/fluxos/_base";
 import { corrigirMeuCusto, previaDoCustoDoStaff, solicitarCusto } from "@/fluxos/custos";
-import { caminhoDoFormularioDeCusto, corrigirMeuCustoSchema, deslocamentoSchema, despesaSchema, type EntradaDeDeslocamento, type EntradaDeDespesa, solicitarCustoSchema } from "@/modules/custos";
+import { caminhoDoFormularioDeCusto, corrigirMeuCustoSchema, deslocamentoDoStaffSchema, despesaSchema, type EntradaDeDeslocamentoDoStaff, type EntradaDeDespesa, solicitarCustoSchema } from "@/modules/custos";
 
 import { staffDaSessao } from "./_servidor/sessao";
 
@@ -79,11 +79,11 @@ export async function calcularPreviaDoStaffAcao(entrada: unknown): Promise<Previ
   if (!sessao.ok) return null;
   const lido = previaSchema.safeParse(entrada);
   if (!lido.success) return null;
-  const deslocamentos = lido.data.deslocamentos.map((linha) => deslocamentoSchema.safeParse(linha));
+  const deslocamentos = lido.data.deslocamentos.map((linha) => deslocamentoDoStaffSchema.safeParse(linha));
   const despesas = lido.data.despesas.map((linha) => despesaSchema.safeParse(linha));
   const validos = <T>(linhas: { success: boolean; data?: T }[]) => linhas.flatMap((linha) => (linha.success && linha.data !== undefined ? [linha.data] : []));
   try {
-    const previa = await previaDoCustoDoStaff({ eventoId: lido.data.eventoId, deslocamentos: validos<EntradaDeDeslocamento>(deslocamentos), despesas: validos<EntradaDeDespesa>(despesas) });
+    const previa = await previaDoCustoDoStaff({ eventoId: lido.data.eventoId, deslocamentos: validos<EntradaDeDeslocamentoDoStaff>(deslocamentos), despesas: validos<EntradaDeDespesa>(despesas) });
     if (!previa) return null;
     let proximo = 0;
     return {

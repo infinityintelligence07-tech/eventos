@@ -472,6 +472,7 @@ a[class*="situacao-"]:hover {
 .cadastro-sair button { border: 0; background: none; font-size: 13px; color: #9fbcff; cursor: pointer; }
 /* Solicitação de custo do staff (celular; docs/08 §11.4) */
 .custo-secao { display: grid; gap: 10px; margin: 0 0 20px; text-align: left; }
+.custo-valor-fixo { font-size: 16px; font-weight: 600; color: #ffffff; padding: 11px 0 2px; }
 .custo-secao h2 { margin: 0; font-size: 15px; font-weight: 700; color: #ffffff; }
 .custo-lista { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .custo-evento {

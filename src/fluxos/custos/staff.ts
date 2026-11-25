@@ -7,7 +7,7 @@ import {
   type DeslocamentoGravado,
   DIAS_DE_PRAZO_DO_FORMULARIO,
   diaEmSaoPaulo,
-  type EntradaDeDeslocamento,
+  type EntradaDeDeslocamentoDoStaff,
   type EntradaDeDespesa,
   type EventoDaPessoa,
   type ItemFixo,
@@ -17,7 +17,7 @@ import {
   prazoDoFormulario,
   type PrazoDoFormulario,
   itensFixosDasRegras,
-  precoDoLitro,
+  precoDoLitroDoStaff,
   regrasAplicaveis,
   servicoDeSolicitacoes,
   situacaoDoPrazo,
@@ -125,7 +125,8 @@ const fixoGravado = (item: ItemGravado): ItemFixoDoStaff => ({ descricao: item.d
 /** Anexo de comprovantes neste ambiente: nulo = desligado (o formulário funciona sem o campo). */
 export type AnexoDoStaff = { comprovantes: ComprovanteDaTela[] } | null;
 
-export type SugestoesDoStaff = { consumoKmL: number | null; precoLitroCentavos: number | null };
+/** `precoLitroCentavos` é o que o servidor vai usar (regra de combustível ou o padrão): a pessoa vê, não escolhe. */
+export type SugestoesDoStaff = { consumoKmL: number | null; precoLitroCentavos: number };
 
 export type FormularioDoStaff =
   | { situacao: "NAO_ENCONTRADO" }
@@ -166,7 +167,7 @@ export async function carregarFormularioDoStaff(eventoId: string, pessoaId: stri
     repo.regras(),
   ]);
   const aplicaveis = regrasAplicaveis(regras, { tipoEventoId: dados.tipoEventoId, uf: dados.uf, data: dados.data });
-  const sugestoes: SugestoesDoStaff = { consumoKmL, precoLitroCentavos: precoDoLitro(aplicaveis) };
+  const sugestoes: SugestoesDoStaff = { consumoKmL, precoLitroCentavos: precoDoLitroDoStaff(aplicaveis) };
   const anexoLigado = anexoDeComprovantesLigado();
 
   // Quem já tem solicitação vê a situação dela, mesmo fora do prazo ou depois de sair da escala.
@@ -223,10 +224,15 @@ export async function carregarFormularioDoStaff(eventoId: string, pessoaId: stri
 }
 
 /** Resumo ao vivo do formulário do staff: o mesmo cálculo do envio, sem gravar. */
-export function previaDoCustoDoStaff(entrada: { eventoId: string; deslocamentos: EntradaDeDeslocamento[]; despesas: EntradaDeDespesa[] }): Promise<PreviaDaSolicitacao | null> {
+export async function previaDoCustoDoStaff(entrada: { eventoId: string; deslocamentos: EntradaDeDeslocamentoDoStaff[]; despesas: EntradaDeDespesa[] }): Promise<PreviaDaSolicitacao | null> {
+  if (!FORMATO_UUID.test(entrada.eventoId)) return null;
+  const repo = criarRepositorioSolicitacoes(await bancoParaLeitura());
+  const evento = await repo.eventoDoCusto(entrada.eventoId);
+  if (!evento) return null;
   return previaDaSolicitacao({
     eventoId: entrada.eventoId,
-    deslocamentos: entrada.deslocamentos,
+    // Mesmo preço do litro do envio: o do servidor.
+    deslocamentos: await servicoDeSolicitacoes.deslocamentosDoStaff(repo, evento, entrada.deslocamentos),
     itens: entrada.despesas.map((despesa) => ({ categoria: servicoDeSolicitacoes.CATEGORIA_DA_DESPESA_DO_STAFF, descricao: despesa.descricao, quantidade: 1, valorCentavos: despesa.valorCentavos })),
   });
 }

@@ -239,7 +239,7 @@ describe.skipIf(!TEST_DATABASE_URL)("comprovantes do formulário de custo do sta
     await expect(semAnexo).rejects.toBeInstanceOf(RegraDeNegocioError);
     await expect(semAnexo).rejects.toThrow("Anexe pelo menos um comprovante");
     await expect(
-      solicitarCusto({ eventoId, deslocamentos: [{ origem: "Canoas", destino: "Manaus", idaVolta: true, km: 60, consumoKmL: 12, precoLitroCentavos: 600, pedagioCentavos: 0 }], despesas: [] }, hugo.ator, DURANTE_O_PRAZO),
+      solicitarCusto({ eventoId, deslocamentos: [{ origem: "Canoas", destino: "Manaus", idaVolta: true, km: 60, consumoKmL: 12, pedagioCentavos: 0 }], despesas: [] }, hugo.ator, DURANTE_O_PRAZO),
     ).rejects.toThrow("Anexe pelo menos um comprovante");
     expect(await um(`select count(*)::int as n from eventos.solicitacao_custo where pessoa_id = $1`, [hugo.pessoaId])).toEqual({ n: 0 });
 

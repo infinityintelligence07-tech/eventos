@@ -8,7 +8,7 @@ const deslocamento = { origem: "Canoas", destino: "Porto Alegre", idaVolta: "on"
 describe("formulário de custo do staff", () => {
   it("lê o deslocamento com a validação do registro do time e a despesa em reais", () => {
     const lido = solicitarCustoSchema.parse({ eventoId, deslocamentos: [deslocamento], despesas: [{ descricao: " Estacionamento ", valorCentavos: "25,00" }] });
-    expect(lido.deslocamentos[0]).toEqual({ origem: "Canoas", destino: "Porto Alegre", idaVolta: true, km: 20.5, consumoKmL: 11, precoLitroCentavos: 619, pedagioCentavos: 450 });
+    expect(lido.deslocamentos[0]).toEqual({ origem: "Canoas", destino: "Porto Alegre", idaVolta: true, km: 20.5, consumoKmL: 11, pedagioCentavos: 450 });
     expect(lido.despesas).toEqual([{ descricao: "Estacionamento", valorCentavos: 2500 }]);
   });
 

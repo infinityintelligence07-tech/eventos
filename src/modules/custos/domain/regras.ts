@@ -126,6 +126,17 @@ export function itensFixosDasRegras(aplicaveis: RegraDeCusto[]): ItemFixo[] {
     }));
 }
 
+/** Preço do litro usado no formulário do staff quando não há regra de combustível para a UF: R$ 6,50 (decisão do time, 25/11/2026). */
+export const PRECO_DO_LITRO_PADRAO_CENTAVOS = 650;
+
+/**
+ * Preço do litro do formulário do staff: a pessoa não escolhe. Vale a regra de combustível da UF, se a líder
+ * cadastrou uma; senão, o padrão.
+ */
+export function precoDoLitroDoStaff(aplicaveis: RegraDeCusto[]): number {
+  return precoDoLitro(aplicaveis) ?? PRECO_DO_LITRO_PADRAO_CENTAVOS;
+}
+
 /** Preço do litro da UF (regra COMBUSTIVEL), quando houver. */
 export function precoDoLitro(aplicaveis: RegraDeCusto[]): number | null {
   return aplicaveis.find((regra) => regra.categoria === "COMBUSTIVEL" && regra.valorCentavos !== null)?.valorCentavos ?? null;
