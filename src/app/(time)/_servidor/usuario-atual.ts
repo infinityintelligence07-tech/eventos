@@ -64,20 +64,34 @@ async function situacaoDaSessaoPropria(): Promise<SituacaoDoAtor | null> {
   return resolverAtorPorEmail(email, await bancoParaLeitura());
 }
 
-async function situacaoDaSessao(): Promise<SituacaoDoAtor> {
-  const propria = await situacaoDaSessaoPropria();
-  if (propria) return propria;
+/**
+ * A sessão do Supabase (login com Google), conferida no Supabase Auth: getUser() vai pela rede e o Auth confere a
+ * assinatura, a validade e se a sessão não foi encerrada; o e-mail confirmado e as identidades vêm dessa resposta, não
+ * do cookie. É a ÚNICA ida ao Auth da requisição (docs/09 §2.3): o middleware não pergunta, cache() junta as leituras
+ * da mesma renderização e o cliente (criarSupabaseDoServidor) reaproveita a resposta entre a action e a tela que ela
+ * redesenha. Nulo = sem sessão válida, ou login não configurado.
+ */
+const sessaoDoSupabase = cache(async () => {
   const supabase = await criarSupabaseDoServidor();
-  if (!supabase) return { situacao: "SEM_SESSAO", destino: "/login" };
+  if (!supabase) return null;
   const {
     data: { user },
     error,
   } = await supabase.auth.getUser();
-  if (error || !user) return { situacao: "SEM_SESSAO", destino: "/login" };
+  return error || !user ? null : { supabase, user };
+});
+
+async function situacaoDaSessao(): Promise<SituacaoDoAtor> {
+  const propria = await situacaoDaSessaoPropria();
+  if (propria) return propria;
+  const sessao = await sessaoDoSupabase();
+  if (!sessao) return { situacao: "SEM_SESSAO", destino: "/login" };
+  const { supabase, user } = sessao;
   // O Google confirma o e-mail; sem confirmação, o e-mail não identifica ninguém.
   if (!user.email || !user.email_confirmed_at) return { situacao: "SEM_CADASTRO" };
   // Só aqui a lista da SDC é consultada, só para e-mail que não é de ninguém da IAM e só se ESTA sessão foi autenticada
-  // pelo Google (docs/09 §15.2). As claims vêm de getClaims(), que confere a assinatura do token; erro = não é SDC.
+  // pelo Google (docs/09 §15.2). As claims vêm de getClaims(), que confere o token (com a chave pública do projeto ou,
+  // se a chave for simétrica, com um getUser() do mesmo token, que não vai de novo pela rede); erro = não é SDC.
   return resolverAcessoPorEmail(user.email, await bancoParaLeitura(), {
     pelaContaGoogle: async () => {
       try {
@@ -104,13 +118,8 @@ export const identidadeDaSessao = cache(async (): Promise<{ identidade: Identida
   const segredo = segredoDaSessao();
   const daSenha = segredo ? lerSessao((await cookies()).get(COOKIE_SESSAO)?.value, segredo, new Date()) : null;
   if (daSenha) return { identidade: { email: daSenha }, origem: "SESSAO" };
-  const supabase = await criarSupabaseDoServidor();
-  if (!supabase) return null;
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-  if (error || !user?.email || !user.email_confirmed_at) return null;
+  const user = (await sessaoDoSupabase())?.user;
+  if (!user?.email || !user.email_confirmed_at) return null;
   return { identidade: { email: user.email }, origem: "SESSAO" };
 });
 
