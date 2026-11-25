@@ -1,8 +1,9 @@
-import { bancoParaLeitura, type Executor, transacao, type AtorDaEscrita } from "@/fluxos/_base";
+import { type AtorSdcDaEscrita, bancoParaLeitura, type Executor, transacao, type AtorDaEscrita } from "@/fluxos/_base";
 import { ehMasterclass } from "@/modules/eventos";
 import {
   agruparPorMesEEvento,
   type AlterarPedido,
+  type AprovarPagamento,
   type CancelarPedido,
   criarRepositorioPedidos,
   dataEmSaoPaulo,
@@ -21,6 +22,8 @@ import {
   servicoDePedidos,
   type SituacaoDoVoo,
   textoDoPedidoDeVoo,
+  type TotaisDoPagamento,
+  totaisDoPagamento,
   type Trajeto,
   trajetoDosTrechos,
 } from "@/modules/logistica";
@@ -57,6 +60,8 @@ export type VoosCarregados = {
   /** Linhas depois do filtro de situação. */
   total: number;
   contagens: Record<SituacaoDoVoo, number>;
+  /** Soma das compras dos pedidos listados (antes do filtro de situação): a aprovar pelo time e já aprovadas. */
+  totais: TotaisDoPagamento;
   /** Aviso por evento: entrou no prazo (Configurações › Aviso de voos) e ainda não tem nenhum pedido de voo. */
   avisoDeCompra: AvisoDeVoosPorEvento;
   /** Eventos que o time marcou como "não precisa de voo" (para desfazer). */
@@ -114,14 +119,19 @@ export async function carregarVoos(filtro: FiltroDeVoos, agora: Date): Promise<V
   const hoje = dataEmSaoPaulo(agora);
   const db = await bancoParaLeitura();
   const repo = criarRepositorioPedidos(db);
-  const [futuros, passageiros, pedidos, naEscala, staff, diasDoAviso] = await Promise.all([
+  const [futuros, passageiros, doPeriodo, esperandoAprovacao, naEscala, staff, diasDoAviso] = await Promise.all([
     repo.eventosFuturos({ desde: hoje }),
     repo.passageirosDeVoo({ desde: hoje, eventoId: filtro.eventoId }),
     repo.pedidos({ desde: hoje, eventoId: filtro.eventoId, tipo: "VOO" }),
+    // A aprovação vem depois do evento (o time confirma que usou): compras a aprovar de eventos que já passaram
+    // continuam na lista até serem aprovadas.
+    filtro.eventoId ? Promise.resolve([]) : repo.pedidos({ tipo: "VOO", aAprovar: true }),
     repo.naEscala({ desde: hoje, eventoId: filtro.eventoId }),
     repo.staffAtivoPorNome(),
     diasDoAvisoDeVoos(db),
   ]);
+  const jaListados = new Set(doPeriodo.map((pedido) => pedido.id));
+  const pedidos = [...esperandoAprovacao.filter((pedido) => !jaListados.has(pedido.id)), ...doPeriodo];
   const eventoDoFiltro = filtro.eventoId ? (futuros.find((evento) => evento.id === filtro.eventoId) ?? (await repo.eventoPorId(filtro.eventoId))) : null;
 
   const ativos = pedidos.filter((pedido) => pedidoAtivo(pedido.situacao));
@@ -163,6 +173,7 @@ export async function carregarVoos(filtro: FiltroDeVoos, agora: Date): Promise<V
     grupos: agruparPorMesEEvento(filtradas),
     total: filtradas.length,
     contagens,
+    totais: totaisDoPagamento(pedidos),
     avisoDeCompra: montarAviso({ futuros, pedidos, passageiros, diasDoAviso, hoje, eventoId: filtro.eventoId }),
     semVoo: futuros.filter((evento) => evento.semVoo && (!filtro.eventoId || evento.id === filtro.eventoId)),
     staff,
@@ -218,5 +229,20 @@ export function cancelarPedido(entrada: CancelarPedido, ator: AtorDaEscrita, ago
 
 /** "Registrar voo" em nome da SDC. */
 export function registrarRetornoDaSdc(entrada: RegistrarRetornoDeVoo, ator: AtorDaEscrita, agora: Date) {
-  return traduzirErros(() => transacao(ator, (tx) => servicoDePedidos.registrarRetornoDeVoo(criarRepositorioPedidos(tx), entrada, { usuarioId: ator.usuarioId, instante: agora })));
+  return traduzirErros(() => transacao(ator, (tx) => servicoDePedidos.registrarRetornoDeVoo(criarRepositorioPedidos(tx), entrada, { autor: { usuarioId: ator.usuarioId }, instante: agora })));
+}
+
+/** A mesma compra registrada pela própria SDC, na área dela (src/fluxos/sdc): mesmas validações e transições. */
+export function registrarRetornoDeVooPelaSdc(entrada: RegistrarRetornoDeVoo, sdc: AtorSdcDaEscrita, agora: Date) {
+  return traduzirErros(() => transacao(sdc, (tx) => servicoDePedidos.registrarRetornoDeVoo(criarRepositorioPedidos(tx), entrada, { autor: { acessoSdcId: sdc.acessoSdcId }, instante: agora })));
+}
+
+/** "Aprovar pagamento": o time confirma que usou e que o valor registrado pode ser pago. */
+export function aprovarPagamento(entrada: AprovarPagamento, ator: AtorDaEscrita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDePedidos.aprovarPagamento(criarRepositorioPedidos(tx), entrada, { usuarioId: ator.usuarioId, instante: agora })));
+}
+
+/** O time desfaz a aprovação: o pedido volta para "a aprovar" e a SDC pode corrigir a compra. */
+export function desfazerAprovacao(entrada: { pedidoId: string }, ator: AtorDaEscrita, agora: Date) {
+  return traduzirErros(() => transacao(ator, (tx) => servicoDePedidos.desfazerAprovacao(criarRepositorioPedidos(tx), entrada, { usuarioId: ator.usuarioId, instante: agora })));
 }

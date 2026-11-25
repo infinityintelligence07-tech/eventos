@@ -13,6 +13,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { pessoa, usuario } from "../core";
+import { acessoSdc } from "./acesso-sdc";
 import { local } from "./cadastros";
 import { convocacao, evento } from "./evento";
 import { eventosSchema } from "./schemas";
@@ -46,7 +47,13 @@ export const pedidoSdc = eventosSchema.table(
     solicitadoEm: timestamp("solicitado_em", { withTimezone: true }).notNull().defaultNow(),
     // Em ALTERADO fica o emitido_em da emissão anterior.
     emitidoEm: timestamp("emitido_em", { withTimezone: true }),
+    // Quem lançou a compra: alguém do time em nome da SDC (retorno_registrado_por) ou a própria SDC, pela área dela.
     retornoRegistradoPor: uuid("retorno_registrado_por").references(() => usuario.id, { onDelete: "set null" }),
+    retornoRegistradoPelaSdc: uuid("retorno_registrado_pela_sdc").references(() => acessoSdc.id, { onDelete: "restrict" }),
+    // Aprovação do pagamento pelo time, depois da compra: "usamos e este valor pode ser pago". Cai se a compra muda.
+    aprovadoEm: timestamp("aprovado_em", { withTimezone: true }),
+    aprovadoPor: uuid("aprovado_por").references(() => usuario.id, { onDelete: "set null" }),
+    observacaoAprovacao: text("observacao_aprovacao"),
     canceladoEm: timestamp("cancelado_em", { withTimezone: true }),
     canceladoPor: uuid("cancelado_por").references(() => usuario.id, { onDelete: "set null" }),
     motivoCancelamento: text("motivo_cancelamento"),
@@ -61,6 +68,8 @@ export const pedidoSdc = eventosSchema.table(
     index("pedido_sdc_convocacao_idx").on(table.convocacaoId),
     index("pedido_sdc_solicitado_por_idx").on(table.solicitadoPor),
     index("pedido_sdc_retorno_registrado_por_idx").on(table.retornoRegistradoPor),
+    index("pedido_sdc_retorno_pela_sdc_idx").on(table.retornoRegistradoPelaSdc),
+    index("pedido_sdc_aprovado_por_idx").on(table.aprovadoPor),
     index("pedido_sdc_cancelado_por_idx").on(table.canceladoPor),
     index("pedido_sdc_situacao_idx").on(table.situacao),
     check("pedido_sdc_referencia_check", sql`${table.referencia} ~ '^SDC-[0-9]{6,}$'`),
@@ -70,6 +79,11 @@ export const pedidoSdc = eventosSchema.table(
     check("pedido_sdc_valor_check", sql`${table.valorCentavos} IS NULL OR ${table.valorCentavos} >= 0`),
     check("pedido_sdc_emitido_check", sql`${table.situacao} <> 'EMITIDO' OR ${table.emitidoEm} IS NOT NULL`),
     check("pedido_sdc_cancelado_check", sql`(${table.situacao} = 'CANCELADO') = (${table.canceladoEm} IS NOT NULL)`),
+    // Só se aprova compra registrada (EMITIDO) e com valor; sair de EMITIDO derruba a aprovação.
+    check("pedido_sdc_aprovacao_check", sql`${table.aprovadoEm} IS NULL OR (${table.situacao} = 'EMITIDO' AND ${table.valorCentavos} IS NOT NULL)`),
+    check("pedido_sdc_aprovacao_obs_check", sql`${table.observacaoAprovacao} IS NULL OR (${table.aprovadoEm} IS NOT NULL AND length(${table.observacaoAprovacao}) <= 500)`),
+    // A compra é de um autor só: alguém do time (em nome da SDC) OU a própria SDC; nunca os dois.
+    check("pedido_sdc_retorno_autor_check", sql`${table.retornoRegistradoPor} IS NULL OR ${table.retornoRegistradoPelaSdc} IS NULL`),
     check("pedido_sdc_forma_pagamento_check", sql`${table.formaPagamento} IS NULL OR length(${table.formaPagamento}) BETWEEN 1 AND 60`),
   ],
 );

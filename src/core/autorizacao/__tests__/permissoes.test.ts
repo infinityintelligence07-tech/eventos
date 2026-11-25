@@ -15,6 +15,7 @@ const MATRIZ: Record<Permissao, { time: boolean; lider: boolean }> = {
   "pessoas.editar": { time: true, lider: true },
   "logistica.gerir": { time: true, lider: true },
   "logistica.registrar_retorno_sdc": { time: true, lider: true },
+  "logistica.aprovar_pagamento": { time: true, lider: true },
   "custos.registrar": { time: true, lider: true },
   "custos.auditar": { time: true, lider: true },
   "custos.reabrir_auditoria": { time: false, lider: true },
@@ -25,6 +26,7 @@ const MATRIZ: Record<Permissao, { time: boolean; lider: boolean }> = {
   "config.regras_vagas": { time: false, lider: true },
   "config.regras_custo": { time: false, lider: true },
   "config.acesso_do_time": { time: false, lider: true },
+  "config.acesso_da_sdc": { time: false, lider: true },
 };
 
 const comPerfis = (...perfis: PerfilDoEventos[]) => ({ perfis });

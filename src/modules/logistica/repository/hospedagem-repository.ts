@@ -36,6 +36,8 @@ export type HospedagemDoEvento = {
     formaPagamento: string | null;
     observacaoTime: string | null;
     observacaoSdc: string | null;
+    /** Preenchido = pagamento aprovado pelo time. */
+    aprovadoEm: Date | null;
     atualizadoEm: string;
   } | null;
   checkIn: string;
@@ -126,6 +128,7 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
           formaPagamento: pedidoSdc.formaPagamento,
           observacaoTime: pedidoSdc.observacaoTime,
           observacaoSdc: pedidoSdc.observacaoSdc,
+          aprovadoEm: pedidoSdc.aprovadoEm,
           pedidoAtualizadoEm: pedidoSdc.atualizadoEm,
           checkIn: hospedagem.checkIn,
           checkOut: hospedagem.checkOut,
@@ -190,6 +193,7 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
                 formaPagamento: linha.formaPagamento,
                 observacaoTime: linha.observacaoTime,
                 observacaoSdc: linha.observacaoSdc,
+                aprovadoEm: linha.aprovadoEm,
                 atualizadoEm: linha.pedidoAtualizadoEm.toISOString(),
               }
             : null,

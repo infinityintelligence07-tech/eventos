@@ -20,6 +20,8 @@ export default async function PaginaSemAcesso() {
       redirect(atual.destino);
     case "SEM_CADASTRO":
       redirect("/auth/encerrar?motivo=sem-cadastro");
+    case "SDC":
+      redirect("/sdc");
     case "SEM_PERFIL": {
       // Staff sem perfil do time: o lugar dele é "Meu cadastro" (docs/10).
       const sessao = await identidadeDaSessao();

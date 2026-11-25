@@ -1,4 +1,4 @@
-import type { AtorDaEscrita } from "@/core/autorizacao";
+import type { QuemEscreve } from "@/core/autorizacao";
 import { bancoLocal, bancoLocalDaUrl, urlSemDesvio } from "@/core/config/banco-local";
 import { type ConfigDeEscrita, lerConfigDeEscrita } from "@/core/config/escrita";
 import { type Config, lerConfig } from "@/core/config/leitura";
@@ -154,7 +154,7 @@ export function verificarServidor(leitura: LeituraDoServidor, portaEsperada: num
 }
 
 /** Trava 4: quem pede a transação. Em PRODUCAO, só ator de sessão (o "Entrar como" do local nunca grava lá); o visitante da demo, em nenhum. */
-export function verificarAtor(modo: ModoDeEscrita, ator: AtorDaEscrita | null): SituacaoDaEscrita {
+export function verificarAtor(modo: ModoDeEscrita, ator: QuemEscreve | null): SituacaoDaEscrita {
   switch (modo) {
     case "LOCAL":
       if (!ator) return fechada("ATOR", "Escrita sem usuário.");

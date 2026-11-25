@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { entradaLocalLiberada, situacaoDoAtor } from "@/app/(time)/_servidor/usuario-atual";
-import { listarUsuariosLocais, rotuloDoPerfil, type UsuarioLocal } from "@/core/auth";
+import { listarSdcLocais, listarUsuariosLocais, rotuloDoPerfil, type UsuarioLocal } from "@/core/auth";
 import { bancoParaLeitura } from "@/fluxos/_base";
 
 import { MolduraDeEntrada } from "../login/_componentes/moldura";
@@ -31,8 +31,13 @@ function OpcaoDeUsuario({ usuario, atual }: { usuario: UsuarioLocal; atual: bool
 /** Seletor do modo local (docs/09 L6). Não existe fora do modo local nem com alguma trava do banco local fechada. */
 export default async function PaginaEntrarLocal({ searchParams }: { searchParams: Promise<{ erro?: string }> }) {
   if (!(await entradaLocalLiberada())) notFound();
-  const [{ erro }, usuarios, atual] = await Promise.all([searchParams, bancoParaLeitura().then(listarUsuariosLocais), situacaoDoAtor()]);
-  const atualId = atual.situacao === "OK" ? atual.ator.usuarioId : null;
+  const [{ erro }, usuarios, daSdc, atual] = await Promise.all([
+    searchParams,
+    bancoParaLeitura().then(listarUsuariosLocais),
+    bancoParaLeitura().then(listarSdcLocais),
+    situacaoDoAtor(),
+  ]);
+  const atualId = atual.situacao === "OK" ? atual.ator.usuarioId : atual.situacao === "SDC" ? atual.sdc.acessoSdcId : null;
   const comPerfil = usuarios.filter((usuario) => usuario.perfis.length > 0);
   const semPerfil = usuarios.filter((usuario) => usuario.perfis.length === 0);
 
@@ -55,6 +60,23 @@ export default async function PaginaEntrarLocal({ searchParams }: { searchParams
           <OpcaoDeUsuario key={usuario.usuarioId} usuario={usuario} atual={usuario.usuarioId === atualId} />
         ))}
       </div>
+      {daSdc.length > 0 && (
+        <>
+          <p className="login-lead mt-4">SDC (agência de fora): só vê a área de voos e hospedagem dela.</p>
+          <div className="login-apps">
+            {daSdc.map((sdc) => (
+              <form key={sdc.id} action={entrarComo}>
+                <input type="hidden" name="usuarioId" value={sdc.id} />
+                <button type="submit" className="login-app" aria-current={sdc.id === atualId ? "true" : undefined}>
+                  <strong>{sdc.nome}</strong>
+                  <small>{sdc.email} · SDC</small>
+                  <span className="login-app-cta">{sdc.id === atualId ? "Você está como esta pessoa · entrar de novo" : "Entrar como SDC"}</span>
+                </button>
+              </form>
+            ))}
+          </div>
+        </>
+      )}
       {semPerfil.length > 0 && (
         <details className="mt-4 text-left">
           <summary className="cursor-pointer text-[13px] text-white/60">Sem perfil do Eventos ({semPerfil.length}) · para testar a tela Sem acesso</summary>

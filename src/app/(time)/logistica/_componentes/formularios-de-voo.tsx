@@ -1,6 +1,6 @@
 "use client";
 
-import { Ban, PlaneTakeoff, Send } from "lucide-react";
+import { Ban, BadgeCheck, PlaneTakeoff, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { type AcaoDoFormulario, ErroDoFormulario, type ErrosDoCampo, useAcao } from "@/app/(time)/_componentes/ui";
@@ -367,6 +367,82 @@ export function BotaoCancelarPedido({
       >
         <input type="hidden" name="pedidoId" value={pedidoId} />
         <CampoDeTextoLongo nome="motivo" rotulo="Motivo" obrigatorio maxLength={500} erros={erros("motivo")} />
+      </Confirmacao>
+    </>
+  );
+}
+
+/**
+ * "Aprovar pagamento" (Voos e Hospedagem): depois que a compra está registrada, o time confere e confirma que usou e
+ * que o valor pode ser pago. A confirmação é obrigatória; a observação, opcional.
+ */
+export function BotaoAprovarPagamento({
+  acao,
+  pedidoId,
+  referencia,
+  valor,
+  valorCentavos,
+  atualizadoEm,
+  tamanho = "pequeno",
+}: {
+  acao: AcaoDoFormulario;
+  pedidoId: string;
+  referencia: string;
+  /** Já formatado ("R$ 980,00"). */
+  valor: string;
+  /** O valor e a versão do pedido que esta tela mostrou: a aprovação só vale se a compra ainda for esta. */
+  valorCentavos: number;
+  atualizadoEm: string;
+  tamanho?: "normal" | "pequeno";
+}) {
+  const [aberto, setAberto] = useState(false);
+  const { despachar, erros, pendente } = useAcao(acao, { aoConcluir: () => setAberto(false), toastDeCampo: true });
+  return (
+    <>
+      <Botao variante="primario" tamanho={tamanho} icone={<BadgeCheck size={tamanho === "pequeno" ? 16 : 18} aria-hidden />} onClick={() => setAberto(true)}>
+        Aprovar pagamento
+      </Botao>
+      <Confirmacao
+        aberto={aberto}
+        aoFechar={() => setAberto(false)}
+        titulo={`Aprovar o pagamento do pedido ${referencia}?`}
+        descricao={`A SDC registrou ${valor}. Ao aprovar, ela passa a ver o pedido como aprovado para pagamento.`}
+        rotuloConfirmar="Aprovar pagamento"
+        rotuloCancelar="Voltar"
+        carregando={pendente}
+        acao={despachar}
+      >
+        <input type="hidden" name="pedidoId" value={pedidoId} />
+        <input type="hidden" name="valorCentavos" value={valorCentavos} />
+        <input type="hidden" name="atualizadoEm" value={atualizadoEm} />
+        <CaixaDeMarcar name="confirmo" required rotulo="Confirmo que usamos e que este valor pode ser pago" />
+        <CampoDeTextoLongo className="mt-2" nome="observacao" rotulo="Observação (opcional)" maxLength={500} erros={erros("observacao")} />
+      </Confirmacao>
+    </>
+  );
+}
+
+/** Desfaz a aprovação: o pedido volta para "a aprovar" e a SDC pode corrigir a compra. */
+export function BotaoDesfazerAprovacao({ acao, pedidoId, referencia, tamanho = "pequeno" }: { acao: AcaoDoFormulario; pedidoId: string; referencia: string; tamanho?: "normal" | "pequeno" }) {
+  const [aberto, setAberto] = useState(false);
+  const { despachar, pendente } = useAcao(acao, () => setAberto(false));
+  return (
+    <>
+      <Botao variante="texto" tamanho={tamanho} onClick={() => setAberto(true)}>
+        Desfazer aprovação
+      </Botao>
+      <Confirmacao
+        aberto={aberto}
+        aoFechar={() => setAberto(false)}
+        titulo={`Desfazer a aprovação do pedido ${referencia}?`}
+        descricao={'O pedido volta para "a aprovar" e a SDC pode corrigir a compra. Fica registrado quem desfez.'}
+        rotuloConfirmar="Desfazer aprovação"
+        rotuloCancelar="Voltar"
+        destrutiva
+        carregando={pendente}
+        acao={despachar}
+      >
+        <input type="hidden" name="pedidoId" value={pedidoId} />
       </Confirmacao>
     </>
   );

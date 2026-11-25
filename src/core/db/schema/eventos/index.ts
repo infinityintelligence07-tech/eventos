@@ -1,3 +1,4 @@
+export * from "./acesso-sdc";
 export * from "./cadastros";
 export * from "./comunicacao";
 export * from "./configuracao";

@@ -16,6 +16,8 @@ export function decisaoDaSaida(atual: SituacaoDoAtor): DecisaoDaSaida {
       return { tipo: "IR", destino: atual.destino };
     case "SEM_PERFIL":
       return { tipo: "IR", destino: "/sem-acesso" };
+    case "SDC":
+      return { tipo: "IR", destino: "/sdc" };
     default: {
       const desconhecida: never = atual;
       throw new Error(`situação do ator desconhecida: ${JSON.stringify(desconhecida)}`);

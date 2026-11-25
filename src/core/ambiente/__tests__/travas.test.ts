@@ -170,6 +170,14 @@ describe("trava 4: ator", () => {
     expect(verificarAtor("LOCAL", null)).toMatchObject({ liberada: false, trava: "ATOR" });
   });
 
+  it("a SDC grava como ela mesma: de sessão em PRODUCAO, local ou de sessão em LOCAL; nunca com origem de demo", () => {
+    const sdc = { acessoSdcId: "s", origem: "SESSAO" as const };
+    expect(verificarAtor("PRODUCAO", sdc)).toEqual({ liberada: true, modo: "PRODUCAO" });
+    expect(verificarAtor("PRODUCAO", { ...sdc, origem: "LOCAL" })).toMatchObject({ liberada: false, trava: "ATOR" });
+    for (const origem of ["SESSAO", "LOCAL"] as const) expect(verificarAtor("LOCAL", { ...sdc, origem })).toEqual({ liberada: true, modo: "LOCAL" });
+    for (const modo of ["LOCAL", "PRODUCAO"] as const) expect(verificarAtor(modo, { ...sdc, origem: "DEMO" as never })).toMatchObject({ liberada: false, trava: "ATOR" });
+  });
+
   it("o visitante da demo não grava em nenhum modo", () => {
     const demo = { ...sessao, origem: "DEMO" as const };
     for (const modo of ["LOCAL", "PRODUCAO"] as const) expect(verificarAtor(modo, demo)).toMatchObject({ liberada: false, trava: "ATOR" });

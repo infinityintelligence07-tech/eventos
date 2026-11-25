@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, index, jsonb, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 import { pessoa, usuario } from "../core";
+import { acessoSdc } from "./acesso-sdc";
 import { evento } from "./evento";
 import { eventosSchema } from "./schemas";
 
@@ -24,8 +25,10 @@ export const registroAcao = eventosSchema.table(
     // Preenchido = registrado pelo time em nome desta pessoa.
     emNomeDePessoaId: uuid("em_nome_de_pessoa_id").references(() => pessoa.id, { onDelete: "restrict" }),
     // USUARIO: ação de alguém do time (usuario_id obrigatório). SISTEMA: sincronização, sem usuário.
+    // SDC: ação de alguém da agência (acesso_sdc_id obrigatório; a pessoa da SDC não tem core.usuario).
     origem: text("origem").notNull().default("USUARIO"),
     usuarioId: uuid("usuario_id").references(() => usuario.id, { onDelete: "restrict" }),
+    acessoSdcId: uuid("acesso_sdc_id").references(() => acessoSdc.id, { onDelete: "restrict" }),
     dados: jsonb("dados").notNull().default(sql`'{}'::jsonb`),
     criadoEm: timestamp("criado_em", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -34,13 +37,17 @@ export const registroAcao = eventosSchema.table(
     index("registro_acao_evento_idx").on(table.eventoId),
     index("registro_acao_em_nome_de_idx").on(table.emNomeDePessoaId),
     index("registro_acao_usuario_idx").on(table.usuarioId),
+    index("registro_acao_acesso_sdc_idx").on(table.acessoSdcId),
     check(
       "registro_acao_entidade_check",
       sql`${table.entidade} IN ('ESCALA_DO_EVENTO', 'CONVOCACAO', 'MENSAGEM', 'DISPONIBILIDADE', 'SOLICITACAO_CUSTO', 'COMPROVANTE_CUSTO', 'PEDIDO_SDC', 'HOSPEDAGEM', 'CARONA', 'REGRA_CUSTO', 'MODELO_COPY', 'TIPO_EVENTO', 'CONFIGURACAO', 'PESSOA', 'LOCAL', 'ENQUETE', 'EVENTO', 'VAGA')`,
     ),
     check("registro_acao_acao_check", sql`${table.acao} ~ '^[A-Z_]{3,40}$'`),
     check("registro_acao_comentario_check", sql`${table.comentario} IS NULL OR length(${table.comentario}) <= 2000`),
-    check("registro_acao_origem_check", sql`${table.origem} IN ('USUARIO', 'SISTEMA')`),
-    check("registro_acao_autoria_check", sql`(${table.origem} = 'USUARIO') = (${table.usuarioId} IS NOT NULL)`),
+    check("registro_acao_origem_check", sql`${table.origem} IN ('USUARIO', 'SISTEMA', 'SDC')`),
+    check(
+      "registro_acao_autoria_check",
+      sql`(${table.origem} = 'USUARIO') = (${table.usuarioId} IS NOT NULL) AND (${table.origem} = 'SDC') = (${table.acessoSdcId} IS NOT NULL)`,
+    ),
   ],
 );

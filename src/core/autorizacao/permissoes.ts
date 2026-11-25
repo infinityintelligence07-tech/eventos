@@ -16,6 +16,7 @@ export const PERMISSOES = [
   "pessoas.editar",
   "logistica.gerir",
   "logistica.registrar_retorno_sdc",
+  "logistica.aprovar_pagamento",
   "custos.registrar",
   "custos.auditar",
   "custos.reabrir_auditoria",
@@ -26,6 +27,7 @@ export const PERMISSOES = [
   "config.regras_vagas",
   "config.regras_custo",
   "config.acesso_do_time",
+  "config.acesso_da_sdc",
 ] as const;
 
 export type Permissao = (typeof PERMISSOES)[number];
@@ -39,6 +41,7 @@ const SO_DA_LIDER = new Set<Permissao>([
   "config.regras_vagas",
   "config.regras_custo",
   "config.acesso_do_time",
+  "config.acesso_da_sdc",
 ]);
 
 /** A líder tem tudo o que o time tem, mais aprovar, reabrir e as configurações que mexem em dinheiro e copys. */

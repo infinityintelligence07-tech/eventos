@@ -62,7 +62,10 @@ export default async function PaginaLogin({ searchParams }: { searchParams: Prom
     );
   }
 
-  if ((await situacaoDoAtor()).situacao === "OK") redirect(destinoSeguro(proximo));
+  const atual = await situacaoDoAtor();
+  if (atual.situacao === "OK") redirect(destinoSeguro(proximo));
+  // A SDC só tem a área dela: o `proximo` (que pode apontar para uma tela do time) é ignorado.
+  if (atual.situacao === "SDC") redirect("/sdc");
 
   const googleConfigurado = Boolean(configuracaoDoLogin()?.urlPublica);
   const senhaConfigurada = loginComSenhaConfigurado();

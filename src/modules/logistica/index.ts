@@ -48,12 +48,39 @@ export {
   textoDoRooming,
 } from "./domain/rooming";
 export { lugaresLivres } from "./domain/caronas";
+export {
+  type CompraDoPedido,
+  efeitoNaAprovacao,
+  podeAprovarPagamento,
+  podeDesfazerAprovacao,
+  rotuloDoPagamento,
+  type SituacaoDoPagamento,
+  situacaoDoPagamento,
+  type TotaisDoPagamento,
+  totaisDoPagamento,
+} from "./domain/pagamento";
+export { type AcessoDaSdc, criarRepositorioAcessoSdc } from "./repository/acesso-sdc-repository";
+export { criarRepositorioDaSdc, type EventoParaASdc, type HospedagemParaASdc, type TrechoParaASdc, type VooParaASdc } from "./repository/sdc-repository";
 export { ErroDaLogistica, LogisticaMudouError } from "./domain/erros";
 export {
   type AdicionarQuarto,
   adicionarQuartoSchema,
   type AlterarHospedagem,
   type AlterarPedido,
+  type AprovarPagamento,
+  aprovarPagamentoSchema,
+  type DefinirAcessoDaSdc,
+  definirAcessoDaSdcSchema,
+  desfazerAprovacaoSchema,
+  type IncluirAcessoDaSdc,
+  incluirAcessoDaSdcSchema,
+  type RegistrarCompraDeVooPelaSdc,
+  COMPANHIAS_DA_SDC,
+  companhiaNoFormulario,
+  OUTRA_COMPANHIA,
+  registrarCompraDeVooPelaSdcSchema,
+  type RegistrarReservaPelaSdc,
+  registrarReservaPelaSdcSchema,
   type CancelarPedido,
   type CriarCarona,
   type CriarHospedagem,

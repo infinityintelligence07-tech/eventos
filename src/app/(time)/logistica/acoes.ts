@@ -6,6 +6,8 @@ import { z } from "zod";
 
 import {
   adicionarQuarto,
+  aprovarPagamento,
+  desfazerAprovacao,
   alterarHospedagem,
   alterarPedido,
   aplicarRoomingSugerido,
@@ -29,6 +31,8 @@ import {
 } from "@/fluxos/logistica";
 import {
   adicionarQuartoSchema,
+  aprovarPagamentoSchema,
+  desfazerAprovacaoSchema,
   alterarHospedagemSchema,
   alterarPedidoSchema,
   aplicarRoomingSugeridoSchema,
@@ -56,6 +60,8 @@ import { executarAcao, type ResultadoAcao } from "../_servidor/acao";
 /** Voos, hospedagem e caronas aparecem na Logística, na aba do evento, na Comunicação (copy) e no Início. */
 function revalidarLogistica(eventoId: string) {
   revalidatePath("/logistica", "layout");
+  // A SDC vê os mesmos pedidos na área dela.
+  revalidatePath("/sdc", "layout");
   revalidatePath(`/eventos/${eventoId}`, "layout");
   revalidatePath("/inicio");
 }
@@ -117,6 +123,30 @@ export async function registrarRetornoDeHospedagemAcao(_estado: ResultadoAcao, f
     const pedido = await registrarRetornoDeHospedagem(dados, ator, new Date());
     revalidarLogistica(pedido.eventoId);
     return `Reserva do pedido ${pedido.referencia} registrada: o hotel já aparece na hospedagem e na rooming list.`;
+  });
+}
+
+const reais = (centavos: number) => (centavos / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+/** Voos, Hospedagem e a área da SDC mostram a situação do pagamento. */
+function revalidarPagamento(eventoId: string) {
+  revalidarLogistica(eventoId);
+}
+
+/** "Aprovar pagamento": o time confirma que usou e que o valor registrado pode ser pago. */
+export async function aprovarPagamentoAcao(_estado: ResultadoAcao, form: FormData): Promise<ResultadoAcao> {
+  return executarAcao(form, aprovarPagamentoSchema, "logistica.aprovar_pagamento", async (dados, ator) => {
+    const pedido = await aprovarPagamento(dados, ator, new Date());
+    revalidarPagamento(pedido.eventoId);
+    return `Pagamento do pedido ${pedido.referencia} aprovado: ${reais(pedido.valorCentavos ?? 0)}. A SDC já vê como aprovado.`;
+  });
+}
+
+export async function desfazerAprovacaoAcao(_estado: ResultadoAcao, form: FormData): Promise<ResultadoAcao> {
+  return executarAcao(form, desfazerAprovacaoSchema, "logistica.aprovar_pagamento", async (dados, ator) => {
+    const pedido = await desfazerAprovacao(dados, ator, new Date());
+    revalidarPagamento(pedido.eventoId);
+    return `Aprovação do pedido ${pedido.referencia} desfeita: ele voltou para "a aprovar" e a SDC pode corrigir a compra.`;
   });
 }
 

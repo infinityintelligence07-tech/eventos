@@ -34,7 +34,9 @@ export function transicaoDoPedido(atual: SituacaoDoPedido, acao: AcaoNoPedido): 
         case "ALTERAR":
           return { para: "ALTERADO" };
         case "REGISTRAR_RETORNO":
-          return INVALIDA;
+          // Corrigir a compra já registrada (valor, voo, reserva). Se o pagamento já foi aprovado, quem decide é
+          // domain/pagamento.ts: a SDC não corrige e, quando o time corrige, a aprovação cai.
+          return { para: "EMITIDO" };
         case "CANCELAR":
           return { para: "CANCELADO" };
         default:
@@ -205,8 +207,7 @@ export function textoDoPedidoDeHospedagem(pedido: {
   return linhas.join("\n");
 }
 
-export function mensagemDaTransicaoInvalida(situacao: SituacaoDoPedido, acao: AcaoNoPedido): string {
-  if (situacao === "CANCELADO") return "Este pedido foi cancelado. Registre um pedido novo, se precisar.";
-  if (situacao === "EMITIDO" && acao === "REGISTRAR_RETORNO") return "Este pedido já foi emitido. Para mudar, altere o pedido e registre o novo retorno da SDC.";
+export function mensagemDaTransicaoInvalida(situacao: SituacaoDoPedido): string {
+  if (situacao === "CANCELADO") return "Este pedido foi cancelado: não dá mais para mexer nele.";
   return "Esta ação não vale para o pedido agora. Recarregue a página.";
 }
