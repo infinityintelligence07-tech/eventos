@@ -66,6 +66,12 @@ export const local = eventosSchema.table(
     lat: doublePrecision("lat"),
     lng: doublePrecision("lng"),
     capacidade: integer("capacidade"),
+    // IAM_CONTROL: veio dos locais das turmas; a sincronização mantém nome e endereço e o time não os edita.
+    // EVENTOS: cadastrado pelo time (ou pela SDC, no retorno da hospedagem).
+    origem: text("origem").notNull().default("EVENTOS"),
+    // id do local no IAM Control (endereco_eventos.id). Vazio enquanto a rota de turmas não manda o id: até lá o
+    // local é reconhecido por nome + cidade + UF.
+    iamControlEnderecoId: integer("iam_control_endereco_id"),
     criadoEm: timestamp("criado_em", { withTimezone: true }).notNull().defaultNow(),
     atualizadoEm: timestamp("atualizado_em", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -74,7 +80,10 @@ export const local = eventosSchema.table(
     check("local_tipo_check", sql`${table.tipo} IN ('EVENTO', 'HOTEL', 'APARTAMENTO')`),
     check("local_uf_check", sql`${table.uf} ~ '^[A-Z]{2}$'`),
     check("local_capacidade_check", sql`${table.capacidade} IS NULL OR ${table.capacidade} > 0`),
+    check("local_origem_check", sql`${table.origem} IN ('EVENTOS', 'IAM_CONTROL')`),
+    check("local_iam_control_endereco_check", sql`${table.iamControlEnderecoId} IS NULL OR ${table.origem} = 'IAM_CONTROL'`),
     index("local_cidade_idx").on(table.uf, table.cidade),
+    index("local_iam_control_endereco_idx").on(table.iamControlEnderecoId).where(sql`${table.iamControlEnderecoId} IS NOT NULL`),
   ],
 );
 

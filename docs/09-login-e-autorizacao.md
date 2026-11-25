@@ -339,7 +339,7 @@ A SDC **não tem perfil nem permissão desta matriz**: ela não é um `Ator` (§
 | `custos/acoes.ts` | `registrarSolicitacaoAcao`, `corrigirSolicitacaoAcao`, `calcularPreviaAcao` (não grava) → `custos.registrar`; `aprovarSolicitacaoAcao`, `reprovarSolicitacaoAcao` → `custos.auditar`; `reabrirAuditoriaAcao` → `custos.reabrir_auditoria` |
 | `configuracoes/acesso/acoes.ts` | `definirAcessoAcao` → `config.acesso_do_time` |
 | `configuracoes/acesso-da-sdc/acoes.ts` | `incluirAcessoDaSdcAcao`, `definirAcessoDaSdcAcao` → `config.acesso_da_sdc` |
-| `configuracoes/locais/acoes.ts` | `salvarLocalAcao`, `arquivarLocalAcao` → `config.locais` |
+| `configuracoes/locais/acoes.ts` | `salvarLocalAcao`, `ajustarLocalDoIamControlAcao`, `arquivarLocalAcao` → `config.locais` |
 | `configuracoes/modelos-de-copy/acoes.ts` | `salvarModeloAcao`, `definirModeloAtivoAcao`, `previaDoModeloAcao` (não grava) → `config.modelos_copy`; `salvarLinkDeCustosAcao` → `config.link_custos` |
 | `configuracoes/voos/acoes.ts` | `salvarAvisoDeVoosAcao` → `config.aviso_de_voos` |
 | `configuracoes/vagas/acoes.ts` | `salvarRegraDeVagas`, `recalcularVagasDoTipo` → `config.regras_vagas` |
@@ -885,7 +885,9 @@ time nem o banco).
   - **Hotel sem multiplicar cadastro.** Mesmo nome + cidade + UF (comparação sem maiúsculas, acentos e espaços
     repetidos) reaproveita o hotel que já existe, sem alterá-lo. Ao corrigir a reserva, o hotel que a própria SDC
     criou para aquele pedido (e que só ele usa) é **corrigido** (`LOCAL_ALTERADO`, origem `SDC`) em vez de nascer
-    outro. Hotel cadastrado pelo time nunca é alterado pela SDC.
+    outro. Hotel cadastrado pelo time nunca é alterado pela SDC, nem o que veio do IAM Control: se a sincronização
+    ligar ao IAM Control o hotel que a SDC criou (mesmo nome + cidade + UF de um local de lá, docs/07 §6.8.1), ele
+    deixa de ser corrigível por ela, e corrigir a reserva com outro nome cria outro hotel.
   - **Só no que ela enxerga.** A escrita aplica o mesmo recorte de período da lista (eventos terminados há até 120
     dias): fora dele, "Pedido não encontrado".
 - **Não faz:** criar, alterar ou cancelar pedido, mexer em quartos, aprovar. Não há action para isso em `/sdc`, e as do

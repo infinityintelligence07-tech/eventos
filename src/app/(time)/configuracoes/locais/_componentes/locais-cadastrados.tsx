@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, MapPin, MapPinOff, Pencil, Plus, Save } from "lucide-react";
+import { Archive, Lock, MapPin, MapPinOff, Pencil, Plus, Save } from "lucide-react";
 import { type FormEvent, type ReactNode, startTransition, useActionState, useEffect, useState } from "react";
 
 import {
@@ -14,13 +14,14 @@ import {
   EstadoVazio,
   PainelLateral,
   ResumoDeErros,
+  SomenteLeitura,
   useToastDoResultado,
 } from "@/app/(time)/_componentes/ui";
 import { CabecaDaTabela, CelulaDaTabela, ColunaDaTabela, LinhaDaTabela, Tabela } from "@/app/(time)/_componentes/ui/tabela";
 import type { ResultadoAcao } from "@/app/(time)/_servidor/formulario";
 import type { LocalNaTela } from "@/fluxos/eventos";
 
-import { arquivarLocalAcao, salvarLocalAcao } from "../acoes";
+import { ajustarLocalDoIamControlAcao, arquivarLocalAcao, salvarLocalAcao } from "../acoes";
 
 const ACAO_NAO_EXECUTADA: ResultadoAcao = { ok: true };
 const NOVO = "novo";
@@ -89,23 +90,100 @@ function FormularioDoLocal({ local, tipos, aoSalvar }: { local: LocalNaTela | nu
         defaultValue={local?.capacidade ?? ""}
         erros={erros("capacidade")}
       />
-      <fieldset className="flex flex-col gap-2">
-        <legend className="mb-1 text-[13px] font-medium">Localização no mapa</legend>
-        <p className="text-[12px] text-[var(--ds-label-2)]">
-          A busca automática pelo endereço entra numa próxima versão. Por enquanto, copie do Google Maps (botão direito no ponto → os
-          dois números do topo). Sem isso, a distância até o local não é calculada.
-        </p>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <CampoDeTexto nome="lat" rotulo="Latitude" inputMode="decimal" placeholder="-3,1190" defaultValue={decimal(local?.lat ?? null)} erros={erros("lat")} />
-          <CampoDeTexto nome="lng" rotulo="Longitude" inputMode="decimal" placeholder="-60,0217" defaultValue={decimal(local?.lng ?? null)} erros={erros("lng")} />
-        </div>
-      </fieldset>
+      <LocalizacaoNoMapa local={local} erros={erros} />
       <div className="flex justify-end">
         <Botao type="submit" variante="primario" icone={<Save size={18} aria-hidden />} carregando={salvando} textoCarregando="Salvando…">
           Salvar local
         </Botao>
       </div>
     </form>
+  );
+}
+
+function LocalizacaoNoMapa({ local, erros }: { local: LocalNaTela | null; erros: (nome: string) => string[] | undefined }) {
+  return (
+    <fieldset className="flex flex-col gap-2">
+      <legend className="mb-1 text-[13px] font-medium">Localização no mapa</legend>
+      <p className="text-[12px] text-[var(--ds-label-2)]">
+        A busca automática pelo endereço entra numa próxima versão. Por enquanto, copie do Google Maps (botão direito no ponto → os
+        dois números do topo). Sem isso, a distância até o local não é calculada.
+      </p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <CampoDeTexto nome="lat" rotulo="Latitude" inputMode="decimal" placeholder="-3,1190" defaultValue={decimal(local?.lat ?? null)} erros={erros("lat")} />
+        <CampoDeTexto nome="lng" rotulo="Longitude" inputMode="decimal" placeholder="-60,0217" defaultValue={decimal(local?.lng ?? null)} erros={erros("lng")} />
+      </div>
+    </fieldset>
+  );
+}
+
+const enderecoDoLocal = (local: LocalNaTela) => [[local.logradouro, local.numero].filter(Boolean).join(", "), local.bairro].filter(Boolean).join(" · ");
+
+/** Local vindo do IAM Control: nome e endereço aparecem só para leitura; o formulário leva o que é do Eventos. */
+function FormularioDoLocalDoIamControl({ local, tipos, aoSalvar }: { local: LocalNaTela; tipos: Opcao[]; aoSalvar: () => void }) {
+  const [resultado, acao, salvando] = useActionState(ajustarLocalDoIamControlAcao, ACAO_NAO_EXECUTADA);
+  useToastDoResultado(resultado);
+  useEffect(() => {
+    if (resultado.ok && resultado.mensagem) aoSalvar();
+  }, [resultado, aoSalvar]);
+  const erros = (nome: string) => (resultado.ok ? undefined : resultado.campos?.[caminhoDoCampo(nome)]);
+  const doIamControl: [string, string][] = [
+    ["Nome", local.nome],
+    ["Endereço", enderecoDoLocal(local) || "—"],
+    ["Cidade/UF", `${local.cidade}/${local.uf}`],
+    ["CEP", local.cep ?? "—"],
+  ];
+
+  return (
+    <form onSubmit={(evento) => enviarSemLimpar(evento, acao)} className="flex flex-col gap-4">
+      {!resultado.ok && resultado.campos && <ResumoDeErros campos={resultado.campos} rotulos={ROTULOS} />}
+      <input type="hidden" name="localId" value={local.id} />
+      {/* Dado que vem de fora aparece como texto, nunca como campo desabilitado (docs/08 §3). */}
+      <div className="flex flex-col gap-2">
+        <SomenteLeitura origem="Vem do IAM Control. Nome e endereço se atualizam sozinhos; para corrigir, altere o local lá." />
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[14px]">
+          {doIamControl.map(([rotulo, valor]) => (
+            <div key={rotulo} className="contents">
+              <dt className="text-[var(--ds-label-2)]">{rotulo}</dt>
+              <dd>{valor}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+      <CampoDeSelecao
+        nome="tipo"
+        rotulo="Tipo"
+        obrigatorio
+        opcoes={tipos}
+        defaultValue={local.tipo}
+        ajuda="Marque como hotel o local que também hospeda o staff: ele passa a aparecer na hospedagem."
+        erros={erros("tipo")}
+      />
+      <CampoDeTexto nome="complemento" rotulo="Complemento" defaultValue={local.complemento ?? ""} erros={erros("complemento")} />
+      <CampoDeTexto
+        nome="capacidade"
+        rotulo="Capacidade"
+        numerico
+        ajuda="Pessoas no local de evento; leitos no hotel."
+        defaultValue={local.capacidade ?? ""}
+        erros={erros("capacidade")}
+      />
+      <LocalizacaoNoMapa local={local} erros={erros} />
+      <div className="flex justify-end">
+        <Botao type="submit" variante="primario" icone={<Save size={18} aria-hidden />} carregando={salvando} textoCarregando="Salvando…">
+          Salvar local
+        </Botao>
+      </div>
+    </form>
+  );
+}
+
+function Origem({ local }: { local: LocalNaTela }) {
+  return local.origem === "IAM_CONTROL" ? (
+    <Chip tom="informacao" icone={<Lock size={14} aria-hidden />}>
+      IAM Control
+    </Chip>
+  ) : (
+    <Chip tom="neutro">Cadastrado no Eventos</Chip>
   );
 }
 
@@ -124,6 +202,7 @@ function Localizacao({ local }: { local: LocalNaTela }) {
 export function LocaisCadastrados({
   locais,
   tipos,
+  tiposDoIamControl,
   escritaLiberada,
   comFiltro,
   filtros,
@@ -132,6 +211,8 @@ export function LocaisCadastrados({
   filtros: ReactNode;
   locais: LocalNaTela[];
   tipos: Opcao[];
+  /** Tipos que um local vindo do IAM Control pode ter (local de evento ou hotel). */
+  tiposDoIamControl: Opcao[];
   escritaLiberada: boolean;
   comFiltro: boolean;
 }) {
@@ -165,7 +246,7 @@ export function LocaisCadastrados({
       {locais.length === 0 ? (
         <Cartao espacamento="nenhum">
           <EstadoVazio titulo={comFiltro ? "Nenhum resultado com esses filtros." : "Nenhum local cadastrado."} nivel="h2">
-            {comFiltro ? "Mude a busca ou o tipo." : "Cadastre hotéis e apartamentos para montar a hospedagem."}
+            {comFiltro ? "Mude a busca, o tipo ou a origem." : "Os locais dos eventos chegam do IAM Control. Cadastre aqui os hotéis e apartamentos que não existem lá."}
           </EstadoVazio>
         </Cartao>
       ) : (
@@ -173,6 +254,7 @@ export function LocaisCadastrados({
           <CabecaDaTabela>
             <ColunaDaTabela>Nome</ColunaDaTabela>
             <ColunaDaTabela>Tipo</ColunaDaTabela>
+            <ColunaDaTabela>Origem</ColunaDaTabela>
             <ColunaDaTabela>Cidade/UF</ColunaDaTabela>
             <ColunaDaTabela numero>Capacidade</ColunaDaTabela>
             <ColunaDaTabela>Localização no mapa</ColunaDaTabela>
@@ -186,6 +268,9 @@ export function LocaisCadastrados({
               <LinhaDaTabela key={local.id}>
                 <CelulaDaTabela cabecalhoDaLinha>{local.nome}</CelulaDaTabela>
                 <CelulaDaTabela>{rotuloDoTipo(local.tipo)}</CelulaDaTabela>
+                <CelulaDaTabela>
+                  <Origem local={local} />
+                </CelulaDaTabela>
                 <CelulaDaTabela>
                   {local.cidade}/{local.uf}
                 </CelulaDaTabela>
@@ -237,11 +322,14 @@ export function LocaisCadastrados({
         aberto={editando !== null}
         aoFechar={() => setEditando(null)}
         titulo={localEmEdicao ? `Editar ${localEmEdicao.nome}` : "Novo local"}
-        subtitulo={localEmEdicao?.tipo === "EVENTO" ? "Locais de evento também chegam pela sincronização com o IAM Control." : undefined}
+        subtitulo={localEmEdicao ? undefined : "Os locais dos eventos chegam sozinhos do IAM Control. Cadastre aqui o que não existe lá."}
       >
-        {editando !== null && (
-          <FormularioDoLocal key={`${editando}-${aberturas}`} local={localEmEdicao} tipos={tipos} aoSalvar={() => setEditando(null)} />
-        )}
+        {editando !== null &&
+          (localEmEdicao?.origem === "IAM_CONTROL" ? (
+            <FormularioDoLocalDoIamControl key={`${editando}-${aberturas}`} local={localEmEdicao} tipos={tiposDoIamControl} aoSalvar={() => setEditando(null)} />
+          ) : (
+            <FormularioDoLocal key={`${editando}-${aberturas}`} local={localEmEdicao} tipos={tipos} aoSalvar={() => setEditando(null)} />
+          ))}
       </PainelLateral>
 
       <Confirmacao

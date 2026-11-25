@@ -117,6 +117,25 @@ describe("evento a partir da turma", () => {
     expect(semNada.ok && semNada.evento.local).toBeNull();
   });
 
+  it("local cadastrado no IAM Control leva os lugares da turma; o id só quando a rota manda", () => {
+    const hoje = eventoDaTurma(turmaDeExemplo(), "2026-10-26");
+    expect(hoje.ok && hoje.evento.local).toMatchObject({ cadastrado: true, iamControlEnderecoId: null, capacidade: 400 });
+    const comId = eventoDaTurma(turmaDeExemplo({ local: { ...turmaDeExemplo().local, id: 12, capacidade: 350 } }), "2026-10-26");
+    expect(comId.ok && comId.evento.local).toMatchObject({ cadastrado: true, iamControlEnderecoId: 12, capacidade: 350 });
+    const semLugares = eventoDaTurma(turmaDeExemplo({ capacidade: null }), "2026-10-26");
+    expect(semLugares.ok && semLugares.evento.local?.capacidade).toBeNull();
+  });
+
+  it("endereço digitado na turma não é local cadastrado: sem id e sem lugares", () => {
+    const digitado = eventoDaTurma(turmaDeExemplo({ local: { ...turmaDeExemplo().local, nome: null } }), "2026-10-26");
+    expect(digitado.ok && digitado.evento.local).toMatchObject({
+      nome: "Av. Constantino Nery, Manaus",
+      cadastrado: false,
+      iamControlEnderecoId: null,
+      capacidade: null,
+    });
+  });
+
   it("data final antes da inicial vira evento de um dia; sem data é ignorada", () => {
     const invertida = eventoDaTurma(turmaDeExemplo({ data_final: "2026-12-01" }), "2026-10-26");
     expect(invertida.ok && invertida.evento.dataFim).toBe("2026-12-12");

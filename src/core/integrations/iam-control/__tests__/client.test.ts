@@ -21,6 +21,17 @@ describe("cliente do IAM Control", () => {
     expect((init.headers as Record<string, string>)["x-webhook-token"]).toBe("tok");
   });
 
+  it("o local da turma chega sem id nem capacidade (rota de hoje) e aceita os dois quando o IAM Control mandar", async () => {
+    const hoje = turmaDeExemplo();
+    const futura = turmaDeExemplo({ id: 502, local: { ...turmaDeExemplo().local, id: 12, capacidade: 350 } });
+    const fetch = fetchQueResponde(200, { a_partir_de: "2026-09-26", ate: null, total: 2, turmas: [hoje, futura] });
+    const { turmas } = await createIamControlClient({ baseUrl: "https://iam.test", token: "tok", fetch }).listarTurmas();
+
+    expect(turmas[0]?.local).toEqual(hoje.local);
+    expect(turmas[0]?.local.id).toBeUndefined();
+    expect(turmas[1]?.local).toMatchObject({ id: 12, capacidade: 350, nome: "Centro de Convenções Vasco Vasques" });
+  });
+
   it("explica token recusado, erro do servidor e formato inesperado", async () => {
     const com = (fetch: typeof globalThis.fetch) => createIamControlClient({ baseUrl: "https://iam.test", token: "t", fetch });
 

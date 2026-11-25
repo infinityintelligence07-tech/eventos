@@ -201,6 +201,15 @@ async function hotelDoRetorno(
     if (daSdc) return existente;
     throw new RegraDeNegocioError(`Já existe o hotel "${dados.nome}" em ${dados.cidade}/${dados.uf}. Escolha-o na lista em vez de cadastrar de novo.`);
   }
+  // O hotel que o time informa já veio do IAM Control como local de evento (o evento é num hotel): usa esse cadastro,
+  // que passa a hotel, em vez de nascer outro com o mesmo nome. A SDC não altera cadastro que não é dela (docs/09
+  // §15.4): o hotel que ela informa nasce à parte e a sincronização o liga ao IAM Control na rodada seguinte.
+  const doIamControl = daSdc ? null : await locais.localDoIamControlComNome(dados);
+  if (doIamControl?.tipo === "EVENTO") {
+    if (!(await locais.marcarComoHotel(doIamControl.id, agora))) throw new RegraDeNegocioError("O local deste hotel mudou. Recarregue a página.");
+    await locais.registrar(doIamControl.id, { acao: "LOCAL_ALTERADO", ...autor, dados: { mudancas: { tipo: { de: "EVENTO", para: "HOTEL" } }, origem: "retorno da SDC" } });
+    return doIamControl.id;
+  }
   // Correção da reserva pela SDC: o hotel que ela mesma cadastrou para este pedido é corrigido, em vez de nascer
   // outro registro em Locais e hotéis a cada nome diferente.
   const doPedido = daSdc ? await locais.hotelDaSdcDoPedido(daSdc.pedidoId) : null;
