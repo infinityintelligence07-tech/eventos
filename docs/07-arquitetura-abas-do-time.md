@@ -850,7 +850,79 @@ Cada sub-tela é do módulo dono do dado (e da frente dona desse módulo). O `la
 | Regras de custo | `custos` | `regra_custo` | `listarRegrasDeCusto`; `criarVigenciaDeRegra` ← `{ regraId, valorCentavos?, parametros?, vigenteDesde: date }` (nova linha; nunca edita a antiga, porque solicitações apontam para ela); `desativarRegra` ← `{ regraId }` |
 | Regras de vagas | `escala` | `tipo_evento.regra_vagas` | `listarRegrasDeVagas`; `salvarRegraDeVagas` ← `{ tipoEventoId, funcoes: [{ funcao, formula? \| fixo? \| digitado? }] }` (validado por `compilarRegraVagas`; prévia com público de exemplo); `recalcularVagasDoTipo` ← `{ tipoEventoId }` (chama `gerarVagasDoEvento` nos eventos futuros em `SEM_ESCALA`/`RASCUNHO`/`DEVOLVIDA`; linhas confirmadas não mudam) |
 | Modelos de copy | `comunicacao` | `modelo_copy` | `listarModelos`; `salvarModelo` ← `{ modeloId?, tipo: enum do CHECK, nome, corpo }` (recusa se `validarModelo` devolver erro); `ativarModelo`/`desativarModelo` ← `{ modeloId }`. Mudar o texto não deixa copy enviada "desatualizada" (o hash é dos dados) |
-| Locais e hotéis | `eventos` | `local` | `listarLocais`; `salvarLocal` ← `{ localId?, nome, tipo: 'EVENTO'\|'HOTEL'\|'APARTAMENTO', endereço…, cidade, uf: /^[A-Z]{2}$/, lat?, lng?, capacidade? }`; `arquivarLocal` ← `{ localId }` (`deleted_at`) |
+| Locais e hotéis | `eventos` | `local` | `listarLocais` ← `{ tipo?, origem?, busca? }`; `salvarLocal` ← `{ localId?, nome, tipo: 'EVENTO'\|'HOTEL'\|'APARTAMENTO', endereço…, cidade, uf: /^[A-Z]{2}$/, lat?, lng?, capacidade? }` (só cadastro do Eventos); `ajustarLocalDoIamControl` ← `{ localId, tipo: 'EVENTO'\|'HOTEL', complemento?, lat?, lng?, capacidade? }` (só local vindo do IAM Control); `arquivarLocal` ← `{ localId }` (`deleted_at`) |
+
+#### 6.8.1 Locais e hotéis vindos do IAM Control (25/11/2026, migration 0018)
+
+Pedido do Vitor: "locais e hotéis devem pegar de IAM Control". A base do cadastro passa a vir de lá; o time só cadastra
+à mão o que não existe lá (hotéis que a SDC reserva fora do local do evento, apartamentos da IAM).
+
+**O que o IAM Control tem e o que ele expõe** (IAM-Control-Backend, `origin/main` em 25/11/2026):
+
+- Uma entidade só, `endereco_eventos` (`src/modules/config/entities/enderecoEventos.entity.ts`): `id`, `id_polo`,
+  `local_evento` (o nome: "P7 Eventos", "Hotel Sibara"), `logradouro`, `numero`, `bairro`, `cidade`, `estado`, `cep`,
+  `capacidade` (lugares da sala). Lá não existe "hotel de hospedagem" separado de "local do evento": o que a tela
+  chama de hotel é o local onde a turma acontece. Não há complemento, tipo nem latitude/longitude.
+- A turma aponta para o local por `turmas.id_endereco_evento` (opcional) e tem um endereço próprio digitado.
+- A rota de cadastro, `GET /api/endereco-eventos` (`src/modules/api/endereco-eventos`), exige login de usuário
+  (`JwtAuthGuard` + permissão `enderecosEventos.view`). **O token do Eventos não a alcança.**
+- O token do Eventos (`IntegracaoEventosTokenGuard`, env `EVENTOS_WEBHOOK_TOKENS`) só abre duas rotas, em
+  `src/modules/api/integracao-eventos`: `GET /api/webhooks/eventos/turmas` e `GET /api/webhooks/eventos/colaboradores`.
+- Na turma, o local chega **embutido**, em `local: { nome, logradouro, numero, complemento, bairro, cidade, estado, cep }`
+  (`IntegracaoEventosService.mapTurma`): do `endereco_eventos` quando a turma tem um, senão do endereço digitado na
+  turma (com `nome: null`). **Não vêm o `id` nem a `capacidade` do local**; vem a `capacidade` da turma, que o IAM
+  Control preenche com a do local quando o hotel é escolhido na agenda.
+
+**Desenho adotado** (não há rota de locais, então o Eventos aproveita o que já chega na turma):
+
+- `eventos.local` ganha `origem` (`EVENTOS` | `IAM_CONTROL`) e `iam_control_endereco_id` (o `endereco_eventos.id`;
+  fica vazio até o IAM Control mandar o id na turma, e o cliente já aceita `local.id` e `local.capacidade` opcionais).
+- **Sincronização** (o mesmo job das turmas, `src/jobs/sincronizar-turmas.ts`): antes de gravar o evento, cada local
+  da rodada é gravado **uma vez** por `salvarLocalDoIamControl` (`sincronizacao-repository.ts`). A identidade é o id do
+  IAM Control quando vier; hoje é a chave nome + cidade + UF comparada sem maiúsculas, acentos e espaços repetidos
+  (`chaveDoLocal`, a mesma regra do hotel informado pela SDC). O resumo da rodada conta `locais: { criados,
+  vinculados, atualizados }`.
+- **Ligar em vez de duplicar** (`correspondentesDoIamControl`): se já existe cadastro ativo com a mesma chave, de tipo
+  local de evento **ou hotel**, ele passa a `IAM_CONTROL` (histórico `LOCAL_VINCULADO`, origem `SISTEMA`, com o de/para)
+  e recebe nome e endereço de lá. O evento usa o local de evento, se houver; senão, o hotel. Só nasce cadastro novo
+  (tipo local de evento) quando nenhum corresponde. Apartamento da IAM nunca corresponde.
+- **De quem é cada campo:** do IAM Control: nome, logradouro, número, bairro, cidade, UF e CEP
+  (`CAMPOS_DO_IAM_CONTROL`). Do Eventos, editáveis na tela: **tipo** (local de evento ou hotel), **complemento**,
+  **capacidade** e **latitude/longitude**. A capacidade é sugerida uma vez (lugares da turma, só em local de evento e
+  só enquanto está vazia); depois é do time.
+- **Tipo é do Eventos:** o local chega como "local de evento". Para hospedar o staff nele, o time muda o tipo para
+  Hotel (um cadastro só serve ao evento e à hospedagem). No "Registrar reserva" feito pelo time, informar um hotel que
+  já veio do IAM Control como local de evento usa esse cadastro e o marca como hotel. Com hospedagem, o tipo não muda.
+- **Endereço digitado na turma** (sem local cadastrado lá): vira local `IAM_CONTROL` com o nome montado pelo Eventos
+  ("Rua X, Cidade" ou "Local a definir — Cidade"); só casa com local de evento e não é regravado a cada rodada.
+- **Nunca apaga:** a sincronização não apaga nem arquiva local. O que deixa de vir nas turmas continua no cadastro
+  (com os eventos antigos e as hospedagens); o time arquiva o que não está em uso. Local arquivado não é reaproveitado.
+- **SDC** (docs/09 §15.4): nada muda no que ela vê e faz. O hotel que ela informa é reaproveitado pelo nome ou nasce
+  como cadastro do Eventos; se corresponder a um local do IAM Control, a rodada seguinte o liga, e a partir daí ela
+  não o corrige mais (corrigir a reserva com outro nome cria outro hotel).
+- **Banco:** o papel do app não tem `UPDATE` em `origem` nem em `iam_control_endereco_id` (privilégio por coluna da
+  0005): só a sincronização (`app_eventos_worker`) liga um cadastro ao IAM Control.
+
+**Migration 0018 sobre os dados existentes:** acrescenta as duas colunas (`origem` nasce `EVENTOS` em toda linha), os
+dois `CHECK`s e um índice. Marca como `IAM_CONTROL` os locais (de evento ou hotel) apontados por evento que veio de
+turma, que é onde a sincronização já os punha. Não apaga linha, não muda nome, tipo, endereço nem `atualizado_em`. Os
+hotéis cadastrados à mão com o mesmo nome de um local do IAM Control são ligados pela primeira sincronização depois do
+deploy. O `.down.sql` só remove as colunas.
+
+**Limites de hoje e o que pedir ao time do IAM Control:**
+
+1. **`id` e `capacidade` do local dentro da turma** (`mapTurma`, em `integracao-eventos.service.ts`):
+   `local.id = endereco.id` e `local.capacidade = endereco.capacidade` (nulos quando a turma não tem
+   `id_endereco_evento`). Sem o id, local renomeado no IAM Control vira cadastro novo no Eventos (o antigo fica, sem
+   uso, e o que o time preencheu nele não acompanha) e dois locais de lá com o mesmo nome na mesma cidade viram um só.
+2. **Rota de locais para o token do Eventos**: `GET /api/webhooks/eventos/locais`, com o mesmo guard das turmas,
+   devolvendo todos os `endereco_eventos` (inclusive excluídos): `{ total, locais: [{ id, nome, logradouro, numero,
+   bairro, cidade, estado, cep, capacidade, polo: { id, sigla } | null, atualizado_em, excluido_em }] }`. Sem ela, o
+   Eventos só conhece os locais usados por turmas presenciais que viram evento e que terminam de 30 dias atrás em
+   diante, e não fica sabendo de local excluído lá.
+
+Nada disso exige mudança de banco no Eventos: o cliente e a sincronização já tratam o id e a capacidade quando vierem
+(testado com dublê). A rota de locais, quando existir, pede um método novo no cliente e um passo a mais no job.
 
 ### 6.9 Início — `/inicio`
 
@@ -1129,7 +1201,7 @@ Onde a doc 08 diverge, vale o que está aqui.
 | Conflito de agenda | Recusa incluir a pessoa (§4.2). Validar com a Patricia se há casos legítimos (ex.: Masterclass e evento no mesmo dia). |
 | "Desfazer" ao aprovar | Não nesta rodada; o caminho é reabrir e aprovar de novo. |
 | Trocar o tipo de um modelo ativo | Recusado ("desative antes"). |
-| Local com nome repetido | Recusado no mesmo tipo, cidade e UF (sem diferenciar maiúsculas), a chave que a sincronização usa. |
+| Local com nome repetido | Recusado no mesmo tipo, cidade e UF (sem diferenciar maiúsculas). Desde a 0018, também é recusado cadastrar à mão (como local de evento ou hotel) um lugar que já veio do IAM Control, comparando sem maiúsculas, acentos e espaços repetidos (§6.8.1). |
 | Masterclasses nas listas | Escalas abre escondendo Masterclasses; o Início agrupa ("+N Masterclasses"). |
 | Alerta de custo por km | Texto "acima do limite de R$ 0,95" (sem arredondamento enganoso); o modal de aprovar com crítico lista todos os alertas. |
 | Lugares do veículo | `pessoa_veiculo.lugares` = lugares para passageiros (sem o motorista). |

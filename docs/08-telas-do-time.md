@@ -956,7 +956,7 @@ de evento traz todos os eventos de hoje em diante, com ou sem escala.
 - Sem quartos: "Monte os quartos para pedir a hospedagem à SDC." (o pedido diz quantos quartos e quem divide com quem).
 - Com quartos: botão primário **"Pedir hospedagem à SDC"**. Gera o pedido `SDC-…` e o texto de "Copiar pedido": evento, **local e cidade do evento** (para a SDC procurar hotel perto), check-in e check-out, "3 quartos · 7 pessoas" e a lista de quartos com os nomes. Sem hotel no texto (a não ser que já esteja definido).
 - Pedido aguardando: referência, chip "Pedido à SDC", **"Registrar reserva"** e "Cancelar pedido".
-- **"Registrar reserva"** (painel, em nome da SDC): **Hotel reservado pela SDC** (um hotel de Locais e hotéis ou "Cadastrar outro hotel…", que abre ali mesmo Nome, Cidade e UF — já com a cidade do evento — e, opcionais, rua, número e bairro; o hotel entra em Configurações › Locais e hotéis), Número da reserva, Valor total (R$), **Forma de pagamento** (vem "Faturado SDC") e Observação da SDC. Aí o hotel aparece no cartão e na rooming list. Toast: "Reserva do pedido SDC-000020 registrada: o hotel já aparece na hospedagem e na rooming list."
+- **"Registrar reserva"** (painel, em nome da SDC): **Hotel reservado pela SDC** (um hotel de Locais e hotéis ou "Cadastrar outro hotel…", que abre ali mesmo Nome, Cidade e UF — já com a cidade do evento — e, opcionais, rua, número e bairro; o hotel entra em Configurações › Locais e hotéis; se o nome informado for o de um local que já veio do IAM Control, usa-se esse cadastro, que passa a hotel, sem criar outro), Número da reserva, Valor total (R$), **Forma de pagamento** (vem "Faturado SDC") e Observação da SDC. Aí o hotel aparece no cartão e na rooming list. Toast: "Reserva do pedido SDC-000020 registrada: o hotel já aparece na hospedagem e na rooming list."
 - Cancelar o pedido deixa os quartos montados e libera pedir de novo.
 
 **Apartamento da IAM** (sem SDC): escolhido no campo "Onde"; tem quartos e rooming list, não tem pedido.
@@ -1217,10 +1217,33 @@ Cabeçalho: "Configurações" / "Valores e modelos usados pelo sistema. Mudança
 
 ### 12.4 Locais e hotéis
 
-- Tabela: Nome | Tipo (Local de evento, Hotel, Apartamento) | Cidade/UF | Capacidade | Localização no mapa (chip "Encontrada" sucesso / "Não encontrada" atenção) | "Editar".
-- Primário "Novo local" → painel: Nome, Tipo, CEP (preenche o endereço), Logradouro, Número, Complemento, Bairro, Cidade, UF, Capacidade.
-  Ao salvar: "Local salvo. Localização encontrada no mapa." ou faixa de atenção "Não encontramos este endereço no mapa. Confira o CEP e o número; sem isso, a distância até o evento não é calculada."
-- Remover local em uso: bloqueado com o motivo "Este local está em 3 eventos."
+A base vem do **IAM Control**: os locais das turmas entram sozinhos pela sincronização (a cada 30 minutos) e cada linha
+diz de onde veio. O time cadastra à mão só o que não existe lá: hotéis que a SDC reserva fora do local do evento e
+apartamentos da IAM.
+
+- Filtros: busca por nome ou cidade; atalhos de tipo (Todos | Locais de evento | Hotéis | Apartamentos) e de origem
+  (Qualquer origem | Do IAM Control | Cadastrados no Eventos).
+- Tabela: Nome | Tipo (Local de evento, Hotel, Apartamento) | **Origem** (chip "IAM Control" com cadeado, ou
+  "Cadastrado no Eventos") | Cidade/UF | Capacidade | Localização no mapa (chip "Informada" sucesso / "Sem localização"
+  atenção) | Em uso ("3 ev. · 1 hosp.") | "Editar" e, sem uso, "Arquivar".
+- Primário "Novo local" → painel (subtítulo "Os locais dos eventos chegam sozinhos do IAM Control. Cadastre aqui o que
+  não existe lá."): Nome, Tipo, CEP, Logradouro, Número, Complemento, Bairro, Cidade, UF, Capacidade e Localização no
+  mapa (latitude e longitude copiadas do Google Maps; a busca automática entra numa próxima versão).
+  Toast: "Hotel X salvo." ou "Hotel X salvo. Sem latitude e longitude, a distância até ele não é calculada."
+- **Editar um local vindo do IAM Control:** Nome, Endereço, Cidade/UF e CEP aparecem como texto, com o cadeado e
+  "Vem do IAM Control. Nome e endereço se atualizam sozinhos; para corrigir, altere o local lá." Editáveis, por serem
+  do Eventos: **Tipo** (Local de evento ou Hotel; ajuda "Marque como hotel o local que também hospeda o staff: ele
+  passa a aparecer na hospedagem."), **Complemento**, **Capacidade** e **Localização no mapa**.
+- Cadastrar à mão um lugar que já veio do IAM Control é recusado: "\"Hotel Sibara\" em Balneário Camboriú/SC já veio do
+  IAM Control como local de evento. Edite esse cadastro em vez de criar outro (para hospedar o staff nele, mude o tipo
+  para Hotel)." A comparação ignora maiúsculas, acentos e espaços repetidos.
+- Hotel cadastrado à mão (pelo time ou pela SDC) com o mesmo nome, cidade e UF de um local do IAM Control é **ligado**
+  a ele na sincronização seguinte: a linha passa a "IAM Control", com o nome e o endereço de lá, e mantém tipo,
+  complemento, capacidade e localização.
+- Nome repetido no mesmo tipo e cidade: "Já existe \"Hotel X\" em Manaus/AM. Edite o cadastro existente."
+- Tipo de local com hospedagem não muda: "Este local tem hospedagem: o tipo não muda enquanto ela existir."
+- Arquivar local em uso: sem botão; pelo servidor, "Este local está em 3 eventos." A sincronização nunca apaga nem
+  arquiva local: o que deixou de vir do IAM Control continua na lista até o time arquivar.
 
 ### 12.5 Aviso de voos (`/configuracoes/voos`)
 
@@ -1239,7 +1262,7 @@ Cabeçalho: "Configurações" / "Valores e modelos usados pelo sistema. Mudança
 - Desativar corta o acesso no próximo clique da pessoa. E-mail repetido é recusado ("Este e-mail já está na lista da SDC."; se estiver desativado, a mensagem manda reativar).
 - Vazio: "Ninguém da SDC tem acesso ainda." / "Inclua abaixo o e-mail de quem cuida dos pedidos na agência."
 
-**Estados (Configurações):** carregando e erro padrão; vazio por aba ("Nenhum modelo de copy." + "Novo modelo"; "Nenhum local cadastrado." + "Novo local").
+**Estados (Configurações):** carregando e erro padrão; vazio por aba ("Nenhum modelo de copy." + "Novo modelo"; "Nenhum local cadastrado." / "Os locais dos eventos chegam do IAM Control. Cadastre aqui os hotéis e apartamentos que não existem lá." + "Novo local").
 
 ---
 
