@@ -4,8 +4,10 @@ import type { Pendencia } from "./vagas";
 // Máquina de estado de evento.status_escala (docs/07 §4.1 e §11.1).
 // Com a líder (AGUARDANDO_APROVACAO) a escala fica travada para quem monta; depois de aprovada,
 // qualquer mudança de pessoas exige reabrir (volta para RASCUNHO) e aprovar de novo.
+// Masterclass não passa por aprovação (Vitor, 26/11/2026): quem monta conclui a escala (CONCLUIR) e ela já fica
+// aprovada, pronta para comunicar. O caminho da aprovação continua existindo para os demais eventos.
 
-export type AcaoDaEscala = "ENVIAR" | "APROVAR" | "DEVOLVER" | "REABRIR";
+export type AcaoDaEscala = "ENVIAR" | "CONCLUIR" | "APROVAR" | "DEVOLVER" | "REABRIR";
 
 export type TransicaoDaEscala = { para: StatusEscala } | { erro: "TRANSICAO_INVALIDA" };
 
@@ -14,6 +16,8 @@ export function transicaoDaEscala(atual: StatusEscala, acao: AcaoDaEscala): Tran
   switch (acao) {
     case "ENVIAR":
       return atual === "RASCUNHO" || atual === "DEVOLVIDA" ? { para: "AGUARDANDO_APROVACAO" } : invalida;
+    case "CONCLUIR":
+      return atual === "RASCUNHO" || atual === "DEVOLVIDA" ? { para: "APROVADA" } : invalida;
     case "APROVAR":
       return atual === "AGUARDANDO_APROVACAO" ? { para: "APROVADA" } : invalida;
     case "DEVOLVER":
@@ -32,6 +36,8 @@ export function acaoRegistrada(acao: AcaoDaEscala): string {
   switch (acao) {
     case "ENVIAR":
       return "ENVIADA_APROVACAO";
+    case "CONCLUIR":
+      return "CONCLUIDA";
     case "APROVAR":
       return "APROVADA";
     case "DEVOLVER":

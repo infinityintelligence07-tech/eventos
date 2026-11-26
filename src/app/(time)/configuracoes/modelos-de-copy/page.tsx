@@ -99,7 +99,7 @@ export default async function PaginaModelosDeCopy() {
                         Inativo
                       </Chip>
                     )}
-                    {modelo.emUso && <span className="text-[12px] text-[var(--ds-label-2)]">usado na Comunicação</span>}
+                    {modelo.emUso && <span className="text-[12px] text-[var(--ds-label-2)]">{modelo.tipo === "REPROVACAO_CUSTO" ? "usado em Custos, ao reprovar" : "usado na Comunicação"}</span>}
                   </span>
                 </CelulaDaTabela>
                 <CelulaDaTabela className="tabular-nums">{formatar.dataEHora(modelo.atualizadoEm)}</CelulaDaTabela>

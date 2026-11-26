@@ -38,7 +38,7 @@ function etapaDaAprovacao(status: StatusEscala, aprovadaEm: string | null): Etap
     case "AGUARDANDO_APROVACAO":
       return { ...base, situacao: "EM_ANDAMENTO", detalhe: "Com a líder" };
     case "DEVOLVIDA":
-      return { ...base, situacao: "PENDENCIA", detalhe: "Devolvida para ajustar" };
+      return { ...base, situacao: "PENDENCIA", detalhe: "Não aprovada: ajustar" };
     case "APROVADA":
     case "COMUNICADA":
       return { ...base, situacao: "FEITA", detalhe: aprovadaEm ? `Aprovada em ${aprovadaEm}` : "Aprovada" };

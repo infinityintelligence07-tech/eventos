@@ -22,23 +22,49 @@ const PREFERENCIAS = [
 
 type Trajeto = "IDA_E_VOLTA" | "IDA" | "VOLTA";
 
+/**
+ * As cidades do pedido ("Porto Alegre (RS)"), já preenchidas e editáveis. O time não informa aeroporto: quem escolhe
+ * é a SDC, que informa o código ao registrar a compra.
+ */
 export type TrechosIniciais = {
-  origemIata: string;
-  destinoIata: string;
+  /** De onde a pessoa sai: a cidade do cadastro dela (ou a do pedido que está sendo alterado). Vazio = sem sugestão. */
+  origemCidade: string;
+  /** A cidade do evento: onde a ida chega. */
+  destinoCidade: string;
+  /**
+   * Só na turnê de Masterclass (a última palestra é outra): a cidade dela, de onde a volta sai. Ganha um campo próprio.
+   * Nulo = a volta sai da cidade do evento.
+   */
+  voltaDeCidade: string | null;
   ida: { data: string; preferencia: string } | null;
   volta: { data: string; preferencia: string } | null;
 };
 
-/** Origem/destino uma vez só; a volta inverte. Gera os campos trechos[i].* que o schema espera. */
+/**
+ * Campo que nasce com uma sugestão e aceita correção. Se a sugestão muda (trocaram a pessoa do pedido), vale a nova:
+ * o que foi digitado era para a sugestão anterior.
+ */
+function useCampoSugerido(sugestao: string) {
+  const [digitado, setDigitado] = useState<{ para: string; valor: string } | null>(null);
+  const valor = digitado && digitado.para === sugestao ? digitado.valor : sugestao;
+  return [valor, (novo: string) => setDigitado({ para: sugestao, valor: novo })] as const;
+}
+
+/** Cidade de origem e cidade do evento uma vez só; a volta inverte. Gera os campos trechos[i].* que o schema espera. */
 function CamposDosTrechos({ inicial, erros }: { inicial: TrechosIniciais; erros: ErrosDoCampo }) {
   const [trajeto, setTrajeto] = useState<Trajeto>(inicial.ida && inicial.volta ? "IDA_E_VOLTA" : inicial.volta ? "VOLTA" : inicial.ida ? "IDA" : "IDA_E_VOLTA");
-  const [origem, setOrigem] = useState(inicial.origemIata);
-  const [destino, setDestino] = useState(inicial.destinoIata);
+  const [origem, setOrigem] = useCampoSugerido(inicial.origemCidade);
+  const [destino, setDestino] = useCampoSugerido(inicial.destinoCidade);
+  const [voltaDe, setVoltaDe] = useCampoSugerido(inicial.voltaDeCidade ?? "");
+  const turne = inicial.voltaDeCidade !== null;
   const sentidos = trajeto === "IDA_E_VOLTA" ? (["IDA", "VOLTA"] as const) : ([trajeto] as const);
-  const erroDe = (campo: string) => sentidos.flatMap((_sentido, indice) => erros(`trechos.${indice}.${campo}`) ?? []).slice(0, 1);
-  // Na volta, a origem do pedido é o destino do trecho.
-  const erroDaOrigem = erroDe(trajeto === "VOLTA" ? "destinoIata" : "origemIata");
-  const erroDoDestino = erroDe(trajeto === "VOLTA" ? "origemIata" : "destinoIata");
+  const temIda = trajeto !== "VOLTA";
+  const temVolta = trajeto !== "IDA";
+  const erroDoTrecho = (sentido: "IDA" | "VOLTA", campo: string) => erros(`trechos.${sentidos.findIndex((item) => item === sentido)}.${campo}`) ?? [];
+  // A cidade de origem é a origem da ida e o destino da volta; a do evento, o contrário.
+  const erroDaOrigem = [...(temIda ? erroDoTrecho("IDA", "origemCidade") : []), ...(temVolta ? erroDoTrecho("VOLTA", "destinoCidade") : [])].slice(0, 1);
+  const erroDoDestino = [...(temIda ? erroDoTrecho("IDA", "destinoCidade") : []), ...(temVolta && !turne ? erroDoTrecho("VOLTA", "origemCidade") : [])].slice(0, 1);
+  const erroDaVoltaDe = temVolta && turne ? erroDoTrecho("VOLTA", "origemCidade").slice(0, 1) : [];
   const erroGeral = erros("trechos")?.[0];
 
   return (
@@ -61,34 +87,55 @@ function CamposDosTrechos({ inicial, erros }: { inicial: TrechosIniciais; erros:
       <div className="grid grid-cols-2 gap-3">
         <CampoDeTexto
           nome="origem"
-          rotulo="Origem (aeroporto)"
+          rotulo="Cidade de origem"
           obrigatorio
           value={origem}
-          onChange={(evento) => setOrigem(evento.target.value.toUpperCase())}
-          maxLength={3}
-          placeholder="POA"
-          ajuda="Código de 3 letras, de onde a pessoa sai."
+          onChange={(evento) => setOrigem(evento.target.value)}
+          maxLength={80}
+          placeholder="Porto Alegre (RS)"
+          ajuda="De onde a pessoa sai. Vem do cadastro dela; corrija se for outra."
           erros={erroDaOrigem}
         />
-        <CampoDeTexto
-          nome="destinoDoEvento"
-          rotulo="Destino (aeroporto)"
-          obrigatorio
-          value={destino}
-          onChange={(evento) => setDestino(evento.target.value.toUpperCase())}
-          maxLength={3}
-          placeholder="MAO"
-          ajuda="Aeroporto da cidade do evento."
-          erros={erroDoDestino}
-        />
+        {/* Na turnê só de volta, a cidade que conta é a da última palestra (abaixo). */}
+        {(temIda || !turne) && (
+          <CampoDeTexto
+            nome="destinoDoEvento"
+            rotulo={turne ? "Cidade da primeira palestra" : "Cidade do evento"}
+            obrigatorio
+            value={destino}
+            onChange={(evento) => setDestino(evento.target.value)}
+            maxLength={80}
+            placeholder="Manaus (AM)"
+            ajuda={turne ? "Onde a ida chega. Vem do local da palestra; corrija se for outra." : "Vem do local do evento; corrija se for outra."}
+            erros={erroDoDestino}
+          />
+        )}
+        {turne && temVolta && (
+          <CampoDeTexto
+            className={temIda ? "col-span-2" : undefined}
+            nome="voltaDe"
+            rotulo="Cidade da última palestra"
+            obrigatorio
+            value={voltaDe}
+            onChange={(evento) => setVoltaDe(evento.target.value)}
+            maxLength={80}
+            placeholder="Macapá (AP)"
+            ajuda="De onde a volta sai. Vem do local da última palestra; corrija se for outra."
+            erros={erroDaVoltaDe}
+          />
+        )}
       </div>
+      <p className="mt-2 text-[12px] text-[var(--ds-label-2)]">Não precisa informar o aeroporto: quem escolhe é a SDC, na compra.</p>
       {sentidos.map((sentido, indice) => {
         const valores = sentido === "IDA" ? inicial.ida : inicial.volta;
+        // A volta inverte: sai da cidade do evento (na turnê, da última palestra) e chega à cidade de origem.
+        const saiDe = sentido === "IDA" ? origem : turne ? voltaDe : destino;
+        const chegaA = sentido === "IDA" ? destino : origem;
         return (
           <div key={sentido} className="mt-3 grid grid-cols-2 gap-3">
             <input type="hidden" name={`trechos[${indice}].sentido`} value={sentido} />
-            <input type="hidden" name={`trechos[${indice}].origemIata`} value={sentido === "IDA" ? origem : destino} />
-            <input type="hidden" name={`trechos[${indice}].destinoIata`} value={sentido === "IDA" ? destino : origem} />
+            <input type="hidden" name={`trechos[${indice}].origemCidade`} value={saiDe} />
+            <input type="hidden" name={`trechos[${indice}].destinoCidade`} value={chegaA} />
             <CampoDeTexto
               nome={`trechos[${indice}].dataDesejada`}
               rotulo={sentido === "IDA" ? "Data da ida" : "Data da volta"}
@@ -116,8 +163,11 @@ function CamposDosTrechos({ inicial, erros }: { inicial: TrechosIniciais; erros:
   );
 }
 
-/** `masterclass`: palestra (o "Novo pedido" separa Eventos de Masterclass antes de escolher, como a planilha). */
-export type EventoDoPedido = { id: string; rotulo: string; dataInicio: string; dataFim: string; masterclass: boolean };
+/**
+ * `masterclass`: palestra (o "Novo pedido" separa Eventos de Masterclass antes de escolher, como a planilha).
+ * `cidade`: a do local do evento ("Manaus (AM)"; vazio se o evento ainda não tem local), sugerida como destino.
+ */
+export type EventoDoPedido = { id: string; rotulo: string; dataInicio: string; dataFim: string; masterclass: boolean; cidade: string };
 
 const TIPOS_DE_VIAGEM = [
   { valor: "EVENTOS", rotulo: "Evento" },
@@ -149,7 +199,8 @@ export function FormularioNovoPedido({
 }: {
   acao: AcaoDoFormulario;
   eventos: EventoDoPedido[];
-  pessoas: { pessoaId: string; nome: string }[];
+  /** `cidade`: a do cadastro da pessoa ("Porto Alegre (RS)"; nulo se ela não informou), sugerida como origem. */
+  pessoas: { pessoaId: string; nome: string; cidade: string | null }[];
   pedidosAtivos: PedidoAtivoDaPessoa[];
   eventoInicial?: string;
   /** Na aba Logística do evento o pedido é sempre daquele evento. */
@@ -176,7 +227,10 @@ export function FormularioNovoPedido({
   const ultimasPalestras = masterclass && evento ? eventos.filter((item) => item.masterclass && item.id !== evento.id && item.dataInicio >= evento.dataInicio) : [];
   const eventoDaVolta = ultimasPalestras.find((item) => item.id === eventoVoltaId) ?? evento;
   const jaPedidos = eventoId && pessoaId ? pedidosAtivos.filter((pedido) => pedido.eventoId === eventoId && pedido.pessoaId === pessoaId) : [];
-  const nome = pessoas.find((pessoa) => pessoa.pessoaId === pessoaId)?.nome ?? "Esta pessoa";
+  const pessoa = pessoas.find((item) => item.pessoaId === pessoaId);
+  const nome = pessoa?.nome ?? "Esta pessoa";
+  // Turnê (a última palestra é outra): a volta sai da cidade dela, que ganha um campo à parte.
+  const emTurne = eventoDaVolta !== undefined && evento !== undefined && eventoDaVolta.id !== evento.id;
 
   if (eventos.length === 0) return <Aviso tom="informacao">Nenhum evento futuro para pedir voo. Os eventos chegam pela sincronização com o IAM Control.</Aviso>;
 
@@ -257,8 +311,9 @@ export function FormularioNovoPedido({
         key={`${eventoId}|${eventoVoltaId}`}
         erros={erros}
         inicial={{
-          origemIata: "",
-          destinoIata: "",
+          origemCidade: pessoa?.cidade ?? "",
+          destinoCidade: evento?.cidade ?? "",
+          voltaDeCidade: emTurne ? eventoDaVolta.cidade : null,
           ida: evento ? { data: diaAnterior(evento.dataInicio), preferencia: "" } : null,
           // Na turnê, a volta é sugerida para o dia da última palestra.
           volta: eventoDaVolta ? { data: eventoDaVolta.dataFim, preferencia: "" } : null,
@@ -328,7 +383,20 @@ export function FormularioAlterarPedido({
 /** Como a planilha anota o pagamento de cada compra. */
 const FORMA_DE_PAGAMENTO_PADRAO = "Faturado SDC";
 
-export type TrechoParaRegistrar = { sentido: "IDA" | "VOLTA"; rotulo: string; partidaSugerida: string; companhia: string; numeroVoo: string; localizador: string; partidaEm: string; chegadaEm: string; cartaoEmbarqueUrl: string };
+export type TrechoParaRegistrar = {
+  sentido: "IDA" | "VOLTA";
+  rotulo: string;
+  partidaSugerida: string;
+  companhia: string;
+  numeroVoo: string;
+  localizador: string;
+  partidaEm: string;
+  chegadaEm: string;
+  /** Aeroportos que a SDC escolheu (código de 3 letras), se já informados. */
+  origemIata: string;
+  destinoIata: string;
+  cartaoEmbarqueUrl: string;
+};
 
 export function FormularioRegistrarVoo({
   acao,
@@ -371,6 +439,24 @@ export function FormularioRegistrarVoo({
             <CampoDeTexto nome={`trechos[${indice}].numeroVoo`} rotulo="Número do voo" obrigatorio defaultValue={trecho.numeroVoo} placeholder="AD4120" erros={erros(`trechos.${indice}.numeroVoo`)} />
             <CampoDeTexto nome={`trechos[${indice}].localizador`} rotulo="Localizador" obrigatorio defaultValue={trecho.localizador} placeholder="KXQ7PZ" erros={erros(`trechos.${indice}.localizador`)} />
             <div />
+            <CampoDeTexto
+              nome={`trechos[${indice}].origemIata`}
+              rotulo="Aeroporto de origem"
+              defaultValue={trecho.origemIata}
+              maxLength={3}
+              placeholder="POA"
+              ajuda="Opcional. O código de 3 letras que a SDC informou."
+              erros={erros(`trechos.${indice}.origemIata`)}
+            />
+            <CampoDeTexto
+              nome={`trechos[${indice}].destinoIata`}
+              rotulo="Aeroporto de destino"
+              defaultValue={trecho.destinoIata}
+              maxLength={3}
+              placeholder="MAO"
+              ajuda="Opcional. O código de 3 letras que a SDC informou."
+              erros={erros(`trechos.${indice}.destinoIata`)}
+            />
             <CampoDeTexto
               nome={`trechos[${indice}].partidaEm`}
               rotulo="Partida"

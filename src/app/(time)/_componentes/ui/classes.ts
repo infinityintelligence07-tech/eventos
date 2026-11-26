@@ -2,6 +2,15 @@
 
 export const CARTAO = "rounded-[var(--ds-radius-lg)] bg-[var(--ds-surface)] shadow-[var(--ds-shadow-1)]";
 
+/**
+ * Cartão clicável por inteiro (doc 08 §3.2): o cartão leva CARTAO_CLICAVEL e o `Link` do título leva LINK_QUE_COBRE,
+ * que estica a área de clique até as bordas do cartão. O link continua sendo um só (para teclado e leitor de tela).
+ * Outro link ou botão dentro do cartão leva SOBRE_O_CARTAO para continuar clicável por cima.
+ */
+export const CARTAO_CLICAVEL = "relative transition-shadow hover:shadow-[var(--ds-shadow-2)] focus-within:shadow-[var(--ds-shadow-2)]";
+export const LINK_QUE_COBRE = "after:absolute after:inset-0 after:content-['']";
+export const SOBRE_O_CARTAO = "relative z-[1]";
+
 export const CAMPO =
   "h-10 w-full rounded-[10px] border border-[var(--ds-separator)] bg-[var(--ds-surface)] px-3 text-[14px] text-[var(--ds-label)]";
 

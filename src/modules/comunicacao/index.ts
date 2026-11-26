@@ -37,6 +37,8 @@ export {
   type SituacaoDaCopy,
   situacaoDaCopy,
   type TipoDeModelo,
+  type TipoDaEscala,
+  TIPOS_DA_ESCALA,
   TIPOS_DE_MODELO,
 } from "./domain/situacao";
 export {

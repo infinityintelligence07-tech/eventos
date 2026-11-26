@@ -22,7 +22,7 @@ export const modeloCopy = eventosSchema.table(
     uniqueIndex("modelo_copy_ativo_unique").on(table.tipo).where(sql`${table.ativo}`),
     check(
       "modelo_copy_tipo_check",
-      sql`${table.tipo} IN ('ESCALACAO', 'HOSPEDAGEM', 'LEMBRETE', 'ALTERACAO')`,
+      sql`${table.tipo} IN ('ESCALACAO', 'HOSPEDAGEM', 'LEMBRETE', 'ALTERACAO', 'REPROVACAO_CUSTO')`,
     ),
   ],
 );

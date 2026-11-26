@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ConflitoDeVersaoError, RegraDeNegocioError } from "@/fluxos/_base";
 import { lerRegraGuiada } from "@/modules/escala";
-import { type BancoDeTeste, criarBancoDeTeste, TEST_DATABASE_URL } from "@/test/banco";
+import { type BancoDeTeste, criarBancoDeTeste, desfazerFuncoesDa0021, TEST_DATABASE_URL } from "@/test/banco";
 
 import { carregarResumoDoEvento, salvarDadosDoEvento } from "../../eventos";
 import * as escalas from "..";
@@ -64,6 +64,8 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da escala no banco", () => {
 
   beforeAll(async () => {
     banco = await criarBancoDeTeste();
+    // As funções de exemplo destes testes (Pai / mãe, Trainee de líder...) saíram na 0021: voltam só aqui.
+    await desfazerFuncoesDa0021(banco);
     estado.banco = banco;
     usuarioId = (await um(`insert into core.usuario (email, nome_usuario) values ('time@exemplo.test', 'Usuário de teste') returning id`)).id as string;
     tipoConfronto = (await um(`select id from eventos.tipo_evento where sigla = 'CONF'`)).id as string;
@@ -194,7 +196,7 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da escala no banco", () => {
     const traineeDeLider = montagem.funcoes.find((funcao) => funcao.codigo === "TRAINEE_LIDER")!;
     expect(traineeDeLider.nome).toBe("Trainee de líder");
 
-    await expect(escalas.adicionarVagaManual({ eventoId, funcaoId: traineeDeLider.id, data: "2026-11-12", quantidade: 1 }, quem())).resolves.toMatchObject({ nomeDaFuncao: "Trainee de líder" });
+    await expect(escalas.adicionarVagaManual({ eventoId, funcaoId: traineeDeLider.id, quantidade: 1 }, quem())).resolves.toMatchObject({ nomeDaFuncao: "Trainee de líder" });
     const linha = await linhaDa("TRAINEE_LIDER");
     // Sem regra de vaga automática: a linha é manual e ninguém a tem ainda, então todos aparecem como não habilitados.
     const sugestoes = (await escalas.sugerirPessoas(eventoId, linha.id, agora))!;
@@ -440,13 +442,17 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da escala no banco", () => {
 
     const itens = await escalas.resumoParaInicio(agora);
     // "Pessoas sem resposta" saiu do Início: quem está na escala já conta como confirmada.
-    expect(itens.map((item) => item.chave)).toEqual(["escalas-a-montar", "escalas-aguardando-aprovacao", "escalas-devolvidas"]);
+    expect(itens.map((item) => item.chave)).toEqual(["escalas-a-montar", "escalas-a-montar-masterclass", "escalas-aguardando-aprovacao", "escalas-situacao"]);
+    // Um cartão só para a aprovação: não aprovadas, aguardando e aprovadas; "aguardando" à parte só alimenta o número do topo.
+    expect(itens[2]).toMatchObject({ semCartao: true });
+    expect(itens[3]!.exemplos.map((exemplo) => exemplo.rotulo.replace(/ \(.*$/, ""))).toEqual(["Não aprovadas", "Aguardando aprovação", "Aprovadas"]);
     expect(itens[0]!.exemplos[0]!.href).toBe(`/eventos/${eventoId}/escala`);
   });
 
   it("cartão Escalas a montar: só quem começa em 30 dias e não foi aprovado, com início, término, local e vagas", async () => {
     const longe = await novoEvento("Conf longe", "2026-12-20T03:00:00Z", "2026-12-22T02:59:59Z");
-    const aMontar = await escalas.escalasAMontar(agora);
+    const { eventos: aMontar, masterclasses } = await escalas.escalasAMontar(agora);
+    expect(masterclasses.every((evento) => evento.tipoSigla === "MC")).toBe(true);
     expect(aMontar.map((evento) => evento.id)).toContain(eventoId);
     expect(aMontar.map((evento) => evento.id)).not.toContain(longe);
     const doTeste = aMontar.find((evento) => evento.id === eventoId)!;
@@ -463,7 +469,29 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da escala no banco", () => {
 
     // Aprovada sai do cartão.
     await banco.sql(`update eventos.evento set status_escala = 'APROVADA', aprovado_em = now() where id = $1`, [eventoId]);
-    expect((await escalas.escalasAMontar(agora)).map((evento) => evento.id)).not.toContain(eventoId);
+    expect((await escalas.escalasAMontar(agora)).eventos.map((evento) => evento.id)).not.toContain(eventoId);
     await banco.sql(`update eventos.evento set status_escala = 'RASCUNHO', aprovado_em = null where id = $1`, [eventoId]);
+  });
+
+  it("Masterclass não passa por aprovação: quem monta conclui e a escala já fica aprovada", async () => {
+    const tipoMasterclass = (await um(`select id from eventos.tipo_evento where sigla = 'MC'`)).id as string;
+    const masterclassId = (await um(
+      `insert into eventos.evento (nome, codigo, inicio, fim, status, tipo_evento_id) values ('Masterclass · Teste', 'MC_TESTE', '2026-11-20T22:00:00Z', '2026-11-21T01:00:00Z', 'PLANEJADO', $1) returning id`,
+      [tipoMasterclass],
+    )).id as string;
+    const staff = (await escalas.carregarMontagem(masterclassId))!.funcoes.find((funcao) => funcao.codigo === "STAFF")!;
+    // Sem o campo "Dia": a função acrescentada vale para o evento inteiro.
+    await escalas.adicionarVagaManual({ eventoId: masterclassId, funcaoId: staff.id, quantidade: 1 }, quem());
+    await expect(escalas.adicionarVagaManual({ eventoId: masterclassId, funcaoId: staff.id, quantidade: 2 }, quem())).rejects.toThrow(/já está na escala/);
+
+    await expect(escalas.enviarParaAprovacao({ eventoId: masterclassId, statusEsperado: "RASCUNHO" }, quem())).resolves.toMatchObject({ semAprovacao: true });
+    expect(await um(`select status_escala, aprovado_em is not null as concluida from eventos.evento where id = $1`, [masterclassId])).toEqual({ status_escala: "APROVADA", concluida: true });
+    expect(
+      await banco.sql(`select acao, status_para from eventos.registro_acao where entidade = 'ESCALA_DO_EVENTO' and entidade_id = $1 order by criado_em, id`, [masterclassId]),
+    ).toEqual([{ acao: "CONCLUIDA", status_para: "APROVADA" }]);
+    // Não entra na fila da líder; reabrir funciona como em qualquer escala aprovada.
+    expect((await escalas.carregarFilaDeAprovacao()).map((evento) => evento.id)).not.toContain(masterclassId);
+    await escalas.reabrirEscala({ eventoId: masterclassId, statusEsperado: "APROVADA" }, quem());
+    expect(await um(`select status_escala from eventos.evento where id = $1`, [masterclassId])).toEqual({ status_escala: "RASCUNHO" });
   });
 });

@@ -76,6 +76,17 @@ export type PreviaNaTela = { partes: ParteDaCopy[]; faltando: FaltaNaCopy[]; err
 /** Prévia do texto em edição com uma pessoa de exemplo (sem pessoa: só saudação e link de custos). Não grava nada. */
 export async function previaDoModelo({ corpo, convocacaoId, eventoId }: PreviaDoModelo, agora: Date): Promise<PreviaNaTela> {
   const repo = criarRepositorioComunicacao(await bancoParaLeitura());
+  // Modelo de reprovação de custo: os campos vêm da solicitação, não da escala. A prévia usa um exemplo fixo.
+  if (/\{\{\s*custo\./.test(corpo)) {
+    const copy = gerarCopy(corpo, {
+      saudacao: saudacao(agora),
+      link_custos: await repo.configuracao(CHAVE_LINK_CUSTOS),
+      pessoa: { nome: "Maria Exemplo", primeiro_nome: "Maria", sexo: "F" },
+      evento: { codigo: "CONF_AM_60" },
+      custo: { protocolo: "STF-202611-0001", motivo: "O comprovante do pedágio está ilegível.", valor: "R$ 184,50" },
+    });
+    return { partes: copy.partes, faltando: faltasDaCopy(copy.faltando), erros: validarModelo(corpo) };
+  }
   const rascunho = { id: "previa", tipo: "ESCALACAO" as const, nome: "Prévia", corpo, ativo: true, atualizadoEm: agora };
   const eventos = convocacaoId && eventoId ? await repo.eventos({ eventoId }) : [];
   const [daPessoa] = eventos.length > 0 ? await gerarCopysDaEquipe(repo, { eventos, modelo: rascunho, instante: agora, convocacaoId }) : [];

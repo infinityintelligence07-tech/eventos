@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Db } from "@/core/db/database";
 import { RegraDeNegocioError } from "@/fluxos/_base";
 import { meuCadastroSchema } from "@/modules/pessoas";
-import { type BancoDeTeste, criarBancoDeTeste, TEST_DATABASE_URL } from "@/test/banco";
+import { type BancoDeTeste, criarBancoDeTeste, desfazerFuncoesDa0021, TEST_DATABASE_URL } from "@/test/banco";
 
 import { carregarMeuCadastro, salvarMeuCadastro, type StaffDaSessao, staffDaIdentidade } from "../meu-cadastro";
 
@@ -65,6 +65,8 @@ describe.skipIf(!TEST_DATABASE_URL)("Meu cadastro no banco", () => {
 
   beforeAll(async () => {
     teste = await criarBancoDeTeste();
+    // As funções de exemplo destes testes (Pai / mãe, Trainee de líder...) saíram na 0021: voltam só aqui.
+    await desfazerFuncoesDa0021(teste);
     banco.db = teste.db;
     await teste.sql(`insert into core.polo (codigo, nome) values ('CPS', 'Campinas'), ('POA', 'Porto Alegre')`);
     const { id: usuarioId } = (await um(`insert into core.usuario (email) values ('ana@exemplo.test') returning id`)) as { id: string };

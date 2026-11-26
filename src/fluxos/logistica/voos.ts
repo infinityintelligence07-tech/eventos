@@ -3,6 +3,7 @@ import { ehMasterclass } from "@/modules/eventos";
 import {
   agruparPorMesEEvento,
   type AlterarPedido,
+  cidadeComUf,
   type AprovarPagamento,
   type CancelarPedido,
   criarRepositorioPedidos,
@@ -85,8 +86,11 @@ export type VoosCarregados = {
    * na Hospedagem (o hotel é pedido junto com o voo, antes da escala).
    */
   hotelSemQuarto: { evento: EventoDaLogistica; pessoas: number }[];
-  /** Quem pode receber um pedido: pessoas ativas do cadastro de staff. */
-  staff: { pessoaId: string; nome: string }[];
+  /**
+   * Quem pode receber um pedido: pessoas ativas do cadastro de staff. `cidade` é a do cadastro da pessoa
+   * ("Porto Alegre (RS)"; nulo se ela não informou): o pedido sugere como cidade de origem.
+   */
+  staff: { pessoaId: string; nome: string; cidade: string | null }[];
   /** Pedidos ativos, para o formulário avisar antes de registrar outro da mesma pessoa no mesmo evento. */
   pedidosAtivos: { eventoId: string; pessoaId: string; referencia: string; trajeto: Trajeto | null }[];
 };
@@ -146,7 +150,7 @@ export async function carregarVoos(filtro: FiltroDeVoos, agora: Date): Promise<V
     // continuam na lista até serem aprovadas.
     filtro.eventoId ? Promise.resolve([]) : repo.pedidos({ tipo: "VOO", aAprovar: true }),
     repo.naEscala({ desde: hoje, eventoId: filtro.eventoId }),
-    repo.staffAtivoPorNome(),
+    repo.staffAtivoComCidade(),
     diasDoAvisoDeVoos(db),
     repo.comHotelPeloVooSemQuarto({ desde: hoje, eventoId: filtro.eventoId }),
   ]);
@@ -210,7 +214,7 @@ export async function carregarVoos(filtro: FiltroDeVoos, agora: Date): Promise<V
       const evento = futuros.find((item) => item.id === eventoId);
       return evento && noRecorte(recorte, evento) ? [{ evento, pessoas }] : [];
     }),
-    staff,
+    staff: staff.map(({ pessoaId, nome, cidade, uf }) => ({ pessoaId, nome, cidade: cidadeComUf(cidade, uf) })),
     pedidosAtivos: [...ativos].sort((a, b) => a.referencia.localeCompare(b.referencia)).flatMap((pedido) =>
       pedido.pessoaId
         ? [{ eventoId: pedido.evento.id, pessoaId: pedido.pessoaId, referencia: pedido.referencia, trajeto: trajetoDosTrechos(pedido.trechos.map((trecho) => trecho.sentido)) }]

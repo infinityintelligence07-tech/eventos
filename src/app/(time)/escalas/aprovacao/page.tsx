@@ -11,6 +11,7 @@ import { exigirAtor, permissoesDoAtor } from "../../_servidor/usuario-atual";
 import { BotaoLink } from "../../_componentes/ui/botao-link";
 import { CabecalhoDaPagina, Migalha } from "../../_componentes/ui/cabecalho";
 import { Cartao } from "../../_componentes/ui/cartao";
+import { CARTAO_CLICAVEL, LINK_QUE_COBRE, SOBRE_O_CARTAO } from "../../_componentes/ui/classes";
 import { EstadoVazio } from "../../_componentes/ui/estados";
 import { dataEHora, periodo } from "../../_componentes/ui/formatos";
 import { AprovarOuDevolver } from "../_componentes/aprovar-ou-devolver";
@@ -55,11 +56,13 @@ export default async function PaginaAprovacao() {
             const idDoTitulo = `fila-${escala.id}`;
             const nome = escala.tipoSigla === "MC" ? escala.nome : [escala.tipoNome, escala.edicao].filter(Boolean).join(" ");
             return (
-              <article key={escala.id} aria-labelledby={idDoTitulo} className="rounded-[var(--ds-radius-lg)] bg-[var(--ds-surface)] p-5 shadow-[var(--ds-shadow-1)]">
+              <article key={escala.id} aria-labelledby={idDoTitulo} className={`rounded-[var(--ds-radius-lg)] bg-[var(--ds-surface)] p-5 shadow-[var(--ds-shadow-1)] ${CARTAO_CLICAVEL}`}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h2 id={idDoTitulo} className="text-[15px] font-semibold">
-                      {nome} · <span className="[font-family:var(--ds-font-mono)]">{codigo}</span>
+                      <Link href={`/eventos/${escala.id}/escala`} className={`hover:underline ${LINK_QUE_COBRE}`}>
+                        {nome} · <span className="[font-family:var(--ds-font-mono)]">{codigo}</span>
+                      </Link>
                     </h2>
                     <p className="mt-0.5 text-[13px] text-[var(--ds-label-2)]">
                       {periodo(escala.dataInicio, escala.dataFim)}
@@ -70,7 +73,7 @@ export default async function PaginaAprovacao() {
                       Vagas: {escala.preenchidas} de {escala.vagas} preenchidas
                     </p>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className={`flex flex-wrap gap-2 ${SOBRE_O_CARTAO}`}>
                     <BotaoLink href={`/eventos/${escala.id}/escala`} aria-label={`Ver escala ${codigo}`}>
                       Ver escala
                     </BotaoLink>

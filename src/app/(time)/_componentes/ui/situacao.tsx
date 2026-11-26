@@ -25,7 +25,7 @@ export function rotuloDaSituacao(situacao: SituacaoNoCalendario): string {
     case "AGUARDANDO_APROVACAO":
       return "Aguardando aprovação";
     case "DEVOLVIDA":
-      return "Devolvida";
+      return "Não aprovada";
     case "APROVADA":
       return "Escala aprovada";
     case "COMUNICADA":

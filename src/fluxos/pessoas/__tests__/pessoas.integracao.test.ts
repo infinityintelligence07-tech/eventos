@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type * as Base from "@/fluxos/_base";
 import { RegraDeNegocioError } from "@/fluxos/_base";
 import { lerFiltrosDaLista } from "@/modules/pessoas";
-import { type BancoDeTeste, criarBancoDeTeste, TEST_DATABASE_URL } from "@/test/banco";
+import { type BancoDeTeste, criarBancoDeTeste, desfazerFuncoesDa0021, TEST_DATABASE_URL } from "@/test/banco";
 
 import { carregarPessoa, definirFuncoes, listarPessoas, salvarCoordenadas, salvarPerfilDoStaff, salvarVeiculo } from "..";
 
@@ -55,6 +55,8 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos de Pessoas no banco", () => {
 
   beforeAll(async () => {
     teste.banco = await criarBancoDeTeste();
+    // As funções de exemplo destes testes (Pai / mãe, Trainee de líder...) saíram na 0021: voltam só aqui.
+    await desfazerFuncoesDa0021(teste.banco);
     usuarioId = ((await teste.banco.sql(`insert into core.usuario (email) values ('time@exemplo.test') returning id`)) as [{ id: string }])[0].id;
     ana = await pessoa("Ana Maria Teste", { nomeSocial: "Ana" });
     bruno = await pessoa("Bruno Teste");

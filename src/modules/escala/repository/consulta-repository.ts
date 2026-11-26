@@ -13,7 +13,13 @@ import type { LinhaDaMontagem } from "../domain/montagem";
 const diaEmSaoPaulo = (coluna: typeof evento.inicio | typeof evento.fim) =>
   sql<string>`to_char(${coluna} at time zone 'America/Sao_Paulo', 'YYYY-MM-DD')`;
 
-const nomeDoUsuario = sql<string | null>`coalesce(${usuario.nomeUsuario}, ${usuario.email})`;
+// Quem fez aparece pelo nome (Vitor, 26/11/2026): o da pessoa ligada ao usuário (nome_usuario fica vazio para quem
+// veio do IAM Control); sem pessoa nem nome de usuário, o e-mail.
+const nomeDoUsuario = sql<string | null>`coalesce(
+  (select coalesce(nullif(trim(p.nome_social), ''), p.nome_completo) from core.pessoa p
+    where p.usuario_id = ${usuario.id} and p.deleted_at is null order by p.ativo desc limit 1),
+  nullif(trim(${usuario.nomeUsuario}), ''),
+  ${usuario.email})`;
 
 export type EventoDaMontagem = {
   id: string;

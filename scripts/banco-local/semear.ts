@@ -21,12 +21,10 @@ const TAMANHOS = ["PP", "P", "M", "G", "GG", "XG"] as const;
 const ESPECIALIDADES: { codigo: string; quantidade: number; tambemStaff: boolean }[] = [
   { codigo: "STAFF_LIDER", quantidade: 8, tambemStaff: true },
   { codigo: "LIDER", quantidade: 6, tambemStaff: true },
-  { codigo: "PAI_MAE", quantidade: 6, tambemStaff: true },
   { codigo: "CAMARIM", quantidade: 3, tambemStaff: true },
   { codigo: "SOCIAL_MEDIA", quantidade: 3, tambemStaff: false },
   { codigo: "DJ", quantidade: 3, tambemStaff: false },
   { codigo: "FOTOGRAFO", quantidade: 3, tambemStaff: false },
-  { codigo: "FILMMAKER", quantidade: 2, tambemStaff: false },
 ];
 
 function idPessoa(n: number): string {
@@ -62,8 +60,6 @@ async function ajustarCadastrosCopiados(db: Executor): Promise<void> {
       WHERE m.ativo AND EXISTS (SELECT 1 FROM eventos.modelo_copy o
                                  WHERE o.tipo = m.tipo AND o.ativo AND (o.atualizado_em, o.id) > (m.atualizado_em, m.id))`,
   );
-  await db.query(`UPDATE eventos.funcao SET cargo_do_evento = true WHERE codigo = 'PAI_MAE' AND NOT cargo_do_evento`);
-  await db.query(`INSERT INTO eventos.funcao (codigo, nome) VALUES ('TRAINEE_LIDER', 'Trainee de líder') ON CONFLICT (codigo) DO NOTHING`);
 }
 
 export async function semear({ sql: db, drizzle }: Banco): Promise<void> {
@@ -116,7 +112,7 @@ export async function semear({ sql: db, drizzle }: Banco): Promise<void> {
   const pessoas: Pessoa[] = [];
   for (let n = 1; n <= TOTAL_PESSOAS; n++) {
     const polo = polos[(n - 1) % polos.length] as { id: string; codigo: string };
-    const cidade = CIDADES[polo.codigo] ?? { lat: -23.55, lng: -46.63, ddd: "11", iata: "GRU" };
+    const cidade = CIDADES[polo.codigo] ?? { nome: "São Paulo", uf: "SP", lat: -23.55, lng: -46.63, ddd: "11", iata: "GRU" };
     const sexo: "F" | "M" = n % 2 === 0 ? "F" : "M";
     const primeiro = sexo === "F" ? escolher(NOMES_F) : escolher(NOMES_M);
     const sobrenome = escolher(SOBRENOMES);
@@ -147,8 +143,8 @@ export async function semear({ sql: db, drizzle }: Banco): Promise<void> {
     );
     await db.query(
       `INSERT INTO eventos.pessoa_evento
-         (pessoa_id, sexo, camiseta_modelo, camiseta_tamanho, possui_camiseta, fez_confronto, tem_cnpj, lat, lng, geocodificado_em, cadastro_revisado_em)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+         (pessoa_id, sexo, camiseta_modelo, camiseta_tamanho, possui_camiseta, fez_confronto, tem_cnpj, lat, lng, geocodificado_em, cadastro_revisado_em, cidade, uf)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
       [
         pessoa.id,
         pessoa.sexo,
@@ -161,11 +157,12 @@ export async function semear({ sql: db, drizzle }: Banco): Promise<void> {
         pessoa.coordenada?.lng ?? null,
         pessoa.coordenada ? new Date() : null,
         aleatorio() < 0.8 ? new Date() : null,
+        // Quem não tem coordenada é o cenário de "falta dado": fica também sem cidade (o pedido de voo não sugere a origem).
+        pessoa.coordenada ? cidade.nome : null,
+        pessoa.coordenada ? cidade.uf : null,
       ],
     );
     for (const codigo of pessoa.funcoes) {
-      // Pai / mãe é cargo do evento (migration 0013), não habilitação: a pessoa só ocupa a vaga nos cenários.
-      if (codigo === "PAI_MAE") continue;
       await db.query(`INSERT INTO eventos.pessoa_funcao (pessoa_id, funcao_id, nivel) VALUES ($1, $2, $3)`, [
         pessoa.id,
         funcoes.get(codigo),

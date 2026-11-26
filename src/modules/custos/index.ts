@@ -55,7 +55,7 @@ export {
   tipoPelosBytes,
 } from "./domain/comprovantes";
 export { CustosMudouError, ErroDosCustos, SolicitacaoJaExisteError } from "./domain/erros";
-export { type CustoAprovado, mensagemDeCustoAprovado, primeiroNome } from "./domain/mensagens";
+export { type CustoAprovado, dadosDoCustoReprovado, mensagemDeCustoAprovado, MODELO_PADRAO_DE_CUSTO_REPROVADO, primeiroNome } from "./domain/mensagens";
 export {
   DIAS_DE_PRAZO_DO_FORMULARIO,
   DIAS_PARA_CORRIGIR,

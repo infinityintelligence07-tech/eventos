@@ -247,8 +247,8 @@ describe("máquina do pedido à SDC (§4.5)", () => {
         passageiro: "Staff 07",
         observacaoTime: "Bagagem de mão",
         trechos: [
-          { sentido: "VOLTA", origemIata: "MAO", destinoIata: "POA", dataDesejada: "2026-11-08", preferenciaHorario: null },
-          { sentido: "IDA", origemIata: "POA", destinoIata: "MAO", dataDesejada: "2026-11-05", preferenciaHorario: "MANHA" },
+          { sentido: "VOLTA", origemCidade: "Manaus (AM)", destinoCidade: "Porto Alegre (RS)", origemIata: null, destinoIata: null, dataDesejada: "2026-11-08", preferenciaHorario: null },
+          { sentido: "IDA", origemCidade: "Porto Alegre (RS)", destinoCidade: "Manaus (AM)", origemIata: null, destinoIata: null, dataDesejada: "2026-11-05", preferenciaHorario: "MANHA" },
         ],
       }),
     ).toBe(
@@ -256,8 +256,8 @@ describe("máquina do pedido à SDC (§4.5)", () => {
         "Pedido SDC-000007 — passagem aérea",
         "Evento: ASM_AM_235",
         "Passageiro: Staff 07",
-        "Ida: POA → MAO em 05/11/2026 (manhã)",
-        "Volta: MAO → POA em 08/11/2026",
+        "Ida: Porto Alegre (RS) → Manaus (AM) em 05/11/2026 (manhã)",
+        "Volta: Manaus (AM) → Porto Alegre (RS) em 08/11/2026",
         "Observação: Bagagem de mão",
       ].join("\n"),
     );

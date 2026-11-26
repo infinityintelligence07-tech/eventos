@@ -1,7 +1,7 @@
 import { type Ator, pode } from "@/core/autorizacao";
 
 export type ItemDoMenu =
-  | "Início"
+  | "Dashboard"
   | "Calendário"
   | "Escalas"
   | "Comunicação"
@@ -14,11 +14,12 @@ export type ItemDoMenu =
 
 /**
  * `raizes` acendem o item também nas subrotas (ex.: /escalas/aprovacao acende Escalas). Voos e Hospedagem dividem
- * /logistica: Voos fica só com as passagens; Hospedagem junta quartos e caronas (montados na mesma passada, a partir
- * da escala) e os créditos de hotel.
+ * /logistica: Voos fica só com as passagens; Hospedagem tem os quartos e os créditos de hotel. As caronas ficam na
+ * escala do evento (/logistica/caronas é só um redirecionamento para lá).
  */
 export const ROTAS_DO_MENU: { nome: ItemDoMenu; href: string; raizes: string[] }[] = [
-  { nome: "Início", href: "/inicio", raizes: ["/inicio"] },
+  // A antiga "Início" (a rota continua /inicio). Hoje é a dashboard do sistema; a dos staffs entra depois.
+  { nome: "Dashboard", href: "/inicio", raizes: ["/inicio"] },
   { nome: "Calendário", href: "/calendario", raizes: ["/calendario"] },
   { nome: "Escalas", href: "/escalas", raizes: ["/escalas"] },
   { nome: "Comunicação", href: "/comunicacao", raizes: ["/comunicacao"] },

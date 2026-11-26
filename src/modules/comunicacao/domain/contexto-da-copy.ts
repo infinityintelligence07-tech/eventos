@@ -27,13 +27,18 @@ export function rotuloDoDeslocamento(deslocamento: Deslocamento): string {
   }
 }
 
-/** Trecho de voo emitido pela SDC. */
+/**
+ * Trecho de voo emitido pela SDC. Cidades: o que o time pediu ("Porto Alegre (RS)"). Aeroportos (3 letras): os que a
+ * SDC informou na compra. Pedido antigo só tem aeroporto; pedido novo pode ainda não ter.
+ */
 export type TrechoDaCopy = {
   companhia: string | null;
   numeroVoo: string | null;
   localizador: string | null;
-  origemIata: string;
-  destinoIata: string;
+  origemCidade: string | null;
+  destinoCidade: string | null;
+  origemIata: string | null;
+  destinoIata: string | null;
   partidaEm: Date | null;
 };
 
@@ -70,13 +75,23 @@ export type ContextoDaCopy = {
   linkCustos: string | null;
 };
 
-/** "AD4120 (AZUL) · 12/12 às 08:10 · GRU → MAO · localizador KXQ7PZ". Só com o voo emitido (número e horário). */
+/** Em cada ponta, o aeroporto quando a SDC informou e a cidade quando não. Nulo se não há nem um nem outro. */
+function rota(trecho: TrechoDaCopy): string | null {
+  const origem = trecho.origemIata ?? trecho.origemCidade;
+  const destino = trecho.destinoIata ?? trecho.destinoCidade;
+  return origem && destino ? `${origem} → ${destino}` : null;
+}
+
+/**
+ * "AD4120 (AZUL) · 12/12 às 08:10 · GRU → MAO · localizador KXQ7PZ". Só com o voo emitido (número e horário). Sem o
+ * aeroporto, vai a cidade: "… · Porto Alegre (RS) → Manaus (AM) · …".
+ */
 export function descreverTrecho(trecho: TrechoDaCopy | null): string | null {
   if (!trecho?.numeroVoo || !trecho.partidaEm) return null;
   return [
     trecho.companhia ? `${trecho.numeroVoo} (${trecho.companhia})` : trecho.numeroVoo,
     formatarDataEHora(trecho.partidaEm),
-    `${trecho.origemIata} → ${trecho.destinoIata}`,
+    rota(trecho),
     trecho.localizador ? `localizador ${trecho.localizador}` : null,
   ]
     .filter(Boolean)

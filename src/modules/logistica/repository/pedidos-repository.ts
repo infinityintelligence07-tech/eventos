@@ -43,8 +43,12 @@ export type PassageiroDeVoo = {
 
 export type TrechoDoPedido = {
   sentido: Sentido;
-  origemIata: string;
-  destinoIata: string;
+  /** O que o time pediu ("Porto Alegre (RS)"). Nulas no pedido anterior à 0020, que só tem o aeroporto. */
+  origemCidade: string | null;
+  destinoCidade: string | null;
+  /** Aeroportos (3 letras) que a SDC informou na compra, ou os do pedido antigo. Nulos enquanto ela não informa. */
+  origemIata: string | null;
+  destinoIata: string | null;
   dataDesejada: string;
   preferenciaHorario: PreferenciaDeHorario | null;
   companhia: string | null;
@@ -130,6 +134,8 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
   comHotelPeloVooSemQuarto(filtro: { desde: string; eventoId?: string }): Promise<{ eventoId: string; pessoas: number }[]>;
   /** Pessoas ativas do cadastro de staff, por nome: quem pode receber um pedido de voo. */
   staffAtivoPorNome(): Promise<{ pessoaId: string; nome: string }[]>;
+  /** As mesmas pessoas, com a cidade e a UF do cadastro delas: o pedido de voo sugere de onde a pessoa sai. */
+  staffAtivoComCidade(): Promise<{ pessoaId: string; nome: string; cidade: string | null; uf: string | null }[]>;
   temPedidoDeVooAtivo(eventoId: string): Promise<boolean>;
   /** `aAprovar`: só compras registradas, com valor, que o time ainda não aprovou para pagamento (de qualquer data). */
   pedidos(filtro: { desde?: string; eventoId?: string; tipo?: TipoDoPedido; referencia?: string; situacoes?: SituacaoDoPedido[]; aAprovar?: boolean }): Promise<PedidoDaSdc[]>;
@@ -141,6 +147,8 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
       .select({
         pedidoId: trechoVoo.pedidoId,
         sentido: trechoVoo.sentido,
+        origemCidade: trechoVoo.origemCidade,
+        destinoCidade: trechoVoo.destinoCidade,
         origemIata: trechoVoo.origemIata,
         destinoIata: trechoVoo.destinoIata,
         dataDesejada: trechoVoo.dataDesejada,
@@ -251,6 +259,15 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
     async staffAtivoPorNome() {
       return executor
         .select({ pessoaId: pessoa.id, nome: nomeDaPessoa })
+        .from(pessoa)
+        .innerJoin(pessoaEvento, eq(pessoaEvento.pessoaId, pessoa.id))
+        .where(and(eq(pessoa.ativo, true), isNull(pessoa.deletedAt)))
+        .orderBy(asc(nomeDaPessoa));
+    },
+
+    async staffAtivoComCidade() {
+      return executor
+        .select({ pessoaId: pessoa.id, nome: nomeDaPessoa, cidade: pessoaEvento.cidade, uf: pessoaEvento.uf })
         .from(pessoa)
         .innerJoin(pessoaEvento, eq(pessoaEvento.pessoaId, pessoa.id))
         .where(and(eq(pessoa.ativo, true), isNull(pessoa.deletedAt)))
@@ -433,6 +450,9 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
       await executor.delete(trechoVoo).where(and(eq(trechoVoo.pedidoId, pedidoId), notInArray(trechoVoo.sentido, sentidos)));
       for (const trecho of trechos) {
         const desejado = {
+          origemCidade: trecho.origemCidade,
+          destinoCidade: trecho.destinoCidade,
+          // Quem decide o que fica de aeroporto em cada ponta é o serviço (nulo = nenhum).
           origemIata: trecho.origemIata,
           destinoIata: trecho.destinoIata,
           dataDesejada: trecho.dataDesejada,
@@ -465,12 +485,18 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
         .where(eq(pedidoSdc.id, pedidoId))
         .for("update");
       if (!linha) return null;
-      const sentidos = await executor.select({ sentido: trechoVoo.sentido }).from(trechoVoo).where(eq(trechoVoo.pedidoId, pedidoId));
+      const trechos = (
+        await executor
+          .select({ sentido: trechoVoo.sentido, origemCidade: trechoVoo.origemCidade, destinoCidade: trechoVoo.destinoCidade, origemIata: trechoVoo.origemIata, destinoIata: trechoVoo.destinoIata })
+          .from(trechoVoo)
+          .where(eq(trechoVoo.pedidoId, pedidoId))
+      ).map((trecho) => ({ ...trecho, sentido: trecho.sentido as Sentido }));
       return {
         ...linha,
         tipo: linha.tipo as TipoDoPedido,
         situacao: linha.situacao as SituacaoDoPedido,
-        sentidos: sentidos.map((trecho) => trecho.sentido as Sentido),
+        sentidos: trechos.map((trecho) => trecho.sentido),
+        trechos,
       };
     },
 
@@ -546,6 +572,8 @@ export function criarRepositorioPedidos(executor: Executor): RepositorioPedidos 
             localizador: trecho.localizador,
             partidaEm: trecho.partidaEm,
             chegadaEm: trecho.chegadaEm,
+            origemIata: trecho.origemIata,
+            destinoIata: trecho.destinoIata,
             // Ausente = quem registra é a SDC: o link do time fica como estava.
             ...(trecho.cartaoEmbarqueUrl !== undefined ? { cartaoEmbarqueUrl: trecho.cartaoEmbarqueUrl } : {}),
             atualizadoEm: instante,

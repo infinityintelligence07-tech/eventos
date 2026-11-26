@@ -186,6 +186,8 @@ export function criarRepositorioComunicacao(executor: Executor): RepositorioComu
           companhia: trechoVoo.companhia,
           numeroVoo: trechoVoo.numeroVoo,
           localizador: trechoVoo.localizador,
+          origemCidade: trechoVoo.origemCidade,
+          destinoCidade: trechoVoo.destinoCidade,
           origemIata: trechoVoo.origemIata,
           destinoIata: trechoVoo.destinoIata,
           partidaEm: trechoVoo.partidaEm,

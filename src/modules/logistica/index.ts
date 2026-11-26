@@ -17,9 +17,15 @@ export {
 } from "./domain/janela";
 export { agruparPorMesEEvento, type GrupoDoMes, rotuloDoMes, rotuloDoTrajeto, type Trajeto, trajetoDosTrechos } from "./domain/planilha-de-voos";
 export {
+  aeroportosDoTrecho,
   aguardandoSdc,
+  cidadeComUf,
+  cidadesDoTrecho,
   pedidoAtivo,
+  type PontasDoTrecho,
   type PreferenciaDeHorario,
+  rotaDoTrecho,
+  rotaPorExtenso,
   rotuloDaPreferencia,
   rotuloDaSituacaoDoVoo,
   rotuloDoSentido,

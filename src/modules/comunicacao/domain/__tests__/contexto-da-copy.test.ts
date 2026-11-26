@@ -29,7 +29,8 @@ const contexto: ContextoDaCopy = {
     colegas: ["ANA PAULA"],
   },
   voos: {
-    ida: { companhia: "AZUL", numeroVoo: "AD4120", localizador: "KXQ7PZ", origemIata: "GRU", destinoIata: "MAO", partidaEm: new Date("2026-12-11T11:10:00Z") },
+    // Pedido antigo: só os aeroportos, sem cidade.
+    ida: { companhia: "AZUL", numeroVoo: "AD4120", localizador: "KXQ7PZ", origemCidade: null, destinoCidade: null, origemIata: "GRU", destinoIata: "MAO", partidaEm: new Date("2026-12-11T11:10:00Z") },
     volta: null,
   },
   linkCustos: "https://exemplo.test/custos",
@@ -85,6 +86,11 @@ describe("dadosDaCopy", () => {
     expect(descreverTrecho({ ...contexto.voos.ida!, numeroVoo: null })).toBeNull();
     expect(descreverTrecho({ ...contexto.voos.ida!, partidaEm: null })).toBeNull();
     expect(descreverTrecho(null)).toBeNull();
+    // Pedido por cidade (0020): sem o aeroporto vai a cidade; quando a SDC informa o aeroporto, é ele que aparece.
+    const porCidade = { ...contexto.voos.ida!, origemCidade: "São Paulo (SP)", destinoCidade: "Manaus (AM)", origemIata: null, destinoIata: null };
+    expect(descreverTrecho(porCidade)).toBe("AD4120 (AZUL) · 11/12 às 08:10 · São Paulo (SP) → Manaus (AM) · localizador KXQ7PZ");
+    expect(descreverTrecho({ ...porCidade, origemIata: "GRU", destinoIata: "MAO" })).toBe("AD4120 (AZUL) · 11/12 às 08:10 · GRU → MAO · localizador KXQ7PZ");
+    expect(descreverTrecho({ ...porCidade, destinoIata: "MAO" })).toBe("AD4120 (AZUL) · 11/12 às 08:10 · São Paulo (SP) → MAO · localizador KXQ7PZ");
     const faltando = gerarCopy("{{voo.ida}} / {{voo.volta}}", dadosDaCopy(contexto, tarde)).faltando;
     expect(faltando).toEqual(["voo.volta"]);
   });

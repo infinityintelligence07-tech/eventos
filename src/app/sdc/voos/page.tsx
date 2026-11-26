@@ -8,7 +8,20 @@ import { dataCurta, dinheiro, hora } from "@/app/(time)/_componentes/ui/formatos
 import { paraCampoDeDataEHora, paraCampoDeDinheiro } from "@/app/(time)/logistica/_componentes/situacoes";
 import { carregarVoosDaSdc } from "@/fluxos/sdc";
 import { AtalhosDoRecorte } from "@/app/(time)/logistica/_componentes/recorte";
-import { COMPANHIAS_DA_SDC, companhiaNoFormulario, dataEmSaoPaulo, OUTRA_COMPANHIA, recorteDaLogistica, rotuloDaPreferencia, rotuloDoMes, rotuloDoTrajeto, trajetoDosTrechos, type TrechoParaASdc } from "@/modules/logistica";
+import {
+  aeroportosDoTrecho,
+  cidadesDoTrecho,
+  COMPANHIAS_DA_SDC,
+  companhiaNoFormulario,
+  dataEmSaoPaulo,
+  OUTRA_COMPANHIA,
+  recorteDaLogistica,
+  rotuloDaPreferencia,
+  rotuloDoMes,
+  rotuloDoTrajeto,
+  trajetoDosTrechos,
+  type TrechoParaASdc,
+} from "@/modules/logistica";
 
 import { enderecoDaSdc, FiltroDaSdc, Linha, ondeE, SituacaoDoPedidoParaASdc, situacaoDoFiltroDaSdc, TituloDoEvento, TotaisDaSdc } from "../_componentes/comuns";
 import { BotaoRegistrarCompraDeVoo } from "../_componentes/formularios";
@@ -23,16 +36,20 @@ const COMPANHIAS = [...COMPANHIAS_DA_SDC.map((nome) => ({ valor: nome, rotulo: n
 
 const sentido = (trecho: TrechoParaASdc) => (trecho.sentido === "IDA" ? "Ida" : "Volta");
 
-/** O que o time pediu: aeroportos, data e preferência de horário. */
+/**
+ * O que o time pediu: de que cidade para que cidade, a data e a preferência de horário. O aeroporto quem escolhe é a
+ * SDC. Pedido antigo (anterior à mudança) não tem cidade: aparece com os aeroportos que o time informou.
+ */
 function pedido(trecho: TrechoParaASdc): string {
-  return `${trecho.origemIata} → ${trecho.destinoIata} em ${dataCurta(trecho.dataDesejada)}${trecho.preferenciaHorario ? ` (${rotuloDaPreferencia(trecho.preferenciaHorario)})` : ""}`;
+  return `${cidadesDoTrecho(trecho) ?? aeroportosDoTrecho(trecho) ?? "—"} em ${dataCurta(trecho.dataDesejada)}${trecho.preferenciaHorario ? ` (${rotuloDaPreferencia(trecho.preferenciaHorario)})` : ""}`;
 }
 
-/** O que a SDC comprou, quando já registrou. */
+/** O que a SDC comprou, quando já registrou (com os aeroportos que ela informou, se o pedido veio por cidade). */
 function compra(trecho: TrechoParaASdc): string | null {
   if (!trecho.companhia) return null;
   const horario = trecho.partidaEm && trecho.chegadaEm ? ` · ${dataCurta(trecho.partidaEm)} ${hora(trecho.partidaEm)}–${hora(trecho.chegadaEm)}` : "";
-  return `${[trecho.companhia, trecho.numeroVoo].filter(Boolean).join(" ")}${horario}${trecho.localizador ? ` · reserva ${trecho.localizador}` : ""}`;
+  const aeroportos = cidadesDoTrecho(trecho) ? aeroportosDoTrecho(trecho) : null;
+  return `${[trecho.companhia, trecho.numeroVoo].filter(Boolean).join(" ")}${aeroportos ? ` · ${aeroportos}` : ""}${horario}${trecho.localizador ? ` · reserva ${trecho.localizador}` : ""}`;
 }
 
 /** Voos pedidos pelo time, como na planilha: por mês e evento. A SDC registra a compra e o valor de cada um. */
@@ -102,6 +119,8 @@ export default async function PaginaVoosDaSdc({ searchParams }: { searchParams: 
                                   localizador: trecho.localizador ?? "",
                                   partidaEm: paraCampoDeDataEHora(trecho.partidaEm),
                                   chegadaEm: paraCampoDeDataEHora(trecho.chegadaEm),
+                                  origemIata: trecho.origemIata ?? "",
+                                  destinoIata: trecho.destinoIata ?? "",
                                 }))}
                               />
                             )

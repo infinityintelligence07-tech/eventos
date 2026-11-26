@@ -8,6 +8,10 @@ export type ItemDoInicio = {
   quantidade: number;
   href: string;
   exemplos: { rotulo: string; detalhe?: string; href: string }[];
+  /** Só alimenta um número do topo; não vira cartão. */
+  semCartao?: boolean;
+  /** Os exemplos já são a lista inteira (as situações, com os totais): o cartão não mostra "e mais N". */
+  listaCompleta?: boolean;
 };
 
 export const EXEMPLOS_NO_INICIO = 6;

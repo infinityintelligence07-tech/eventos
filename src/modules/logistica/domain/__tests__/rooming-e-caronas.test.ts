@@ -177,12 +177,12 @@ describe("schemas da logística", () => {
   });
 
   const convocacaoId = "7e570000-0000-7000-8000-000000000002";
-  const ida = { sentido: "IDA", origemIata: "poa", destinoIata: "MAO", dataDesejada: "2026-11-05" };
+  const ida = { sentido: "IDA", origemCidade: "  Porto  Alegre (RS) ", destinoCidade: "Manaus (AM)", dataDesejada: "2026-11-05" };
 
-  it("pedido de voo: IATA em maiúsculas, sem sentido repetido, volta depois da ida", () => {
+  it("pedido de voo: cidades sem espaço sobrando, sem sentido repetido, volta depois da ida", () => {
     // O pedido é de um evento e de uma pessoa do staff (a convocação não entra: o voo vem antes da escala).
     const pedido = { eventoId: convocacaoId, pessoaId: convocacaoId };
-    expect(registrarPedidoDeVooSchema.parse({ ...pedido, trechos: [ida] }).trechos[0]?.origemIata).toBe("POA");
+    expect(registrarPedidoDeVooSchema.parse({ ...pedido, trechos: [ida] }).trechos[0]?.origemCidade).toBe("Porto Alegre (RS)");
     expect(registrarPedidoDeVooSchema.safeParse({ convocacaoId, trechos: [ida] }).success).toBe(false);
     expect(registrarPedidoDeVooSchema.parse({ ...pedido, trechos: [ida] }).outraCompra).toBeUndefined();
     expect(registrarPedidoDeVooSchema.parse({ ...pedido, trechos: [ida], outraCompra: "on" }).outraCompra).toBe(true);
@@ -190,10 +190,10 @@ describe("schemas da logística", () => {
     expect(
       registrarPedidoDeVooSchema.safeParse({
         ...pedido,
-        trechos: [ida, { sentido: "VOLTA", origemIata: "MAO", destinoIata: "POA", dataDesejada: "2026-11-04" }],
+        trechos: [ida, { sentido: "VOLTA", origemCidade: "Manaus (AM)", destinoCidade: "Porto Alegre (RS)", dataDesejada: "2026-11-04" }],
       }).success,
     ).toBe(false);
-    expect(registrarPedidoDeVooSchema.safeParse({ ...pedido, trechos: [{ ...ida, destinoIata: "POA" }] }).success).toBe(false);
+    expect(registrarPedidoDeVooSchema.safeParse({ ...pedido, trechos: [{ ...ida, destinoCidade: "porto alegre (rs)" }] }).success).toBe(false);
   });
 
   it("retorno da hospedagem: o hotel que a SDC reservou (cadastrado ou novo), reserva, valor e forma de pagamento", () => {

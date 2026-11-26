@@ -281,9 +281,11 @@ export async function semearCenarios(banco: Banco, pessoas: Pessoa[], aleatorio:
 }
 
 // Pedidos à SDC: EMITIDO, ALTERADO, CANCELADO + PEDIDO de novo, e uma pessoa "a pedir" (VOO sem pedido).
+// O time pede por cidade e a SDC informa o aeroporto na compra (0020): o emitido tem as duas coisas, o que ainda
+// aguarda a SDC só tem as cidades, e o alterado é um pedido antigo, só com os aeroportos.
 // Hospedagem no hotel (com pedido EMITIDO) e no apartamento da IAM (sem pedido), com quartos e ocupantes.
 async function semearLogistica(db: Executor, evento: EventoCenario, voando: Convocada[], registrar: Registrar): Promise<void> {
-  const destino = CIDADES[evento.polo]?.iata ?? "VCP";
+  const destino = { cidade: `${evento.cidade} (${evento.uf})`, iata: CIDADES[evento.polo]?.iata ?? "VCP" };
   const ida = somarDias(evento.inicio, -1);
   const volta = evento.fim;
 
@@ -307,17 +309,22 @@ async function semearLogistica(db: Executor, evento: EventoCenario, voando: Conv
       ],
     );
     const pedidoId = r.rows[0]?.id as string;
-    const origem = CIDADES[c.pessoa.poloCodigo]?.iata ?? "GRU";
+    const polo = CIDADES[c.pessoa.poloCodigo];
+    const origem = { cidade: polo ? `${polo.nome} (${polo.uf})` : "São Paulo (SP)", iata: polo?.iata ?? "GRU" };
+    // Pedido antigo (ALTERADO): só aeroporto. Os demais: cidades, e o aeroporto só depois da compra.
+    const antigo = situacao === "ALTERADO";
+    const comAeroporto = antigo || Boolean(emissao);
     for (const [sentido, de, para, data, saida, chegada, numero] of [
       ["IDA", origem, destino, ida, "08:10", "09:55", emissao?.voos[0]],
       ["VOLTA", destino, origem, volta, "19:20", "21:05", emissao?.voos[1]],
     ] as const) {
       await db.query(
         `INSERT INTO eventos.trecho_voo
-           (pedido_id, sentido, origem_iata, destino_iata, data_desejada, preferencia_horario, companhia, numero_voo, localizador, partida_em, chegada_em)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+           (pedido_id, sentido, origem_cidade, destino_cidade, origem_iata, destino_iata, data_desejada, preferencia_horario, companhia, numero_voo, localizador, partida_em, chegada_em)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
         [
-          pedidoId, sentido, de, para, data, sentido === "IDA" ? "MANHA" : "NOITE",
+          pedidoId, sentido, antigo ? null : de.cidade, antigo ? null : para.cidade, comAeroporto ? de.iata : null, comAeroporto ? para.iata : null,
+          data, sentido === "IDA" ? "MANHA" : "NOITE",
           emissao?.companhia ?? null, numero ?? null, emissao?.localizador ?? null,
           emissao ? `${data}T${saida}:00-03:00` : null, emissao ? `${data}T${chegada}:00-03:00` : null,
         ],

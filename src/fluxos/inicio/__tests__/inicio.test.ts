@@ -32,13 +32,15 @@ describe("Início", () => {
   it("cartões na ordem da doc 08; chave desconhecida vai para o fim", () => {
     const { cartoes, tudoEmDia } = montarInicio([
       { origem: "custos", nome: "Custos", ok: true, itens: [item("custos-para-auditar", 0), item("chave-nova", 0)] },
-      { origem: "escalas", nome: "Escalas", ok: true, itens: [item("escalas-a-montar", 0), item("escalas-aguardando-aprovacao", 0)] },
+      { origem: "escalas", nome: "Escalas", ok: true, itens: [item("escalas-a-montar", 0), { ...item("escalas-aguardando-aprovacao", 0), semCartao: true }, item("escalas-a-montar-masterclass", 0), item("escalas-situacao", 0)] },
       { origem: "comunicacao", nome: "Comunicação", ok: true, itens: [item("comunicacao-falta-dado", 0)] },
     ]);
     expect(cartoes.map((cartao) => (cartao.tipo === "item" ? cartao.item.chave : cartao.origem))).toEqual([
       "comunicacao-falta-dado",
-      "escalas-aguardando-aprovacao",
+      // "Aguardando aprovação" só alimenta o número do topo: o cartão é o "Escalas" (escalas-situacao).
+      "escalas-situacao",
       "escalas-a-montar",
+      "escalas-a-montar-masterclass",
       "custos-para-auditar",
       "chave-nova",
     ]);

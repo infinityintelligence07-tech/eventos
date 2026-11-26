@@ -77,7 +77,7 @@ describe("data real da solicitação e da compra", () => {
 
   it("formulários: as datas são opcionais e validadas; a SDC informa só a da compra", () => {
     const id = "7e570000-0000-7000-8000-000000000002";
-    const voo = { eventoId: id, pessoaId: id, trechos: [{ sentido: "IDA", origemIata: "POA", destinoIata: "MAO", dataDesejada: "2026-11-05" }] };
+    const voo = { eventoId: id, pessoaId: id, trechos: [{ sentido: "IDA", origemCidade: "Porto Alegre (RS)", destinoCidade: "Manaus (AM)", dataDesejada: "2026-11-05" }] };
     const semNada = registrarPedidoDeVooSchema.parse(voo);
     expect([semNada.eventoVoltaId, semNada.dataSolicitacao]).toEqual([undefined, undefined]);
     expect(registrarPedidoDeVooSchema.parse({ ...voo, eventoVoltaId: id, dataSolicitacao: "2026-08-03" })).toMatchObject({ eventoVoltaId: id, dataSolicitacao: "2026-08-03" });

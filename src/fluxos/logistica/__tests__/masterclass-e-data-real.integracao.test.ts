@@ -68,8 +68,9 @@ describe.skipIf(!TEST_DATABASE_URL)("Masterclass: voo em turnê, hospedagem da p
   const doBanco = (pedidoId: string) =>
     um(`select evento_id, evento_volta_id, data_solicitacao::text, data_compra::text, forma_pagamento, solicitado_em, emitido_em, situacao from eventos.pedido_sdc where id = $1`, [pedidoId]);
 
-  const ida = { sentido: "IDA" as const, origemIata: "GRU", destinoIata: "MAO", dataDesejada: "2027-03-09" };
-  const volta = { sentido: "VOLTA" as const, origemIata: "MCP", destinoIata: "GRU", dataDesejada: "2027-03-14" };
+  // Na turnê a volta sai da cidade da última palestra (Macapá), não da cidade onde a ida chegou (Manaus).
+  const ida = { sentido: "IDA" as const, origemCidade: "São Paulo (SP)", destinoCidade: "Manaus (AM)", dataDesejada: "2027-03-09" };
+  const volta = { sentido: "VOLTA" as const, origemCidade: "Macapá (AP)", destinoCidade: "São Paulo (SP)", dataDesejada: "2027-03-14" };
   const comprados = [
     { sentido: "IDA" as const, companhia: "Azul", numeroVoo: "AD4120", localizador: "KXQ7PZ", partidaEm: "2027-03-09T08:10", chegadaEm: "2027-03-09T11:45" },
     { sentido: "VOLTA" as const, companhia: "LATAM", numeroVoo: "LA3301", localizador: "KXQ7PZ", partidaEm: "2027-03-14T19:20", chegadaEm: "2027-03-14T23:05" },
@@ -99,11 +100,11 @@ describe.skipIf(!TEST_DATABASE_URL)("Masterclass: voo em turnê, hospedagem da p
 
     // Uma palestra só: a mesma na ida e na volta (ou nenhuma na volta) não grava evento da volta.
     const bia = await staff("Bia Uma Palestra");
-    const simples = await registrarPedidoDeVoo({ eventoId: palestras.belem, eventoVoltaId: palestras.belem, pessoaId: bia, trechos: [{ ...ida, destinoIata: "BEL" }] }, ator(), agora);
+    const simples = await registrarPedidoDeVoo({ eventoId: palestras.belem, eventoVoltaId: palestras.belem, pessoaId: bia, trechos: [{ ...ida, destinoCidade: "Belém (PA)" }] }, ator(), agora);
     expect(await doBanco(simples.id)).toMatchObject({ evento_id: palestras.belem, evento_volta_id: null });
     // E um voo de evento comum, para o outro recorte.
     const caio = await staff("Caio Do Evento");
-    const doEvento = await registrarPedidoDeVoo({ eventoId: evento, pessoaId: caio, trechos: [{ ...ida, destinoIata: "POA" }] }, ator(), agora);
+    const doEvento = await registrarPedidoDeVoo({ eventoId: evento, pessoaId: caio, trechos: [{ ...ida, destinoCidade: "Porto Alegre (RS)" }] }, ator(), agora);
 
     const masterclass = await carregarVoos({ recorte: "MASTERCLASS" }, agora);
     expect(masterclass.recorte).toBe("MASTERCLASS");
@@ -163,8 +164,8 @@ describe.skipIf(!TEST_DATABASE_URL)("Masterclass: voo em turnê, hospedagem da p
   it("data real: a solicitação e a compra levam o dia em que aconteceram; o lançamento continua com a hora de verdade", async () => {
     const eli = await staff("Eli Compra Antiga");
     // Futuro não; passado sim (pedido antigo, da planilha).
-    await expect(registrarPedidoDeVoo({ eventoId: evento, pessoaId: eli, trechos: [{ ...ida, destinoIata: "POA" }], dataSolicitacao: "2026-10-29" }, ator(), agora)).rejects.toThrow(/data da solicitação não pode ser no futuro/);
-    const pedido = await registrarPedidoDeVoo({ eventoId: evento, pessoaId: eli, trechos: [{ ...ida, destinoIata: "POA" }], dataSolicitacao: "2026-08-03" }, ator(), agora);
+    await expect(registrarPedidoDeVoo({ eventoId: evento, pessoaId: eli, trechos: [{ ...ida, destinoCidade: "Porto Alegre (RS)" }], dataSolicitacao: "2026-10-29" }, ator(), agora)).rejects.toThrow(/data da solicitação não pode ser no futuro/);
+    const pedido = await registrarPedidoDeVoo({ eventoId: evento, pessoaId: eli, trechos: [{ ...ida, destinoCidade: "Porto Alegre (RS)" }], dataSolicitacao: "2026-08-03" }, ator(), agora);
     expect(await doBanco(pedido.id)).toMatchObject({ data_solicitacao: "2026-08-03", data_compra: null, solicitado_em: agora });
     expect(await um(`select dados->>'dataSolicitacao' as data from eventos.registro_acao where entidade_id = $1 and acao = 'PEDIDO_REGISTRADO'`, [pedido.id])).toEqual({ data: "2026-08-03" });
 

@@ -14,7 +14,7 @@ import { SemPermissaoNaAcao } from "../../../../_componentes/ui/permissao";
 import { aprovarEscala, devolverEscala, enviarParaAprovacao, reabrirEscala } from "../acoes";
 
 export type SituacaoDaBarra =
-  | { tipo: "MONTANDO"; statusEsperado: "RASCUNHO" | "DEVOLVIDA"; pode: boolean; motivos: string[]; vagasAbertas: number }
+  | { tipo: "MONTANDO"; statusEsperado: "RASCUNHO" | "DEVOLVIDA"; pode: boolean; motivos: string[]; vagasAbertas: number; /** Masterclass: conclui direto. */ semAprovacao: boolean }
   | { tipo: "COM_A_LIDER"; podeAprovar: boolean }
   | { tipo: "APROVADA"; statusEsperado: "APROVADA" | "COMUNICADA"; podeReabrir: boolean }
   | { tipo: "SO_LEITURA" };
@@ -22,7 +22,7 @@ export type SituacaoDaBarra =
 function Enviar({ eventoId, situacao }: { eventoId: string; situacao: Extract<SituacaoDaBarra, { tipo: "MONTANDO" }> }) {
   const [confirmando, setConfirmando] = useState(false);
   const { despachar, pendente } = useAcao(enviarParaAprovacao, { aoConcluir: () => setConfirmando(false), toastDeCampo: true });
-  const rotulo = situacao.statusEsperado === "DEVOLVIDA" ? "Reenviar para aprovação" : "Enviar para aprovação";
+  const rotulo = situacao.semAprovacao ? "Concluir escala" : situacao.statusEsperado === "DEVOLVIDA" ? "Reenviar para aprovação" : "Enviar para aprovação";
   const campos = (
     <>
       <input type="hidden" name="eventoId" value={eventoId} />
@@ -47,9 +47,9 @@ function Enviar({ eventoId, situacao }: { eventoId: string; situacao: Extract<Si
         <Confirmacao
           aberto={confirmando}
           aoFechar={() => setConfirmando(false)}
-          titulo={`Enviar com ${abertas}?`}
-          descricao="A líder vai ver quais funções estão incompletas."
-          rotuloConfirmar="Enviar mesmo assim"
+          titulo={situacao.semAprovacao ? `Concluir com ${abertas}?` : `Enviar com ${abertas}?`}
+          descricao={situacao.semAprovacao ? "A escala fica pronta para comunicar mesmo com função incompleta. Dá para reabrir depois." : "A líder vai ver quais funções estão incompletas."}
+          rotuloConfirmar={situacao.semAprovacao ? "Concluir mesmo assim" : "Enviar mesmo assim"}
           rotuloCancelar="Continuar montando"
           carregando={pendente}
           acao={despachar}
@@ -62,7 +62,7 @@ function Enviar({ eventoId, situacao }: { eventoId: string; situacao: Extract<Si
   return (
     <form action={despachar}>
       {campos}
-      <Botao type="submit" variante="primario" icone={<Send size={18} aria-hidden />} carregando={pendente} textoCarregando="Enviando…">
+      <Botao type="submit" variante="primario" icone={<Send size={18} aria-hidden />} carregando={pendente} textoCarregando={situacao.semAprovacao ? "Concluindo…" : "Enviando…"}>
         {rotulo}
       </Botao>
     </form>

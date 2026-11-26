@@ -15,7 +15,6 @@ const quantidadeDeVagas = z.coerce
   .int("Use um número inteiro.")
   .min(1, "Informe pelo menos 1 vaga.")
   .max(500, "Use até 500 vagas.");
-const data = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida.");
 
 export const confirmarVagasSchema = z.object({
   eventoId: id,
@@ -25,7 +24,8 @@ export const confirmarVagasSchema = z.object({
 /** Muda o número sem confirmar (desfaz a confirmação, se havia). */
 export const alterarVagasSchema = z.object({ eventoId: id, escalaId: id, quantidade: quantidadeDeVagas });
 
-export const adicionarVagaManualSchema = z.object({ eventoId: id, funcaoId: id, data, quantidade: quantidadeDeVagas });
+// Sem "dia" (Vitor, 26/11/2026): a função acrescentada vale para o evento inteiro, com o mesmo número de vagas.
+export const adicionarVagaManualSchema = z.object({ eventoId: id, funcaoId: id, quantidade: quantidadeDeVagas });
 
 /** Função digitada da regra (Staff do Confronto): cria a linha já com o número confirmado. */
 export const definirVagaDigitadaSchema = z.object({ eventoId: id, funcao: z.string().regex(/^[A-Z0-9_]{2,30}$/, "Função inválida."), quantidade: quantidadeDeVagas });

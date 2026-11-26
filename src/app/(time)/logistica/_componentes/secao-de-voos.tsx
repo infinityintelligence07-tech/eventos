@@ -3,10 +3,14 @@ import Link from "next/link";
 
 import type { LinhaDeVoo, PedidoCarregado, VoosCarregados } from "@/fluxos/logistica";
 import {
+  aeroportosDoTrecho,
   aguardandoSdc,
+  cidadeComUf,
+  cidadesDoTrecho,
   type EventoDaLogistica,
   localDaPalestra,
   type PedidoDaSdc,
+  rotaDoTrecho,
   rotuloDaPreferencia,
   rotuloDoMes,
   rotuloDoSentido,
@@ -72,7 +76,10 @@ const rotuloNoSeletor = (evento: EventoDaLogistica) => (evento.masterclass ? rot
 
 const rotuloDoEvento = (evento: EventoDaLogistica) => `${periodo(evento.dataInicio, evento.dataFim)} · ${evento.codigo ?? evento.nome}${evento.cidade && evento.uf ? ` · ${evento.cidade} (${evento.uf})` : ""}`;
 
-/** Ida ou volta numa célula: aeroportos em cima; embaixo a data e o horário (os do voo emitido, ou o que foi pedido). */
+/**
+ * Ida ou volta numa célula. Em cima, de onde para onde: as cidades que o time pediu e, quando a SDC já informou (ou no
+ * pedido antigo), os aeroportos. Embaixo a data e o horário (os do voo emitido, ou o que foi pedido).
+ */
 function CelulaDoSentido({ trechos, sentido }: { trechos: TrechoDoPedido[]; sentido: Sentido }) {
   const trecho = trechos.find((item) => item.sentido === sentido);
   if (!trecho) return <CelulaDaTabela>{SEM_DADO}</CelulaDaTabela>;
@@ -81,9 +88,16 @@ function CelulaDoSentido({ trechos, sentido }: { trechos: TrechoDoPedido[]; sent
     : `${dataCurta(trecho.dataDesejada)}${trecho.preferenciaHorario ? ` · ${rotuloDaPreferencia(trecho.preferenciaHorario)}` : ""}`;
   return (
     <CelulaDaTabela>
-      <span className="block whitespace-nowrap [font-family:var(--ds-font-mono)] text-[13px]">
-        {trecho.origemIata} → {trecho.destinoIata}
-      </span>
+      {trecho.origemIata && trecho.destinoIata ? (
+        // Os dois aeroportos: uma linha em mono, como na planilha.
+        <span className="block whitespace-nowrap [font-family:var(--ds-font-mono)] text-[13px]">{rotaDoTrecho(trecho)}</span>
+      ) : (
+        // Ainda com cidade (em uma ponta ou nas duas): nome de cidade é comprido, então a origem e o destino vão um embaixo do outro.
+        <>
+          <span className="block whitespace-nowrap text-[13px]">{trecho.origemIata ?? trecho.origemCidade ?? "—"} →</span>
+          <span className="block whitespace-nowrap text-[13px]">{trecho.destinoIata ?? trecho.destinoCidade ?? "—"}</span>
+        </>
+      )}
       <span className="block whitespace-nowrap text-[12px] tabular-nums text-[var(--ds-label-2)]">{quando}</span>
     </CelulaDaTabela>
   );
@@ -97,12 +111,22 @@ function QuemRegistrou({ pedido }: { pedido: PedidoDaSdc }) {
 
 const distintos = (valores: (string | null)[]) => [...new Set(valores.filter((valor): valor is string => Boolean(valor)))];
 
-function trechosIniciais(trechos: TrechoDoPedido[]): TrechosIniciais {
-  const ida = trechos.find((trecho) => trecho.sentido === "IDA");
-  const volta = trechos.find((trecho) => trecho.sentido === "VOLTA");
+/**
+ * As cidades do "Alterar pedido": as que o pedido já tem. No pedido antigo (só aeroporto) entram as sugestões, como no
+ * pedido novo: a cidade do cadastro da pessoa e a do evento (na turnê, a volta sai da cidade da última palestra).
+ */
+function trechosIniciais(pedido: PedidoDaSdc, cidadeDaPessoa: string | null): TrechosIniciais {
+  const ida = pedido.trechos.find((trecho) => trecho.sentido === "IDA");
+  const volta = pedido.trechos.find((trecho) => trecho.sentido === "VOLTA");
+  const cidadeDoEvento = cidadeComUf(pedido.evento.cidade, pedido.evento.uf) ?? "";
+  const cidadeDaVolta = pedido.eventoDaVolta ? (cidadeComUf(pedido.eventoDaVolta.cidade, pedido.eventoDaVolta.uf) ?? "") : null;
+  const destinoCidade = ida ? (ida.destinoCidade ?? cidadeDoEvento) : (volta?.origemCidade ?? cidadeDaVolta ?? cidadeDoEvento);
+  // A volta sai de outra cidade (turnê): a gravada no pedido ou, no pedido antigo, a da última palestra.
+  const voltaDe = ida && volta ? (volta.origemCidade ?? cidadeDaVolta) : ida ? cidadeDaVolta : null;
   return {
-    origemIata: ida?.origemIata ?? volta?.destinoIata ?? "",
-    destinoIata: ida?.destinoIata ?? volta?.origemIata ?? "",
+    origemCidade: ida?.origemCidade ?? volta?.destinoCidade ?? cidadeDaPessoa ?? "",
+    destinoCidade,
+    voltaDeCidade: voltaDe !== null && (pedido.eventoDaVolta !== null || voltaDe !== destinoCidade) ? voltaDe : null,
     ida: ida ? { data: ida.dataDesejada, preferencia: ida.preferenciaHorario ?? "" } : null,
     volta: volta ? { data: volta.dataDesejada, preferencia: volta.preferenciaHorario ?? "" } : null,
   };
@@ -408,12 +432,21 @@ function DetalheDoPedido({ pedido, registrado, comHotel = false, escrita = false
       {pedido.trechos.map((trecho) => (
         <section key={trecho.sentido} aria-label={`Trecho de ${rotuloDoSentido(trecho.sentido)}`} className="rounded-[var(--ds-radius-md)] border border-[var(--ds-separator)] p-4">
           <h3 className="text-[15px] font-semibold">
-            {trecho.sentido === "IDA" ? "Ida" : "Volta"}: {trecho.origemIata} → {trecho.destinoIata}
+            {trecho.sentido === "IDA" ? "Ida" : "Volta"}: {cidadesDoTrecho(trecho) ?? aeroportosDoTrecho(trecho) ?? "—"}
           </h3>
           <p className="mt-1 text-[13px] text-[var(--ds-label-2)]">
             Desejado em {dataCurta(trecho.dataDesejada)}
             {trecho.preferenciaHorario ? `, ${rotuloDaPreferencia(trecho.preferenciaHorario)}` : ""}
           </p>
+          {/* Com as cidades no título, os aeroportos (quando a SDC já informou) vêm numa linha própria. */}
+          {cidadesDoTrecho(trecho) && aeroportosDoTrecho(trecho) && (
+            <p className="mt-1 text-[13px] text-[var(--ds-label-2)]">
+              Aeroportos: <span className="[font-family:var(--ds-font-mono)] text-[var(--ds-label)]">{aeroportosDoTrecho(trecho)}</span>
+            </p>
+          )}
+          {cidadesDoTrecho(trecho) && !aeroportosDoTrecho(trecho) && pedido.situacao !== "CANCELADO" && (
+            <p className="mt-1 text-[13px] text-[var(--ds-label-2)]">{aguardandoSdc(pedido.situacao) ? "Aeroporto a definir pela SDC." : "A SDC não informou o aeroporto."}</p>
+          )}
           <p className="mt-1">{textoDoVoo(trecho) ?? "Voo ainda não informado pela SDC."}</p>
           {trecho.cartaoEmbarqueUrl && (
             <a href={trecho.cartaoEmbarqueUrl} target="_blank" rel="noreferrer noopener" className="mt-1 inline-block text-[13px] font-medium text-[var(--ds-tint-text)] hover:underline">
@@ -426,7 +459,22 @@ function DetalheDoPedido({ pedido, registrado, comHotel = false, escrita = false
   );
 }
 
-function PainelDoPedido({ pedido, base, parametros, escrita, hoje }: { pedido: PedidoCarregado; base: string; parametros: ParametrosDeVoos; escrita: boolean; hoje: string }) {
+function PainelDoPedido({
+  pedido,
+  base,
+  parametros,
+  escrita,
+  hoje,
+  cidadeDaPessoa,
+}: {
+  pedido: PedidoCarregado;
+  base: string;
+  parametros: ParametrosDeVoos;
+  escrita: boolean;
+  hoje: string;
+  /** A cidade do cadastro do passageiro, para sugerir a origem ao alterar um pedido antigo (que não tem cidade). */
+  cidadeDaPessoa: string | null;
+}) {
   const fechar = enderecoCom(base, parametros, { ref: null, modo: null, registrado: null, hotel: null });
   const voltar = enderecoCom(base, parametros, { modo: null, registrado: null, hotel: null });
   const subtitulo = [pedido.pessoaNome ?? "Hospedagem", pedido.evento.codigo ?? pedido.evento.nome].join(" · ");
@@ -467,13 +515,15 @@ function PainelDoPedido({ pedido, base, parametros, escrita, hoje }: { pedido: P
           hoje={hoje}
           trechos={pedido.trechos.map((trecho) => ({
             sentido: trecho.sentido,
-            rotulo: `${trecho.sentido === "IDA" ? "Ida" : "Volta"}: ${trecho.origemIata} → ${trecho.destinoIata} em ${dataCurta(trecho.dataDesejada)}`,
+            rotulo: `${trecho.sentido === "IDA" ? "Ida" : "Volta"}: ${cidadesDoTrecho(trecho) ?? aeroportosDoTrecho(trecho) ?? "—"} em ${dataCurta(trecho.dataDesejada)}`,
             partidaSugerida: `${trecho.dataDesejada}T08:00`,
             companhia: trecho.companhia ?? "",
             numeroVoo: trecho.numeroVoo ?? "",
             localizador: trecho.localizador ?? "",
             partidaEm: paraCampoDeDataEHora(trecho.partidaEm),
             chegadaEm: paraCampoDeDataEHora(trecho.chegadaEm),
+            origemIata: trecho.origemIata ?? "",
+            destinoIata: trecho.destinoIata ?? "",
             cartaoEmbarqueUrl: trecho.cartaoEmbarqueUrl ?? "",
           }))}
         />
@@ -488,7 +538,7 @@ function PainelDoPedido({ pedido, base, parametros, escrita, hoje }: { pedido: P
           acao={alterarPedidoAcao}
           pedidoId={pedido.id}
           atualizadoEm={pedido.atualizadoEm}
-          inicial={trechosIniciais(pedido.trechos)}
+          inicial={trechosIniciais(pedido, cidadeDaPessoa)}
           observacaoTime={pedido.observacaoTime}
           aoConcluirIrPara={voltar}
         />
@@ -807,13 +857,29 @@ export function SecaoDeVoos({
             pessoaInicial={parametros.pessoa}
             recorteInicial={dados.recorte}
             hoje={dados.hoje}
-            eventos={eventosDoFormulario.map((evento) => ({ id: evento.id, rotulo: rotuloNoSeletor(evento), dataInicio: evento.dataInicio, dataFim: evento.dataFim, masterclass: evento.masterclass }))}
+            eventos={eventosDoFormulario.map((evento) => ({
+              id: evento.id,
+              rotulo: rotuloNoSeletor(evento),
+              dataInicio: evento.dataInicio,
+              dataFim: evento.dataFim,
+              masterclass: evento.masterclass,
+              cidade: cidadeComUf(evento.cidade, evento.uf) ?? "",
+            }))}
             pessoas={dados.staff}
             pedidosAtivos={dados.pedidosAtivos.map((item) => ({ ...item, trajeto: item.trajeto ? rotuloDoTrajeto(item.trajeto).toLowerCase() : null }))}
           />
         </PainelPelaUrl>
       )}
-      {parametros.ref && pedido && <PainelDoPedido pedido={pedido} base={base} parametros={parametros} escrita={escrita} hoje={dados.hoje} />}
+      {parametros.ref && pedido && (
+        <PainelDoPedido
+          pedido={pedido}
+          base={base}
+          parametros={parametros}
+          escrita={escrita}
+          hoje={dados.hoje}
+          cidadeDaPessoa={dados.staff.find((pessoa) => pessoa.pessoaId === pedido.pessoaId)?.cidade ?? null}
+        />
+      )}
       {parametros.ref && !pedido && (
         <PainelPelaUrl titulo="Pedido não encontrado" aoFecharIrPara={enderecoCom(base, parametros, { ref: null, modo: null })}>
           <Aviso tom="atencao">Não encontramos o pedido {parametros.ref}. Ele pode ter outra referência.</Aviso>

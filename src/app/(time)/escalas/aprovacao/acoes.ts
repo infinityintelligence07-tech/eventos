@@ -27,6 +27,6 @@ export async function devolverEscala(_estado: ResultadoAcao, form: FormData): Pr
   return executarAcao(form, devolverEscalaSchema, "escala.aprovar", async (dados, ator) => {
     const { codigo } = await fluxo.devolverEscala(dados, { ator, agora: new Date() });
     atualizarTelas(dados.eventoId);
-    return `Escala ${codigo ?? "do evento"} devolvida.`;
+    return `Escala ${codigo ?? "do evento"} não aprovada. Quem montou já pode ajustar.`;
   });
 }

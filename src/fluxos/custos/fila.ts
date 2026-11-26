@@ -4,8 +4,10 @@ import {
   alertasDoConsumo,
   criarRepositorioSolicitacoes,
   type DeslocamentoGravado,
+  dadosDoCustoReprovado,
   type DetalheDaSolicitacao,
   mensagemDeCustoAprovado,
+  MODELO_PADRAO_DE_CUSTO_REPROVADO,
   type NivelDeExcecao,
   type NumerosDaFila,
   ordenarParaAuditoria,
@@ -15,6 +17,7 @@ import {
   type SolicitacaoDaFila,
   type StatusAuditoria,
 } from "@/modules/custos";
+import { CHAVE_LINK_CUSTOS, criarRepositorioComunicacao, gerarCopy, modeloEmUso, saudacao } from "@/modules/comunicacao";
 import { linkDoWhatsApp } from "@/modules/pessoas";
 
 import { diaEmSaoPaulo } from "./comum";
@@ -90,6 +93,8 @@ export type SolicitacaoCarregada = DetalheDaSolicitacao & {
   proxima: string | null;
   /** Só nas aprovadas. */
   mensagemDeAprovado: MensagemDeAprovado | null;
+  /** Só nas reprovadas: a copy de reprovação, com o motivo, pronta para mandar à pessoa. */
+  mensagemDeReprovado: MensagemDeAprovado | null;
 };
 
 export type OpcoesDaSolicitacao = {
@@ -104,7 +109,8 @@ export async function carregarSolicitacao(
   { comLinkDoWhatsApp = false }: OpcoesDaSolicitacao = {},
 ): Promise<SolicitacaoCarregada | null> {
   if (!/^STF-\d{6}-\d{4,}$/.test(protocolo)) return null;
-  const repo = criarRepositorioSolicitacoes(await bancoParaLeitura());
+  const db = await bancoParaLeitura();
+  const repo = criarRepositorioSolicitacoes(db);
   const detalhe = await repo.detalhe(protocolo);
   if (!detalhe) return null;
   const regras = await repo.regras();
@@ -116,7 +122,39 @@ export async function carregarSolicitacao(
     anterior: posicao > 0 ? fila[posicao - 1]!.protocolo : null,
     proxima: posicao >= 0 ? (fila[posicao + 1]?.protocolo ?? null) : (fila[0]?.protocolo ?? null),
     mensagemDeAprovado: detalhe.auditoria === "APROVADO" ? await mensagemDeAprovado(repo, detalhe, comLinkDoWhatsApp) : null,
+    mensagemDeReprovado:
+      detalhe.auditoria === "REPROVADO" ? await mensagemDeReprovado(repo, criarRepositorioComunicacao(db), detalhe, comLinkDoWhatsApp, new Date()) : null,
   };
+}
+
+/**
+ * Copy de reprovação (Vitor, 26/11/2026): nasce quando a solicitação é reprovada, com o motivo escrito pelo time. O
+ * texto vem do modelo ativo "Reprovação de custo" (Configurações › Modelos de copy); sem modelo ativo, do texto padrão.
+ */
+async function mensagemDeReprovado(
+  repo: { telefoneDaPessoa(pessoaId: string): Promise<string | null> },
+  comunicacao: Pick<ReturnType<typeof criarRepositorioComunicacao>, "modelos" | "configuracao">,
+  detalhe: DetalheDaSolicitacao,
+  comLinkDoWhatsApp: boolean,
+  agora: Date,
+): Promise<MensagemDeAprovado> {
+  const [modelos, linkCustos] = await Promise.all([comunicacao.modelos(), comunicacao.configuracao(CHAVE_LINK_CUSTOS)]);
+  const corpo = modeloEmUso(modelos, "REPROVACAO_CUSTO")?.corpo ?? MODELO_PADRAO_DE_CUSTO_REPROVADO;
+  const { texto } = gerarCopy(
+    corpo,
+    dadosDoCustoReprovado({
+      nome: detalhe.pessoaNome,
+      evento: detalhe.evento.codigo ?? detalhe.evento.nome,
+      protocolo: detalhe.protocolo,
+      totalCentavos: detalhe.totalCentavos,
+      motivo: detalhe.parecer,
+      saudacao: saudacao(agora),
+      linkCustos,
+    }),
+  );
+  if (!comLinkDoWhatsApp) return { texto, linkDoWhatsApp: null, semTelefone: false };
+  const link = linkDoWhatsApp(await repo.telefoneDaPessoa(detalhe.pessoaId), texto);
+  return { texto, linkDoWhatsApp: link, semTelefone: link === null };
 }
 
 async function mensagemDeAprovado(

@@ -115,8 +115,12 @@ export const trechoVoo = eventosSchema.table(
       .notNull()
       .references(() => pedidoSdc.id, { onDelete: "cascade" }),
     sentido: text("sentido").notNull(),
-    origemIata: text("origem_iata").notNull(),
-    destinoIata: text("destino_iata").notNull(),
+    // O time pede por cidade ("Porto Alegre (RS)"): de onde a pessoa sai e a cidade do evento. Quem escolhe o aeroporto
+    // é a SDC, que informa o código (3 letras) ao registrar a compra. Trecho anterior à 0020 só tem o aeroporto.
+    origemCidade: text("origem_cidade"),
+    destinoCidade: text("destino_cidade"),
+    origemIata: text("origem_iata"),
+    destinoIata: text("destino_iata"),
     dataDesejada: date("data_desejada").notNull(),
     preferenciaHorario: text("preferencia_horario"),
     // Preenchidos pela SDC na emissão.
@@ -132,9 +136,19 @@ export const trechoVoo = eventosSchema.table(
   (table) => [
     unique("trecho_voo_pedido_sentido_unique").on(table.pedidoId, table.sentido),
     check("trecho_voo_sentido_check", sql`${table.sentido} IN ('IDA', 'VOLTA')`),
+    // Aeroporto é opcional; quando vem, são 3 letras, e os dois de um trecho não podem ser o mesmo.
     check(
       "trecho_voo_iata_check",
-      sql`${table.origemIata} ~ '^[A-Z]{3}$' AND ${table.destinoIata} ~ '^[A-Z]{3}$' AND ${table.origemIata} <> ${table.destinoIata}`,
+      sql`(${table.origemIata} IS NULL OR ${table.origemIata} ~ '^[A-Z]{3}$') AND (${table.destinoIata} IS NULL OR ${table.destinoIata} ~ '^[A-Z]{3}$') AND (${table.origemIata} IS NULL OR ${table.destinoIata} IS NULL OR ${table.origemIata} <> ${table.destinoIata})`,
+    ),
+    // Cada ponta do trecho tem a cidade ou o aeroporto: não existe trecho sem saber de onde sai ou aonde chega.
+    check(
+      "trecho_voo_pontas_check",
+      sql`(${table.origemCidade} IS NOT NULL OR ${table.origemIata} IS NOT NULL) AND (${table.destinoCidade} IS NOT NULL OR ${table.destinoIata} IS NOT NULL)`,
+    ),
+    check(
+      "trecho_voo_cidade_check",
+      sql`(${table.origemCidade} IS NULL OR length(${table.origemCidade}) BETWEEN 2 AND 80) AND (${table.destinoCidade} IS NULL OR length(${table.destinoCidade}) BETWEEN 2 AND 80)`,
     ),
     check(
       "trecho_voo_preferencia_check",

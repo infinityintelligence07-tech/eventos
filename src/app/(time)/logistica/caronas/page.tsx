@@ -9,11 +9,11 @@ import { parametro } from "../_componentes/situacoes";
 export const dynamic = "force-dynamic";
 
 /**
- * As caronas são montadas junto com os quartos, na tela de Hospedagem do evento. O endereço antigo continua valendo:
- * leva para lá (mantendo o evento escolhido), direto na seção de caronas.
+ * As caronas são montadas na escala do evento (saíram da Hospedagem em 26/11/2026). O endereço antigo continua valendo:
+ * com o evento, leva para a escala dele, direto na seção de caronas; sem evento, para a lista de Escalas.
  */
 export default async function PaginaCaronas({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await exigirAtor();
   const eventoId = z.uuid().safeParse(parametro((await searchParams).evento)).data;
-  redirect(`/logistica/hospedagem${eventoId ? `?evento=${eventoId}` : ""}#titulo-caronas`);
+  redirect(eventoId ? `/eventos/${eventoId}/escala#titulo-caronas` : "/escalas");
 }

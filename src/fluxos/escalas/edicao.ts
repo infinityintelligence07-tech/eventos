@@ -32,7 +32,7 @@ export function definirVagaDigitada(entrada: { eventoId: string; funcao: string;
   return escrever(ator, (tx) => escala.definirVagaDigitada(montagem(tx), { ...entrada, usuarioId: ator.usuarioId, instante: agora }));
 }
 
-export function adicionarVagaManual(entrada: { eventoId: string; funcaoId: string; data: string; quantidade: number }, { ator, agora }: Quem) {
+export function adicionarVagaManual(entrada: { eventoId: string; funcaoId: string; quantidade: number }, { ator, agora }: Quem) {
   return escrever(ator, (tx) => escala.adicionarVagaManual(montagem(tx), { ...entrada, usuarioId: ator.usuarioId, instante: agora }));
 }
 

@@ -2,8 +2,15 @@ import type { CopyGerada } from "./copy";
 
 // Situação da copy na tela (docs/07 §4.3). "Copiar" não grava nada; só "Marcar como enviada" grava a mensagem.
 
-/** Valores do CHECK modelo_copy_tipo_check. */
-export const TIPOS_DE_MODELO = ["ESCALACAO", "HOSPEDAGEM", "LEMBRETE", "ALTERACAO"] as const;
+/** Copys da escala: uma por pessoa escalada, na Comunicação do evento. */
+export const TIPOS_DA_ESCALA = ["ESCALACAO", "HOSPEDAGEM", "LEMBRETE", "ALTERACAO"] as const;
+export type TipoDaEscala = (typeof TIPOS_DA_ESCALA)[number];
+
+/**
+ * Valores do CHECK modelo_copy_tipo_check. REPROVACAO_CUSTO não é copy da escala: é a mensagem que o time manda quando
+ * reprova uma solicitação de custo (aparece no detalhe da solicitação, em Custos), mas o texto é editado no mesmo lugar.
+ */
+export const TIPOS_DE_MODELO = [...TIPOS_DA_ESCALA, "REPROVACAO_CUSTO"] as const;
 export type TipoDeModelo = (typeof TIPOS_DE_MODELO)[number];
 
 export function rotuloDoTipoDeModelo(tipo: TipoDeModelo): string {
@@ -16,6 +23,8 @@ export function rotuloDoTipoDeModelo(tipo: TipoDeModelo): string {
       return "Lembrete";
     case "ALTERACAO":
       return "Alteração";
+    case "REPROVACAO_CUSTO":
+      return "Reprovação de custo";
     default: {
       const desconhecido: never = tipo;
       throw new Error(`tipo de modelo desconhecido: ${String(desconhecido)}`);

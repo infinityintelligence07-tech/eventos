@@ -13,7 +13,7 @@ import { PainelLateral } from "@/app/(time)/_componentes/ui/dialogo";
 
 export type TrechoDaCompra = {
   sentido: "IDA" | "VOLTA";
-  /** "Ida: VCP → POA em 14/12 (manhã)". */
+  /** "Ida: Porto Alegre (RS) → Manaus (AM) em 14/12 (manhã)". */
   rotulo: string;
   partidaSugerida: string;
   /** Uma das companhias da lista, "OUTRA" ou vazio (ainda não informada). */
@@ -23,6 +23,9 @@ export type TrechoDaCompra = {
   localizador: string;
   partidaEm: string;
   chegadaEm: string;
+  /** Aeroportos já informados (código de 3 letras), ou vazio. */
+  origemIata: string;
+  destinoIata: string;
 };
 
 /** A data da compra já registrada (ou hoje), que não passa de hoje nem vem antes do pedido do time. */
@@ -75,7 +78,10 @@ function CampoDaCompanhia({ indice, trecho, companhias, erros }: { indice: numbe
   );
 }
 
-/** Compra do voo: companhia, número do voo, código da reserva e horários de cada trecho, mais o valor. */
+/**
+ * Compra do voo: companhia, número do voo, código da reserva e horários de cada trecho, mais o valor. O time pede só
+ * as cidades: o aeroporto de origem e o de destino de cada trecho são informados aqui (opcionais).
+ */
 export function BotaoRegistrarCompraDeVoo({
   acao,
   referencia,
@@ -142,6 +148,24 @@ export function BotaoRegistrarCompraDeVoo({
                   obrigatorio
                   defaultValue={trecho.chegadaEm || trecho.partidaSugerida}
                   erros={erros(`trechos.${indice}.chegadaEm`)}
+                />
+                <CampoDeTexto
+                  nome={`trechos[${indice}].origemIata`}
+                  rotulo="Aeroporto de origem"
+                  defaultValue={trecho.origemIata}
+                  maxLength={3}
+                  placeholder="POA"
+                  ajuda="Opcional. Código de 3 letras."
+                  erros={erros(`trechos.${indice}.origemIata`)}
+                />
+                <CampoDeTexto
+                  nome={`trechos[${indice}].destinoIata`}
+                  rotulo="Aeroporto de destino"
+                  defaultValue={trecho.destinoIata}
+                  maxLength={3}
+                  placeholder="MAO"
+                  ajuda="Opcional. Código de 3 letras."
+                  erros={erros(`trechos.${indice}.destinoIata`)}
                 />
               </div>
             </fieldset>

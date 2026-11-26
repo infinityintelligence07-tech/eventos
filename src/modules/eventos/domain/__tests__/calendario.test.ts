@@ -236,6 +236,8 @@ describe("precisa de ação", () => {
     );
     const ids = (lista: EventoNoCalendario[]) => lista.map((item) => item.id);
     expect(ids(pendencias.escalasAMontar)).toEqual(["conf", "conf-com-fila"]);
+    // A Masterclass tem o aviso dela, à parte, com a mesma regra de prazo.
+    expect(ids(pendencias.masterclassesAMontar)).toEqual(["mc"]);
     expect(ids(pendencias.semCodigo)).toEqual(["longe"]);
   });
 

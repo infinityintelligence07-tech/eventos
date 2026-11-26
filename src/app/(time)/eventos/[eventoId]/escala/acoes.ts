@@ -112,9 +112,9 @@ export async function atualizarConvocacao(_estado: ResultadoAcao, form: FormData
 
 export async function enviarParaAprovacao(_estado: ResultadoAcao, form: FormData): Promise<ResultadoAcao> {
   return executarAcao(form, enviarParaAprovacaoSchema, "escala.montar", async (dados, ator) => {
-    await fluxo.enviarParaAprovacao(dados, quem(ator));
+    const { semAprovacao } = await fluxo.enviarParaAprovacao(dados, quem(ator));
     atualizarTelas(dados.eventoId);
-    return "Escala enviada para aprovação.";
+    return semAprovacao ? "Escala concluída. Masterclass não passa por aprovação: já dá para comunicar." : "Escala enviada para aprovação.";
   });
 }
 
@@ -130,7 +130,7 @@ export async function devolverEscala(_estado: ResultadoAcao, form: FormData): Pr
   return executarAcao(form, devolverEscalaSchema, "escala.aprovar", async (dados, ator) => {
     const { codigo } = await fluxo.devolverEscala(dados, quem(ator));
     atualizarTelas(dados.eventoId);
-    return `Escala ${codigo ?? "do evento"} devolvida.`;
+    return `Escala ${codigo ?? "do evento"} não aprovada. Quem montou já pode ajustar.`;
   });
 }
 

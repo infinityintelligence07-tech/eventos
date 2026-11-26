@@ -45,6 +45,10 @@ export const VARIAVEIS_COPY = {
   "hospedagem.colega": { rotulo: "colega de quarto", descricao: "Colega(s) de quarto", onde: "LOGISTICA" },
   "voo.ida": { rotulo: "voo de ida", descricao: "Voo de ida emitido (número, data e hora, trecho e localizador)", onde: "LOGISTICA" },
   "voo.volta": { rotulo: "voo de volta", descricao: "Voo de volta emitido (número, data e hora, trecho e localizador)", onde: "LOGISTICA" },
+  // Só no modelo "Reprovação de custo": vêm da solicitação reprovada, em Custos.
+  "custo.protocolo": { rotulo: "protocolo do custo", descricao: "Protocolo da solicitação de custo (só no modelo de reprovação de custo)", onde: "AUTOMATICO" },
+  "custo.motivo": { rotulo: "motivo da reprovação", descricao: "Motivo que o time escreveu ao reprovar (só no modelo de reprovação de custo)", onde: "AUTOMATICO" },
+  "custo.valor": { rotulo: "valor do custo", descricao: "Valor total da solicitação (só no modelo de reprovação de custo)", onde: "AUTOMATICO" },
 } as const satisfies Record<string, Variavel>;
 
 export type VariavelDaCopy = keyof typeof VARIAVEIS_COPY;

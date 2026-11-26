@@ -101,8 +101,8 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
   const convocacaoDoPedido = async (pedidoId: string) => (await um(`select convocacao_id from eventos.pedido_sdc where id = $1`, [pedidoId])).convocacao_id;
   const cartaoDeVoos = async (quando = agora) => (await resumoParaInicio(quando)).find((item) => item.chave === "voos-a-pedir")!;
 
-  const ida = { sentido: "IDA" as const, origemIata: "POA", destinoIata: "MAO", dataDesejada: "2026-12-14" };
-  const volta = { sentido: "VOLTA" as const, origemIata: "MAO", destinoIata: "POA", dataDesejada: "2026-12-17" };
+  const ida = { sentido: "IDA" as const, origemCidade: "Porto Alegre (RS)", destinoCidade: "Manaus (AM)", dataDesejada: "2026-12-14" };
+  const volta = { sentido: "VOLTA" as const, origemCidade: "Manaus (AM)", destinoCidade: "Porto Alegre (RS)", dataDesejada: "2026-12-17" };
 
   beforeAll(async () => {
     teste = await criarBancoDeTeste();
@@ -176,7 +176,7 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
     await expect(repetido).rejects.toBeInstanceOf(RegraDeNegocioError);
     await expect(repetido).rejects.toThrow(new RegExp(`Ana Voo já tem o pedido ${pedido.referencia}`));
     const extra = await registrarPedidoDeVoo(
-      { eventoId, pessoaId: ana.pessoaId, trechos: [{ sentido: "IDA", origemIata: "MAO", destinoIata: "BSB", dataDesejada: "2026-12-18" }], outraCompra: true },
+      { eventoId, pessoaId: ana.pessoaId, trechos: [{ sentido: "IDA", origemCidade: "Manaus (AM)", destinoCidade: "Brasília (DF)", dataDesejada: "2026-12-18" }], outraCompra: true },
       ator(),
       agora,
     );
@@ -212,7 +212,7 @@ describe.skipIf(!TEST_DATABASE_URL)("fluxos da logística no banco", () => {
 
     const carregado = await carregarPedido(pedido.referencia);
     expect(carregado?.situacao).toBe("PEDIDO");
-    expect(carregado?.textoParaSdc).toContain("Ida: POA → MAO em 14/12/2026");
+    expect(carregado?.textoParaSdc).toContain("Ida: Porto Alegre (RS) → Manaus (AM) em 14/12/2026");
 
     const retorno = {
       pedidoId: pedido.id,

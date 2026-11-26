@@ -12,7 +12,7 @@ import type { AoTrocarPrincipal, ConvocacaoTravada, EventoTravado, LinhaTravada,
 function motivoDaTrava(status: StatusEscala): string {
   switch (status) {
     case "AGUARDANDO_APROVACAO":
-      return "A escala está com a líder para aprovação. Espere aprovar ou devolver para mudar.";
+      return "A escala está com a líder para aprovação. Espere a decisão dela para mudar.";
     case "APROVADA":
     case "COMUNICADA":
       return "A escala já foi aprovada. Reabra a escala para mudar.";
@@ -103,25 +103,24 @@ export async function definirVagaDigitada(
 
 export async function adicionarVagaManual(
   repo: RepositorioMontagem,
-  entrada: { eventoId: string; funcaoId: string; data: string; quantidade: number; usuarioId: string; instante: Date },
+  entrada: { eventoId: string; funcaoId: string; quantidade: number; usuarioId: string; instante: Date },
 ): Promise<{ escalaId: string; nomeDaFuncao: string }> {
   const evento = await travarEventoEditavel(repo, entrada.eventoId, entrada.instante);
-  if (entrada.data < evento.dataInicio || entrada.data > evento.dataFim) {
-    throw new TransicaoInvalidaError("Escolha um dia dentro das datas do evento.");
-  }
   const funcao = await repo.funcaoPorId(entrada.funcaoId);
   if (!funcao) throw new NaoEncontradoError("A função não está cadastrada.");
-  const repetida = (await repo.linhasDoEvento(entrada.eventoId)).some((linha) => linha.funcaoId === funcao.id && linha.data === entrada.data);
-  if (repetida) throw new TransicaoInvalidaError(`${funcao.nome} já está na escala neste dia. Ajuste o número de vagas na linha dela.`);
+  // A função acrescentada vale para o evento inteiro: a linha nasce no primeiro dia, como as linhas da regra.
+  const data = evento.dataInicio;
+  const repetida = (await repo.linhasDoEvento(entrada.eventoId)).some((linha) => linha.funcaoId === funcao.id && linha.data === data);
+  if (repetida) throw new TransicaoInvalidaError(`${funcao.nome} já está na escala. Ajuste o número de vagas na linha dela.`);
 
-  const escalaId = await repo.inserirLinha({ ...entrada, origem: "MANUAL", confirmadaPor: entrada.usuarioId });
+  const escalaId = await repo.inserirLinha({ ...entrada, data, origem: "MANUAL", confirmadaPor: entrada.usuarioId });
   await repo.registrar({
     entidade: "VAGA",
     entidadeId: escalaId,
     eventoId: entrada.eventoId,
     acao: "VAGA_MANUAL_ADICIONADA",
     usuarioId: entrada.usuarioId,
-    dados: { funcao: funcao.nome, data: entrada.data, quantidade: entrada.quantidade },
+    dados: { funcao: funcao.nome, data, quantidade: entrada.quantidade },
   });
   return { escalaId, nomeDaFuncao: funcao.nome };
 }

@@ -14,7 +14,7 @@ Especificação das 8 abas que faltam no app do time de eventos, no mesmo visual
 1. Princípios e convenções
 2. Navegação e rotas
 3. Guia de componentes reutilizáveis
-4. Início
+4. Dashboard (a antiga "Início")
 5. Evento (detalhe) — porta de entrada para montar a escala
 6. Escalas (lista, montar escala, aprovação)
 7. Comunicação
@@ -48,7 +48,7 @@ Especificação das 8 abas que faltam no app do time de eventos, no mesmo visual
 | Pessoa / staff | Usuário, colaborador |
 | Copy | Template, payload |
 | Confirmou / Não pode / Aguardando resposta | Aceita / Recusada / Pendente |
-| Aprovar / Devolver | Rejeitar (na escala) |
+| Aprovar / Não aprovar (escala; no código, "devolver") | Rejeitar, Devolver, Reprovar (na escala) |
 | Aprovar / Reprovar (nos custos) | Deferir / Indeferir |
 | Registrado pelo time | Inserido manualmente, override |
 
@@ -95,14 +95,14 @@ O logo passa a levar para `/inicio` quando a tela Início existir.
 
 | Menu | Rota | Telas internas |
 |---|---|---|
-| Início | `/inicio` | — |
+| Dashboard (a antiga "Início"; a rota não mudou) | `/inicio` | — |
 | Calendário | `/calendario` (pronta) | — |
 | Escalas | `/escalas` | `/escalas/aprovacao` (fila da líder) |
 | Comunicação | `/comunicacao` | — |
 | Disponibilidade | `/disponibilidade` | `/disponibilidade/nova`, `/disponibilidade/[enqueteId]` |
 | Pessoas | `/pessoas` | `/pessoas/[pessoaId]` |
 | Voos | `/logistica/voos` | — |
-| Hospedagem | `/logistica/hospedagem` (quartos e caronas) | `/logistica/creditos`; `/logistica/caronas` redireciona para a Hospedagem, na seção de caronas |
+| Hospedagem | `/logistica/hospedagem` (quartos) | `/logistica/creditos`; `/logistica/caronas` redireciona para a escala do evento, na seção de caronas (sem evento, para a lista de Escalas) |
 | Custos | `/custos` | `/custos/nova`; detalhe em painel lateral com `?protocolo=STF-…` |
 | Configurações | `/configuracoes/regras-de-custo` | `/configuracoes/vagas`, `/configuracoes/modelos-de-copy`, `/configuracoes/locais`, `/configuracoes/voos` |
 | (fora do menu do time) **Área da SDC** | `/sdc` → `/sdc/voos` | `/sdc/hospedagem`. Só para quem está na lista da SDC (§10.5); o time é levado para `/inicio` |
@@ -181,8 +181,8 @@ CARTAO = "rounded-[var(--ds-radius-lg)] bg-[var(--ds-surface)] shadow-[var(--ds-
 
 - Padding: `p-5` (padrão), `px-5 py-4` (cartão de número), `p-4 md:p-5` (cartão com tabela ou calendário).
 - Título do cartão: `h3` `text-[15px] font-semibold`; explicação logo abaixo `mt-0.5 text-[12px] text-[var(--ds-label-2)]`.
-- Cartão clicável inteiro: o `Link` envolve o título (não o cartão todo com `onClick`), e o cartão ganha
-  `hover:shadow-[var(--ds-shadow-2)]`. Foco usa o anel padrão do `[data-ds] :focus-visible`.
+- Cartão clicável por inteiro (26/11/2026: vale para todo cartão que leva a algum lugar): o `Link` continua sendo um só, no título, com `LINK_QUE_COBRE` (um `::after` que cobre o cartão), e o cartão leva `CARTAO_CLICAVEL` (`relative` +
+  `hover:shadow-[var(--ds-shadow-2)]`). Outro link ou botão dentro do cartão leva `SOBRE_O_CARTAO` para continuar clicável (classes em `ui/classes.ts`). No cartão de pendência, clicar fora das linhas leva para a lista ("Ver todos") e cada linha leva para o item dela. Foco usa o anel padrão do `[data-ds] :focus-visible`.
 
 **Cartão de número — `Numero`** (já existe no Calendário): rótulo 12 px `text-[var(--ds-label-2)]` e valor 28 px
 `font-semibold tabular-nums`, com "de N" opcional. Quando o número é um atalho para uma lista, o rótulo vira link.
@@ -482,7 +482,7 @@ Acrescentar `scroll-padding-bottom` no `main` com a altura da barra, para o foco
 
 ---
 
-## 4. Início
+## 4. Dashboard (a antiga "Início")
 
 **Objetivo:** mostrar, em uma olhada, o que o time precisa resolver hoje e levar direto ao lugar de resolver.
 
@@ -490,9 +490,9 @@ Acrescentar `scroll-padding-bottom` no `main` com a altura da barra, para o foco
 
 ### Layout (de cima para baixo)
 
-1. **Cabeçalho:** título "Início"; subtítulo com a hora da última sincronização (mesmo texto do Calendário: "Turmas do IAM Control sincronizadas em 28/10 às 19:30."). À direita, botão secundário "Atualizar" (`RefreshCw`).
+1. **Cabeçalho:** título "Dashboard" (26/11/2026: o item do menu e a tela passam a se chamar Dashboard; esta é a dashboard do sistema, com tudo o que a Início tinha; a dos staffs será construída depois); subtítulo com a hora da última sincronização (mesmo texto do Calendário: "Turmas do IAM Control sincronizadas em 28/10 às 19:30."). À direita, botão secundário "Atualizar" (`RefreshCw`).
 2. **Cartões de número** (grade `grid-cols-2 lg:grid-cols-4 gap-3`), cada rótulo é link para a lista correspondente:
-   - "Escalas a montar" (próximos 30 dias, sem escala ou em andamento) → `/escalas?situacao=a-montar`
+   - "Escalas a montar" (eventos, sem Masterclass, nos próximos 30 dias, sem escala ou em andamento) → `/escalas?situacao=a-montar`
    - "Aguardando aprovação" → `/escalas/aprovacao`
    - "Copys bloqueadas" → `/comunicacao?situacao=falta-dado`
    - "Custos para auditar" → `/custos`
@@ -501,9 +501,9 @@ Acrescentar `scroll-padding-bottom` no `main` com a altura da barra, para o foco
 | Cartão | Explicação (microcopy) | Itens mostram | Leva para |
 |---|---|---|---|
 | Copys bloqueadas por falta de dado | "Estas copys só podem ser enviadas quando o dado for preenchido." | `[Staff 03] · CONF_AM_60 — falta voo de ida` | Comunicação do evento, com a pessoa selecionada |
-| Aguardando aprovação | "Escalas enviadas para a líder aprovar." | código · data · "enviada há 2 dias" | Aprovação |
-| Escalas devolvidas | "A líder devolveu para ajustar." | código · comentário (1 linha, se houver) | Montar escala |
-| Escalas a montar | "Eventos nos próximos 30 dias com a escala ainda não aprovada." | código · data · "12 de 22 vagas" | Montar escala |
+| **Escalas** (um cartão só para a aprovação, 26/11/2026; substitui "Aguardando aprovação" e "Escalas devolvidas") | "A aprovação das escalas num lugar só: as que a líder não aprovou, as que esperam por ela e as aprovadas." | três linhas, cada uma com o total e os primeiros códigos: "Não aprovadas", "Aguardando aprovação (a mais antiga há 2 dias)", "Aprovadas". O contador do cartão soma não aprovadas e aguardando | cada linha abre a lista de Escalas naquela situação (a de aguardando abre a fila de aprovação); o cartão abre a lista de Escalas |
+| Escalas a montar · Masterclass (aviso à parte, 26/11/2026) | "Masterclasses nos próximos 30 dias com a escala ainda não concluída." | data ou código · "1 de 2 vagas" | Montar escala |
+| Escalas a montar · Eventos | "Eventos nos próximos 30 dias com a escala ainda não aprovada." | código · data · "12 de 22 vagas" | Montar escala |
 | Copys desatualizadas | "Os dados mudaram depois do envio. Copie e envie de novo." | nome · código · o que mudou | Comunicação do evento |
 | Pendências da sincronização | "Eventos sem polo cadastrado ou com código repetido no IAM Control." | código ou nome da turma · motivo | Evento · Resumo |
 | Custos para auditar | "Solicitações de custo esperando aprovação do time." | protocolo · nome · chip "Crítico"/"Alerta" | Custos, com o painel aberto |
@@ -600,10 +600,10 @@ stateDiagram-v2
 
 **Layout:**
 1. Cabeçalho: "Escalas" / subtítulo "Monte e acompanhe a escala de cada evento." Ação secundária à direita: "Fila de aprovação" com contador (pílula) → `/escalas/aprovacao`.
-   Abaixo, "Precisa de ação" com um cartão só, de largura total: **"Escalas a montar"** (eventos, sem Masterclass, que começam nos próximos 30 dias com a escala ainda não aprovada) + contador.
+   Abaixo, "Precisa de ação" com dois cartões lado a lado (um embaixo do outro em tela estreita), cada um com contador: **"Escalas a montar · Eventos"** (eventos, sem Masterclass, que começam nos próximos 30 dias com a escala ainda não aprovada) e **"Escalas a montar · Masterclass"** (as Masterclasses no mesmo prazo, com a escala ainda não concluída). Cada bloco de evento é clicável por inteiro e abre a escala dele.
    Os eventos ficam em grade (`sm:grid-cols-2 xl:grid-cols-3`); cada um mostra nome curto (link para a escala), código, chip da situação, **Início**, **Término**, local (quando houver) e vagas preenchidas.
    Sem evento: "Nenhuma escala a montar nos próximos 30 dias." "Confronto sem fila" e "Eventos sem código" não aparecem mais aqui. "Eventos sem código" continua no Início ("Pendências da sincronização"); "Confronto sem fila" saiu também do Início (24/11/2026): a falta da fila aparece só na escala do próprio evento (faixa "Falta o número de pessoas na fila", §6.2).
-2. Barra de filtros: atalhos de situação **"A montar (N) | Aguardando aprovação (N) | Devolvidas (N) | Aprovadas | Comunicadas | Todas"**; seletores Polo, Tipo e Período ("Próximos 30 dias" padrão, "Próximos 60 dias", "Próximos 90 dias", "Mês…"); busca por código ou nome.
+2. Barra de filtros: atalhos de situação **"A montar (N) | Aguardando aprovação (N) | Não aprovadas (N) | Aprovadas | Comunicadas | Todas"**; seletores Polo, Tipo e Período ("Próximos 30 dias" padrão, "Próximos 60 dias", "Próximos 90 dias", "Mês…"); busca por código ou nome.
    "A montar" = sem escala + em andamento. Masterclasses entram, mas podem ser escondidas com o chip "Esconder Masterclasses".
 3. Tabela (ordem: data mais próxima primeiro):
 
@@ -633,7 +633,7 @@ stateDiagram-v2
 2. **Faixas de pendência** (só quando houver), antes de tudo:
    - Confronto sem fila: atenção — "Falta o número de pessoas na fila. Sem ele, as vagas de pai e mãe não são sugeridas." + ação "Informar fila" (abre campo inline).
    - Sem expectativa de público: atenção — "Falta a expectativa de público. Sem ela, as vagas de líderes não são sugeridas." + "Informar público".
-   - Devolvida: informação — "A líder devolveu esta escala em 06/11 às 10:12." + comentário entre aspas, se houver. Some depois de reenviar.
+   - Não aprovada (no código, DEVOLVIDA): informação — "A líder não aprovou esta escala em 06/11 às 10:12." + comentário entre aspas, se houver. Some depois de reenviar.
    - Aprovada: informação — "Escala aprovada em 05/11 às 16:40. Trocas de pessoa ainda podem ser feitas e ficam marcadas como 'alterada depois da aprovação'." (ver Perguntas).
 3. **Vagas por função** (`h2`, cartão com tabela):
 
@@ -646,11 +646,11 @@ stateDiagram-v2
 | Horário | "08:00–18:00" + selo neutro "provisório" (enquanto a regra de horário não estiver definida) |
 | Preenchidas | "6 de 8" |
 
-   Rodapé do cartão: "+ Adicionar função" (botão texto) → painel lateral com a lista de funções que ainda não estão na escala e campo de número.
+   Rodapé do cartão: "+ Adicionar função" (botão texto) → painel lateral com a lista de funções e o campo de número. **Sem campo "Dia"** (26/11/2026): a função acrescentada vale para o evento inteiro, com o mesmo número de vagas.
    Evento de vários dias: por padrão cada função vale para todos os dias. Link por linha "Ajustar por dia" expande sub-linhas `12/11`, `13/11`… com o mesmo campo de vagas.
    Uma ação no cabeçalho do cartão: "Confirmar todas as sugestões" (secundário) — confirma de uma vez as funções que têm sugestão e não foram alteradas; **não** confirma Staff do Confronto.
 
-4. **Equipe** (`h2`, com o atalho **"Montar quartos e caronas"** à direita do título: leva para a Hospedagem daquele evento, `/logistica/hospedagem?evento=…`, onde quem foi marcado com Hotel e com Carona é distribuído em quartos e carros, §10.2 e §10.3), uma seção por função (ordem da tabela de vagas), cada uma num cartão com título "Staff líder · 6 de 8" e tabela:
+4. **Equipe** (`h2`, com o atalho **"Montar quartos"** à direita do título: leva para a Hospedagem daquele evento, `/logistica/hospedagem?evento=…`, onde quem foi marcado com Hotel é distribuído em quartos, §10.2; **as caronas ficam nesta mesma tela, logo abaixo da equipe**, §10.3), uma seção por função (ordem da tabela de vagas), cada uma num cartão com título "Staff líder · 6 de 8" e tabela:
 
 | Coluna | Conteúdo |
 |---|---|
@@ -669,7 +669,7 @@ stateDiagram-v2
 
 5. **Barra de ação fixa** (3.12):
    - À esquerda, resumo em texto: "18 de 22 vagas preenchidas · 1 função sem número confirmado".
-   - À direita: primário **"Enviar para aprovação"** (em andamento/devolvida) ou "Reenviar para aprovação" (devolvida).
+   - À direita: primário **"Enviar para aprovação"** (em andamento) ou "Reenviar para aprovação" (não aprovada). **Masterclass não passa por aprovação** (26/11/2026): o botão é **"Concluir escala"**, com as mesmas conferências, e a escala já fica aprovada ("Escala concluída. Masterclass não passa por aprovação: já dá para comunicar."); no histórico aparece "Concluída, sem aprovação (Masterclass)".
    - Fica com `aria-disabled` e o motivo visível enquanto houver função sem número confirmado: "Confirme o número de vagas de: Staff." (a lista é link e leva ao campo).
    - Se houver vaga aberta, o envio é permitido com confirmação: "Enviar com 4 vagas abertas? A líder vai ver quais funções estão incompletas." (Enviar mesmo assim / Continuar montando).
    - Depois de aprovada a barra mostra só o resumo + link "Ir para Comunicação".
@@ -716,7 +716,7 @@ stateDiagram-v2
 
 ### 6.3 Aprovação (fila da líder)
 
-**Objetivo:** a líder revisa as escalas enviadas e aprova ou devolve. Aprovar **só registra** (data e hora; com login, quem aprovou).
+**Objetivo:** a líder revisa as escalas enviadas e aprova ou não aprova (26/11/2026: "devolvida" passou a se chamar **"não aprovada"** em todas as telas; no código e no banco continua DEVOLVIDA). **Só escalas de evento chegam aqui: Masterclass não passa por aprovação** (§6.2). Aprovar **só registra** (data e hora; com login, quem aprovou).
 
 **Rota:** `/escalas/aprovacao`.
 
@@ -724,7 +724,7 @@ stateDiagram-v2
 1. Cabeçalho: "Aprovação de escalas" / "Escalas enviadas para a líder aprovar. Aprovar só registra; nada é enviado às pessoas."
 2. Lista de **cartões** (um por escala, ordem: evento mais próximo primeiro). Cartão:
    ```
-   Confronto 60 · CONF_AM_60                         [Ver escala] [Devolver] [Aprovar]
+   Confronto 60 · CONF_AM_60                         [Ver escala] [Não aprovar] [Aprovar]
    12/11 a 14/11 · Manaus · enviada em 04/11 às 18:20
    Vagas: 22 de 22 preenchidas
    Pontos de atenção:
@@ -735,18 +735,18 @@ stateDiagram-v2
      ℹ 1 trainee em Staff líder
    ```
    Pontos de atenção em `ul`, cada um com ícone + texto + link para a linha na Montar escala. Sem pontos: "Nenhum ponto de atenção." com `CircleCheck`.
-3. **Ver escala** abre `/eventos/[id]/escala` em modo revisão: a barra de ação fixa troca para "Devolver" e "Aprovar".
+3. **Ver escala** abre `/eventos/[id]/escala` em modo revisão: a barra de ação fixa troca para "Não aprovar" e "Aprovar". O cartão da fila é clicável por inteiro e abre a escala.
 
 **Ações:**
 - **Aprovar** (primário): sem modal (é reversível). Toast "Escala CONF_AM_60 aprovada." + "Desfazer" (10 s). O cartão sai da fila.
-- **Devolver** (perigo, contorno): modal "Devolver a escala CONF_AM_60?" — texto: "Quem montou vai ver seu comentário e poderá reenviar." Campo "Comentário (opcional)" (texto longo, 500 caracteres, com contador). Botões "Cancelar" / "Devolver escala". Toast "Escala CONF_AM_60 devolvida."
+- **Não aprovar** (perigo, contorno): modal "Não aprovar a escala CONF_AM_60?" — texto: "Quem montou vai ver seu comentário e poderá reenviar." Campo "Comentário (opcional)" (texto longo, 500 caracteres, com contador). Botões "Cancelar" / "Não aprovar". Toast "Escala CONF_AM_60 devolvida."
 
 **Estados:**
 - Vazio: ícone `CircleCheck` — "Nenhuma escala esperando aprovação." / "Quando alguém enviar uma escala, ela aparece aqui." + link "Ver escalas".
 - Sem permissão (quando houver login): componente `SemPermissao` (3.12).
 - Erro ao aprovar: toast de erro "Não foi possível aprovar. Tente de novo." e o cartão permanece.
 
-**Acessibilidade:** cada cartão é `article` com `aria-labelledby` no título; os botões incluem o código no nome acessível ("Aprovar escala CONF_AM_60"). Depois de aprovar/devolver, o foco vai para o próximo cartão (ou para a mensagem de vazio).
+**Acessibilidade:** cada cartão é `article` com `aria-labelledby` no título; os botões incluem o código no nome acessível ("Aprovar escala CONF_AM_60"). Depois de aprovar ou não aprovar, o foco vai para o próximo cartão (ou para a mensagem de vazio).
 
 ---
 
@@ -907,6 +907,7 @@ A camiseta (modelo e tamanho) não aparece na lista: fica só na ficha da pessoa
 **Layout** (cabeçalho + grade `lg:grid-cols-3 gap-3`):
 - Cabeçalho: nome; linha "Staff · Manaus (AM) · ativa"; chip de cadastro. Migalha `Pessoas › [Staff 07]`.
 - **Contato** (somente leitura, `Lock` + "Vem do cadastro de pessoas"): telefone (com "Copiar"), e-mail.
+- **Quais funções existem (26/11/2026, migration 0021):** saíram Palco, Pai / mãe, Som, Musicista, Logística, Aplicativo, Filmmaker e Trainee de líder (apagadas, com a habilitação de quem as tinha); "Líder" passou a se chamar **"Líder de Confronto"** (o código `LIDER` não mudou); entraram **"Trainee de líder de evento"** e **"Trainee de líder de confronto"**. Com Pai / mãe fora, a regra de vagas do Confronto deixou de ter a linha "1 a cada 15 pessoas da fila": o campo "Pessoas na fila" e o conceito de "cargo do evento" continuam no código, sem função que os use.
 - **Funções** (editável): lista de funções com nível (rádio "Habilitado" / "Trainee") e "Remover"; "+ Adicionar função". Salva a cada mudança com toast "Funções de [Staff 07] atualizadas."
 - **Veículo** (editável): "Tem carro" (sim/não); "Lugares para passageiros" 1–8 (sem contar o motorista, decisão de 28/10); "Consumo (km/l)" com ajuda "Usado para conferir os custos de combustível. Deixe vazio se não souber."
 - **Camiseta e experiência** (editável): Modelo (Camiseta / Baby look), Tamanho (PP a XG), "Já tem a camiseta do staff", "Fez o Confronto", "Tem CNPJ".
@@ -934,9 +935,9 @@ A camiseta (modelo e tamanho) não aparece na lista: fica só na ficha da pessoa
 | Item do menu | Abre | Abas internas | Acende em |
 |---|---|---|---|
 | **Voos** ("Passagens do staff pela SDC.") | `/logistica/voos` | nenhuma (é uma tela só, sem migalha) | `/logistica/voos` e a aba Logística do evento |
-| **Hospedagem** ("Quartos e caronas de cada evento: quem dorme com quem e quem vai com quem.") | `/logistica/hospedagem` | **Quartos e caronas \| Créditos de hotel** | `/logistica/hospedagem`, `/logistica/caronas`, `/logistica/creditos` |
+| **Hospedagem** ("Quartos de cada evento: quem dorme com quem.") | `/logistica/hospedagem` | **Quartos \| Créditos de hotel** | `/logistica/hospedagem`, `/logistica/caronas`, `/logistica/creditos` |
 
-**Caronas ficam com a Hospedagem** (decisão do Vitor, 24/11/2026: "caronas podemos montar na escala, talvez junto com a montagem de quarto mesmo"). A tela de Hospedagem mostra, para o evento escolhido, os quartos (§10.2) e logo abaixo as caronas (§10.3): o time resolve quem dorme com quem e quem vai com quem numa passada. Não existe mais uma tela só de caronas: `/logistica/caronas` (com ou sem `?evento=`) redireciona para `/logistica/hospedagem…#titulo-caronas`. O cabeçalho da Hospedagem tem o atalho "Ir para as caronas". Chega-se ali pela escala do evento, no atalho "Montar quartos e caronas" (§6.2); as duas faixas da tela têm o link de volta "Abrir a escala".
+**Caronas ficam na escala do evento** (decisão do Vitor, 26/11/2026: "tirar carona de hospedagem"; "vão para escala no evento"). A seção de caronas (§10.3) aparece em `/eventos/[id]/escala`, logo abaixo da equipe, e saiu da tela de Hospedagem e da aba Logística do evento; `/logistica/caronas?evento=…` redireciona para lá. O texto a seguir, de 24/11, fica como histórico. ~~Caronas ficam com a Hospedagem~~ (decisão anterior do Vitor, 24/11/2026: "caronas podemos montar na escala, talvez junto com a montagem de quarto mesmo"). A tela de Hospedagem mostra, para o evento escolhido, os quartos (§10.2) e logo abaixo as caronas (§10.3): o time resolve quem dorme com quem e quem vai com quem numa passada. Não existe mais uma tela só de caronas: `/logistica/caronas` (com ou sem `?evento=`) redireciona para `/logistica/hospedagem…#titulo-caronas`. O cabeçalho da Hospedagem tem o atalho "Ir para as caronas". Chega-se ali pela escala do evento, no atalho "Montar quartos e caronas" (§6.2); as duas faixas da tela têm o link de volta "Abrir a escala".
 `/logistica` continua redirecionando para `/logistica/voos`. No evento, `/eventos/[id]/logistica` mostra as três seções
 (Voos, Hospedagem, Caronas) filtradas pelo evento, uma abaixo da outra, e acende **Voos** no menu (é a seção que abre a página).
 Títulos da aba do navegador: "Voos", "Hospedagem", "Créditos de hotel · Hospedagem". Seletor de evento em Voos e na Hospedagem (o das caronas é o da Hospedagem).
@@ -957,7 +958,7 @@ escala: é de um **evento** e de uma **pessoa do staff**, como uma linha da plan
 | Escala | "Na escala" ou "Fora da escala" (a pessoa está ou não na escala do evento; o pedido vale nos dois casos) |
 | Solicitação | data em que o pedido foi registrado |
 | Ida/volta | "Ida e volta", "Ida" ou "Volta" |
-| Ida | aeroportos "VCP → POA" e, embaixo, a data e o horário: os do voo emitido ("14/12 · 08:10") ou, antes disso, a data pedida e a preferência ("14/12 · manhã") |
+| Ida | de onde para onde e, embaixo, a data e o horário: os do voo emitido ("14/12 · 08:10") ou, antes disso, a data pedida e a preferência ("14/12 · manhã"). Enquanto a SDC não informa o aeroporto, as cidades do pedido, uma embaixo da outra ("Porto Alegre (RS) →" / "Manaus (AM)"); com os dois aeroportos, os códigos em mono ("POA → MAO"). Pedido anterior a 26/11/2026 só tem os aeroportos |
 | Volta | o mesmo, para a volta |
 | Situação | chip (A pedir, Pedido à SDC, Emitido, Alterado pelo time, Cancelado) + selo "Registrado pelo time" |
 | Compra | data em que o retorno da SDC foi registrado |
@@ -972,7 +973,9 @@ escala: é de um **evento** e de uma **pessoa do staff**, como uma linha da plan
 
 Vazio: "Nenhum pedido de voo nos próximos eventos." / "Peça as passagens por aqui, como na planilha: escolha o evento e a pessoa do staff, mesmo antes de montar a escala. A SDC compra e o time registra o voo." + "Novo pedido".
 
-**Painel "Novo pedido"**: Evento (qualquer evento futuro, com ou sem escala; fixo na aba Logística do evento); Passageiro (qualquer pessoa ativa do cadastro de staff, esteja ou não na escala); Trecho (Origem, Destino, Ida e volta / Só ida / Só volta); datas (sugeridas pelo evento) e horário preferido; Observação para a SDC. Primário "Registrar pedido".
+**Painel "Novo pedido"**: Evento (qualquer evento futuro, com ou sem escala; fixo na aba Logística do evento); Passageiro (qualquer pessoa ativa do cadastro de staff, esteja ou não na escala); Trecho (Ida e volta / Só ida / Só volta) com **Cidade de origem** e **Cidade do evento**, as duas obrigatórias e editáveis; datas (sugeridas pelo evento) e horário preferido; Observação para a SDC. Primário "Registrar pedido".
+
+**Sem aeroporto (26/11/2026, migration 0020).** O time não informa aeroporto: pede por cidade, e quem escolhe o aeroporto é a SDC, na compra. "Cidade de origem" já vem com a cidade do cadastro da pessoa ("Porto Alegre (RS)"; ajuda: "De onde a pessoa sai. Vem do cadastro dela; corrija se for outra.") e "Cidade do evento", com a do local do evento ("Vem do local do evento; corrija se for outra."). Na ida a pessoa sai da cidade de origem e chega à do evento; a volta inverte. Abaixo dos campos: "Não precisa informar o aeroporto: quem escolhe é a SDC, na compra." Origem e destino iguais são recusados: "A origem e o destino precisam ser cidades diferentes." Na turnê de Masterclass os campos são "Cidade da primeira palestra" e "Cidade da última palestra" (de onde a volta sai). O texto de "Copiar pedido" diz as cidades ("Ida: Porto Alegre (RS) → Manaus (AM) em 14/12/2026 (manhã)") e, depois da compra, também os aeroportos. No painel do pedido cada trecho mostra as cidades e uma linha "Aeroportos: POA → MAO", "Aeroporto a definir pela SDC." ou "A SDC não informou o aeroporto.". Na área da SDC (§10.5) cada pedido aparece por cidade ("Ida: Porto Alegre (RS) → Manaus (AM) em 14/12 (manhã)"). Pedido antigo continua mostrando só os aeroportos; ao alterá-lo, o formulário pede as cidades.
 **"Também precisa de hotel"** (caixa do Novo pedido, **marcada por padrão**: quem vai de avião quase sempre dorme no hotel, e os dois são pedidos à SDC na mesma época). Ajuda: "A pessoa entra na lista de quem precisa de hotel neste evento, mesmo sem escala. Os quartos são montados em Hospedagem. Desmarque se ela não vai dormir no hotel." Marcada, depois de registrar aparece no painel a faixa "[Staff 07] entrou na lista de quem precisa de hotel" com o link **"Montar os quartos"**. No painel de um pedido de voo que já existe, a linha **Hotel** diz "Também precisa de hotel" (com "Ver quartos") ou "Não precisa de hotel por este pedido", com "Marcar" / "Desmarcar". Desmarcar com a pessoa já num quarto só é recusado se o voo for a única origem do hotel dela. Cancelar o pedido não tira ninguém do quarto.
 **Aviso "N pessoas com voo pedido e sem quarto"** (faixa de informação no topo de Voos, quando houver): "Quem voa e também precisa de hotel já está na lista da Hospedagem. Monte os quartos para pedir o hotel à SDC junto com o voo." + uma linha por evento, com link para a Hospedagem dele.
 Se a pessoa **já tem pedido ativo naquele evento**, o painel avisa ("[Staff 07] já tem pedido de voo neste evento: SDC-000012 (ida e volta). Registre outro só se for uma compra a mais, como um trecho extra.") e pede a caixa **"É outra compra para a mesma pessoa"**; sem ela o pedido é recusado com a mesma explicação (evita duplicar por engano).
@@ -983,10 +986,10 @@ No recorte de **Masterclass** a viagem é uma **turnê** (ida para a primeira pa
 No **Novo pedido**, o primeiro campo é **"Viagem para"**: Evento ou Masterclass (palestras) — começa no recorte da tela. Em Masterclass o evento vira **"Primeira palestra (a ida chega aqui)"** e aparece **"Última palestra (a volta sai daqui)"**, com as palestras do mesmo dia em diante e a opção "A mesma palestra (ida e volta)"; as datas sugeridas são a véspera da primeira e o dia da última. O painel do pedido mostra "1ª palestra" e "Última palestra" no lugar de "Evento", e o texto de "Copiar pedido" diz as duas.
 **Data real.** O Novo pedido tem **"Data da solicitação"** (hoje por padrão; não aceita data futura): "O dia em que o pedido foi feito à SDC. Mude só para lançar um pedido antigo (da planilha, por exemplo)." As colunas **Solicitação** e **Compra** mostram essas datas, não a hora do lançamento; o painel do pedido mostra as duas ("Solicitado em 03/08/2026 · lançado no sistema em 28/10 às 12:00").
 
-**Painel "Registrar voo"** (em nome da SDC): faixa neutra "Você está registrando o voo informado pela SDC." Formulário por trecho: Companhia, Número do voo, Localizador, Partida (data e hora), Chegada (data e hora), link do cartão de embarque (opcional); o Valor (R$), a **Forma de pagamento** (opcional; sugere "Faturado SDC"; uma linha, sem link) e a **Data da compra** (hoje por padrão; não futura nem antes da solicitação: "A compra não pode ser antes da solicitação do pedido (03/08/2026)."). Primário "Registrar voo".
+**Painel "Registrar voo"** (em nome da SDC): faixa neutra "Você está registrando o voo informado pela SDC." Formulário por trecho: Companhia, Número do voo, Localizador, **Aeroporto de origem** e **Aeroporto de destino** (opcionais; "O código de 3 letras que a SDC informou."; os dois não podem ser o mesmo), Partida (data e hora), Chegada (data e hora), link do cartão de embarque (opcional); o Valor (R$), a **Forma de pagamento** (opcional; sugere "Faturado SDC"; uma linha, sem link) e a **Data da compra** (hoje por padrão; não futura nem antes da solicitação: "A compra não pode ser antes da solicitação do pedido (03/08/2026)."). Primário "Registrar voo".
 Toast: "Voo do pedido SDC-000013 registrado. A copy de hospedagem da pessoa foi atualizada."
 
-**Alterar e cancelar** continuam como eram (alterar depois de emitido deixa "Alterado pelo time" até o novo retorno). Cancelar: confirmação "Cancelar o pedido SDC-000013?" — "Avise a SDC pelo canal de sempre. O voo some da copy da pessoa." Pedido cancelado não conta como "já tem pedido".
+**Alterar e cancelar** continuam como eram (ao alterar, o aeroporto já informado continua na ponta em que a cidade não mudou e sai da ponta em que mudou) (alterar depois de emitido deixa "Alterado pelo time" até o novo retorno). Cancelar: confirmação "Cancelar o pedido SDC-000013?" — "Avise a SDC pelo canal de sempre. O voo some da copy da pessoa." Pedido cancelado não conta como "já tem pedido".
 
 **Pagamento: time solicita, SDC registra o valor, time aprova (25/11/2026).** Desde que a SDC tem acesso (§10.5), a compra pode ser registrada **por ela** ou, como antes, pelo time em nome dela. A linha mostra quem registrou ("Compra registrada pela SDC ([nome da lista])" ou o selo "Registrado pelo time").
 - **Chip de pagamento** ao lado do preço: "A aprovar" (compra registrada com valor), "Aprovado para pagamento" (com a data) ou nada (sem compra). Cancelado não tem pagamento.
@@ -1054,7 +1057,8 @@ Arrastar entre quartos é opcional; o seletor "Mover para…" é obrigatório (W
 
 ### 10.3 Caronas
 
-Seção "Caronas" do evento, logo abaixo dos quartos na Hospedagem (e na aba Logística do evento). Parte de quem está com o
+Seção "Caronas" do evento, **na escala do evento** (`/eventos/[id]/escala`), logo abaixo da equipe (26/11/2026; antes ficava
+na Hospedagem e na aba Logística do evento). Parte de quem está com o
 deslocamento **"Carona"** na escala (seção 6.2); o motorista é alguém da escala com veículo no cadastro (em geral quem está
 como "Carro próprio"), escolhido em "Novo motorista". Quem vai de avião não entra em carona.
 
@@ -1091,12 +1095,12 @@ Vazio: "Nenhum crédito de hotel registrado."
 **Voos (`/sdc/voos`)** — "Passagens pedidas pelo time de eventos. Registre a compra e o valor de cada pedido; o time confere e aprova o pagamento."
 - Totais ("Pagamento a aprovar" e "Aprovado para pagamento") e filtro por situação: **A comprar | Aguardando aprovação | Aprovado | Cancelado | Todos**.
 - Pedidos por mês e por evento ("16 a 18/12 · IPR_POA_12 · Imersão · Centro de Eventos — Porto Alegre (RS)"). Cada pedido: referência `SDC-…`, nome do passageiro, o que o time pediu por trecho ("Ida: VCP → POA em 14/12 (manhã)"), a observação do time e, depois da compra, companhia, voo, horários, reserva e valor.
-- **"Registrar compra"** (a comprar) ou **"Corrigir compra"** (aguardando aprovação): por trecho, Companhia (lista: Azul, LATAM, GOL ou "Outra", que abre "Nome da companhia"), Número do voo, Código da reserva (localizador), Partida e Chegada (sem link de cartão de embarque: só o time põe); "Valor total da compra (R$)", **"Forma de pagamento"** (sugere "Faturado SDC"), **"Data da compra"** (hoje por padrão; não futura nem antes do pedido do time) e "Observação para o time (opcional)". Na turnê de Masterclass o cartão mostra a linha "Turnê: Volta da última palestra: 14/03 · Hotel … — Macapá (AP)" (o título é a primeira palestra). As datas mostradas são "pedido em" (a do time) e "comprado em" (a informada).
+- **"Registrar compra"** (a comprar) ou **"Corrigir compra"** (aguardando aprovação): por trecho, **"Aeroporto de origem"** e **"Aeroporto de destino"** ("Opcional. Código de 3 letras."; é a SDC quem escolhe o aeroporto), Companhia (lista: Azul, LATAM, GOL ou "Outra", que abre "Nome da companhia"), Número do voo, Código da reserva (localizador), Partida e Chegada (sem link de cartão de embarque: só o time põe); "Valor total da compra (R$)", **"Forma de pagamento"** (sugere "Faturado SDC"), **"Data da compra"** (hoje por padrão; não futura nem antes do pedido do time) e "Observação para o time (opcional)". Na turnê de Masterclass o cartão mostra a linha "Turnê: Volta da última palestra: 14/03 · Hotel … — Macapá (AP)" (o título é a primeira palestra). As datas mostradas são "pedido em" (a do time) e "comprado em" (a informada).
 - Situação: "A comprar", "Aguardando aprovação do time", "Aprovado para pagamento em dd/mm" (só leitura), "Cancelado" (só leitura). Pedido alterado pelo time depois da compra: "O time alterou este pedido depois da compra. Confira o trecho e registre a compra de novo."
 
 **Hospedagem (`/sdc/hospedagem`)** — cada pedido mostra o evento, check-in e check-out, quantos quartos e pessoas e a lista de quartos com os nomes de quem divide. **"Registrar reserva"** (ou "Corrigir reserva"): o hotel (Nome, Cidade, UF e, se quiser, rua, número e bairro), Número da reserva, Valor total, Forma de pagamento (padrão "Faturado SDC") e **Data da reserva** (hoje por padrão; não futura nem antes do pedido). Os textos são de uma linha e não aceitam links ("Não use links nem endereços de site neste campo."). Corrigir o nome do hotel corrige o mesmo cadastro, sem criar outro.
 
-**O que não aparece para a SDC:** telefone, e-mail, documento, endereço, função, escala, custos, histórico, quem do time pediu ou aprovou. Ela não cria, não altera e não cancela pedido, nem mexe nos quartos.
+**O que não aparece para a SDC:** telefone, e-mail, documento, endereço (a **cidade de origem do trecho** aparece: é o que ela precisa para comprar), função, escala, custos, histórico, quem do time pediu ou aprovou. Ela não cria, não altera e não cancela pedido, nem mexe nos quartos.
 
 **Vazio:** "Nenhum pedido de voo por enquanto." / "Nenhum pedido de hospedagem por enquanto." (com filtro: "… com esse filtro.").
 
@@ -1154,7 +1158,7 @@ O staff envia a solicitação pelo **formulário dele** (`/solicitar-custo`, §1
      telefone válido no cadastro: "Avise [nome]: copie a mensagem de aprovado abaixo e mande pelo WhatsApp.") e a ação "Próxima da fila".
    - **Aprovar com alerta crítico:** modal "Aprovar com alerta crítico?" — texto com o alerta — campo "Motivo da aprovação (obrigatório)" (ex.: "Carro da pessoa é antigo; consumo conferido"). Botão "Aprovar".
    - **Reprovar:** modal "Reprovar STF-202611-0012?" — "A pessoa vai ver o motivo e poderá corrigir e reenviar." Campo "Motivo (obrigatório)". Botão "Reprovar".
-   - **Reprovar:** depois de reprovar, o painel avança para a próxima da fila (a pessoa vê o motivo no formulário dela e pode corrigir, §11.4).
+   - **Reprovar:** depois de reprovar, o painel fica na solicitação e mostra a faixa "STF-… reprovada. Avise [nome]: …" com a ação "Próxima da fila" e o cartão **"Copy de reprovação"** (26/11/2026): a mensagem pronta para a pessoa, já com o motivo, com "Copiar mensagem" e, havendo telefone, "Abrir no WhatsApp". O texto vem do modelo ativo do tipo **"Reprovação de custo"** em Configurações › Modelos de copy (campos próprios: protocolo do custo, motivo da reprovação, valor do custo); sem modelo ativo, vale o texto padrão. O cartão aparece sempre que a solicitação reprovada for aberta. A pessoa também vê o motivo no formulário dela e pode corrigir (§11.4).
    - Já aprovada/reprovada: a barra mostra "Aprovada em 15/11 às 10:20" e, enquanto o financeiro não tiver pago, o link "Reabrir auditoria" (confirmação simples).
 8. **Mensagem de aprovado** (toda solicitação aprovada, logo depois de aprovar e sempre que o painel for aberto de novo): cartão com o
    texto pronto e os botões **"Abrir no WhatsApp"** (`BotaoLink` secundário pequeno, `MessageCircle`) e **"Copiar mensagem"**
@@ -1378,7 +1382,7 @@ Use sempre estes rótulos. Os `switch` sobre esses valores devem ter o caso `def
 | SEM_ESCALA | Sem escala | `CircleDashed` |
 | RASCUNHO | Escala em andamento (o valor no banco continua `RASCUNHO`) | `PencilLine` |
 | AGUARDANDO_APROVACAO (novo) | Aguardando aprovação | `Hourglass` |
-| DEVOLVIDA (novo, ver 14) | Devolvida | `Undo2` |
+| DEVOLVIDA (novo, ver 14) | Não aprovada | `Undo2` |
 | APROVADA | Escala aprovada | `BadgeCheck` |
 | COMUNICADA | Escala comunicada | `Send` |
 

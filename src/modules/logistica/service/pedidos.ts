@@ -1,7 +1,11 @@
 import { ErroDaLogistica, LogisticaMudouError } from "../domain/erros";
 import {
   type AcaoNoPedido,
+  aeroportoAoAlterar,
+  aeroportoAoRegistrar,
   mensagemDaTransicaoInvalida,
+  type PontasDoTrecho,
+  rotuloDoSentido,
   type SituacaoDoPedido,
   type TipoDoPedido,
   type TrechoDesejado,
@@ -62,7 +66,12 @@ export type PedidoTravado = {
   aprovadoEm: Date | null;
   atualizadoEm: Date;
   sentidos: ("IDA" | "VOLTA")[];
+  /** Só no voo: as pontas de cada trecho como estão gravadas (cidades pedidas e aeroportos já informados). */
+  trechos: (PontasDoTrecho & { sentido: "IDA" | "VOLTA" })[];
 };
+
+/** O trecho desejado como vai para o banco: as cidades pedidas e o aeroporto que fica em cada ponta (nulo = nenhum). */
+export type TrechoDesejadoGravado = TrechoDesejado & { origemIata: string | null; destinoIata: string | null };
 
 export type TrechoEmitido = {
   sentido: "IDA" | "VOLTA";
@@ -71,6 +80,9 @@ export type TrechoEmitido = {
   localizador: string;
   partidaEm: Date;
   chegadaEm: Date;
+  /** Aeroportos que a SDC escolheu (código de 3 letras). Nulo = sem aeroporto naquela ponta. */
+  origemIata: string | null;
+  destinoIata: string | null;
   /** Ausente = não mexe na coluna (a SDC nunca grava nem apaga o link; só o time). */
   cartaoEmbarqueUrl?: string | null;
 };
@@ -116,7 +128,7 @@ export type RepositorioPedidos = {
   definirPrecisaHotel(pedidoId: string, precisaHotel: boolean, instante: Date): Promise<void>;
   /** Como está o hotel da pessoa no evento agora: origens de "precisa de hotel" e se ela ocupa um quarto. */
   hotelDaPessoaNoEvento(eventoId: string, pessoaId: string): Promise<{ origens: OrigemDoHotel[]; noQuarto: boolean }>;
-  substituirTrechosDesejados(pedidoId: string, trechos: TrechoDesejado[], instante: Date): Promise<void>;
+  substituirTrechosDesejados(pedidoId: string, trechos: TrechoDesejadoGravado[], instante: Date): Promise<void>;
   travarPedido(pedidoId: string): Promise<PedidoTravado | null>;
   /**
    * Compare-and-set: só muda se a situação ainda for `de` (e, com `atualizadoEm`, se ninguém mexeu desde então).
@@ -246,7 +258,8 @@ export async function registrarPedidoDeVoo(
     usuarioId,
     instante,
   });
-  await repo.substituirTrechosDesejados(pedido.id, entrada.trechos.map(trechoDesejado), instante);
+  // Pedido novo nasce só com as cidades: o aeroporto entra quando a SDC registra a compra.
+  await repo.substituirTrechosDesejados(pedido.id, entrada.trechos.map((trecho) => trechoDesejado(trecho, null)), instante);
   await repo.registrar({
     pedidoId: pedido.id,
     eventoId: evento.id,
@@ -266,11 +279,17 @@ export async function registrarPedidoDeVoo(
   return { ...pedido, eventoId: evento.id, outrosAtivos, precisaHotel: entrada.precisaHotel === true };
 }
 
-function trechoDesejado(trecho: RegistrarPedidoDeVoo["trechos"][number]): TrechoDesejado {
+/**
+ * `atual`: o trecho do mesmo sentido que o pedido já tem (nulo = trecho novo). O aeroporto de cada ponta só continua
+ * valendo se a cidade dela não mudou (domain/pedido.ts, aeroportoAoAlterar).
+ */
+function trechoDesejado(trecho: RegistrarPedidoDeVoo["trechos"][number], atual: PontasDoTrecho | null): TrechoDesejadoGravado {
   return {
     sentido: trecho.sentido,
-    origemIata: trecho.origemIata,
-    destinoIata: trecho.destinoIata,
+    origemCidade: trecho.origemCidade,
+    destinoCidade: trecho.destinoCidade,
+    origemIata: aeroportoAoAlterar(atual && { cidade: atual.origemCidade, iata: atual.origemIata }, trecho.origemCidade),
+    destinoIata: aeroportoAoAlterar(atual && { cidade: atual.destinoCidade, iata: atual.destinoIata }, trecho.destinoCidade),
     dataDesejada: trecho.dataDesejada,
     preferenciaHorario: trecho.preferenciaHorario ?? null,
   };
@@ -322,7 +341,13 @@ export async function alterarPedido(repo: RepositorioPedidos, entrada: AlterarPe
   );
   if (!mudou) throw new LogisticaMudouError(`o pedido ${pedido.referencia} mudou`);
   if (aprovacaoCai) await registrarQuedaDaAprovacao(repo, pedido, { usuarioId }, "pedido alterado");
-  if (entrada.trechos) await repo.substituirTrechosDesejados(pedido.id, entrada.trechos.map(trechoDesejado), instante);
+  if (entrada.trechos) {
+    await repo.substituirTrechosDesejados(
+      pedido.id,
+      entrada.trechos.map((trecho) => trechoDesejado(trecho, pedido.trechos.find((atual) => atual.sentido === trecho.sentido) ?? null)),
+      instante,
+    );
+  }
 
   await repo.registrar({
     pedidoId: pedido.id,
@@ -380,6 +405,19 @@ export async function registrarRetornoDeVoo(
   const sobrando = entrada.trechos.filter((trecho) => !pedido.sentidos.includes(trecho.sentido));
   if (sobrando.length > 0) throw new ErroDaLogistica("O pedido não tem esse trecho. Altere o pedido antes de registrar o voo.");
   const dataCompra = dataDaCompra(entrada.dataCompra, pedido, instante);
+  // É na compra que o aeroporto entra (o time pede só as cidades). Em branco, a ponta fica sem aeroporto; no pedido
+  // antigo, que não tem cidade, fica o aeroporto que ele já tinha.
+  const aeroportos = new Map(
+    entrada.trechos.map((trecho) => {
+      const atual = pedido.trechos.find((item) => item.sentido === trecho.sentido)!;
+      const origemIata = aeroportoAoRegistrar({ cidade: atual.origemCidade, iata: atual.origemIata }, trecho.origemIata);
+      const destinoIata = aeroportoAoRegistrar({ cidade: atual.destinoCidade, iata: atual.destinoIata }, trecho.destinoIata);
+      if (origemIata && destinoIata && origemIata === destinoIata) {
+        throw new ErroDaLogistica(`No voo de ${rotuloDoSentido(trecho.sentido)}, a origem e o destino precisam ser aeroportos diferentes.`);
+      }
+      return [trecho.sentido, { origemIata, destinoIata }];
+    }),
+  );
 
   const mudou = await repo.mudarPedido(
     pedido.id,
@@ -397,6 +435,7 @@ export async function registrarRetornoDeVoo(
       localizador: trecho.localizador,
       partidaEm: instanteDeSaoPaulo(trecho.partidaEm),
       chegadaEm: instanteDeSaoPaulo(trecho.chegadaEm),
+      ...aeroportos.get(trecho.sentido)!,
       // O link do cartão de embarque é só do time: quando quem registra é a SDC, a coluna fica como estava.
       ...(quemMexe(autor) === "TIME" ? { cartaoEmbarqueUrl: trecho.cartaoEmbarqueUrl ?? null } : {}),
     })),

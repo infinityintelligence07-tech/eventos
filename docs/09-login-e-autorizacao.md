@@ -881,14 +881,20 @@ time nem o banco).
   também no voo; `evento.masterclass` (para a tela separar Eventos de Masterclass); `eventoDaVolta` no voo (a última
   palestra da turnê, com os mesmos campos do evento e sem id interno). Na turnê, o recorte de período vale pela data da
   última palestra, na leitura e na escrita.
+- **Voo sem aeroporto (0020, 26/11/2026, lista fechada atualizada de propósito):** cada trecho que ela recebe ganhou
+  `origemCidade` e `destinoCidade`, as cidades que o time pediu (o time não escolhe mais o aeroporto). É a cidade
+  **do trecho**, escrita no pedido: a consulta da SDC continua sem ler o cadastro da pessoa. Como o formulário do time
+  sugere a cidade do cadastro da pessoa como origem, a SDC passa a saber de que cidade o passageiro sai (é o que ela
+  precisa para comprar a passagem); rua, bairro, CEP e o resto do endereço continuam fora. No que ela **grava**, o
+  trecho ganhou `origemIata` e `destinoIata` (opcionais): é ela quem escolhe o aeroporto.
 - **Faz:** registrar ou corrigir a compra de um pedido que já existe, enquanto o time não aprovou
   (`registrarCompraDeVooAcao`, `registrarReservaAcao`). Voo: companhia, número do voo, código da reserva, horários e
   valor, e desde a 0019 a forma de pagamento e a **data da compra** (hoje por padrão; não futura nem antes do pedido
   do time; a data da solicitação é só do time). Hospedagem: o hotel (nome, cidade, UF), número da reserva, valor,
   forma de pagamento e a data da reserva. As regras de transição
   são as mesmas do registro feito pelo time (mesmo serviço), com um schema próprio e mais estreito:
-  - **Lista fechada de campos.** O trecho da SDC tem só sentido, companhia, número do voo, localizador, partida e
-    chegada. **Não tem o link do cartão de embarque**: a SDC não grava nem apaga `cartao_embarque_url` (só o time põe
+  - **Lista fechada de campos.** O trecho da SDC tem só sentido, companhia, número do voo, localizador, partida,
+    chegada e, desde a 0020, os aeroportos de origem e de destino (3 letras, opcionais). **Não tem o link do cartão de embarque**: a SDC não grava nem apaga `cartao_embarque_url` (só o time põe
     link; o serviço não toca na coluna quando o autor é a SDC). Um teste compara as colunas antes e depois da compra.
   - **Textos sem link.** Companhia, nome e endereço do hotel, número da reserva e forma de pagamento vão para copys
     que o time manda ao staff: recusam `://`, `www.`, caracteres de controle e quebra de linha ("Não use links nem
