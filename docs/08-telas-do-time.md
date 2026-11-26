@@ -1006,9 +1006,13 @@ ainda não existe. A lista de quem precisa de hotel é a união de três origens
 onde veio cada uma: **"da escala"** (a caixa Hotel na escala, como antes), **"do pedido de voo"** ("Também precisa de
 hotel" no pedido, §10.1) e **"acrescentada aqui"**. Quem não está na escala aparece com "· fora da escala". O seletor
 de evento traz todos os eventos de hoje em diante, com ou sem escala.
-- **"Acrescentar pessoa"** (na faixa do topo): seletor com as pessoas ativas do cadastro de staff que ainda não estão na
-  lista, por nome, + "Acrescentar". Toast: "[Staff 07] entrou na lista de quem precisa de hotel. Coloque num quarto."
-  Some em evento cancelado ou que já terminou.
+- **"Falta alguém?"** (no rodapé do bloco "Sem quarto"): seletor por nome + "Acrescentar". **Em evento com escala, só
+  aparecem nomes da escala** (Vitor, 26/11/2026): quem está escalado e ainda não está na lista de hotel ("3 pessoas da
+  escala ainda não estão na lista de hotel. Só aparecem nomes da escala."). Com a escala inteira na lista: "Toda a
+  escala já está na lista de hotel. Para incluir outra pessoa, coloque-a antes na escala." Só quando o evento ainda não
+  tem ninguém na escala (ou é Masterclass, que não tem escala) a lista traz o cadastro de staff ativo, e o texto diz
+  isso. Toast: "[Staff 07] entrou na lista de quem precisa de hotel. Coloque num quarto." O seletor some em evento
+  cancelado ou que já terminou. Sempre com o link **"Abrir a escala"**.
 - **"Tirar da lista"** (em "Sem quarto", para quem foi acrescentada aqui). Se ela também veio da escala ou do voo,
   continua na lista por essas origens. Num quarto só por ter sido acrescentada: "…está num quarto. Tire a pessoa do
   quarto antes de tirá-la da lista."
@@ -1016,14 +1020,19 @@ de evento traz todos os eventos de hoje em diante, com ou sem escala.
   está num quarto sem outra origem, ela continua no quarto e passa a aparecer como "acrescentada aqui"; o toast da ação
   avisa ("Ela continua no quarto: tire em Hospedagem se não for mais dormir no hotel.").
 
-**Layout por evento** (seletor de evento obrigatório nesta aba; os marcados aparecem como "· sem hospedagem"), de cima para baixo; depois dos quartos vem a seção de caronas do mesmo evento (§10.3):
-1. **Faixa de quem precisa de hotel** (sempre): "8 pessoas precisam de hotel em CONF_AM_60" + "5 com quarto e 3 sem quarto. Coloque cada pessoa num quarto para definir quem divide com quem." Tom de atenção enquanto houver gente sem quarto, sucesso quando todo mundo tem e informação quando a lista está vazia ("Ninguém na lista de hotel de CONF_AM_60" + "Entra em quarto quem precisa de hotel neste evento. A lista não depende da escala: acrescente a pessoa aqui, marque "Também precisa de hotel" no pedido de voo ou marque Hotel na escala."). Link **"Abrir a escala"** e o **"Acrescentar pessoa"**. Se há gente ativa na escala fora da lista: "4 pessoas da escala não estão na lista de hotel. Se falta alguém, marque Hotel na escala ou acrescente aqui."
-2. **Sem quarto · N** (cartão, logo abaixo da faixa; só aparece quando há alguém sem quarto, mesmo antes de existir quarto): cada pessoa com função e sexo, a origem ("da escala · do pedido de voo", "acrescentada aqui · fora da escala"), o seletor "Colocar no quarto…" e, para quem foi acrescentada aqui, "Tirar da lista". A opção do quarto diz quem já está nele: "Quarto 2 · 1 de 2 · Feminino · com Bia" (ou "· vazio"). Ação "Distribuir por sexo (N)". Sem quarto criado: "Clique em "Montar quartos" logo abaixo para começar a distribuir."
-3. **Primeiro passo — "Montar quartos"** (estado vazio "Nenhum quarto montado para este evento."): abre o painel com as datas de **entrada e saída** já sugeridas pelo evento (véspera do início até o dia seguinte ao fim), a observação e o campo "Onde", que fica em **"Hotel pela SDC (ela escolhe e reserva)"**; só se escolhe ali um apartamento da IAM (não passa pela SDC) ou um hotel já definido. Ao lado, **"Este evento não tem hospedagem"**.
-4. **Cartão da hospedagem**: título "Hotel a definir pela SDC" (ou o nome do hotel, depois do retorno; ou "Apartamento da IAM"). Linhas: Período ("Entrada 14/12 · saída 18/12"); Quartos ("3 quartos · 7 pessoas"); **Pedido à SDC**; Reserva; Valor total e forma de pagamento ("R$ 2.400,00 · Faturado SDC"); Resposta da SDC; Observação. Ações: "Copiar rooming list", "Copiar pedido" (depois de pedir), "Editar" e, sem quartos nem pedido, "Remover".
-5. **Quartos** (grade de cartões `md:grid-cols-2 xl:grid-cols-3`): "Quarto 1 · duplo · 2 de 2" e, na linha de baixo, "Feminino · 2 pessoas dividem o quarto"; lista de ocupantes (com a origem embaixo do nome) com "Período", **"Mover para…"** e "Tirar". Aviso de atenção no cartão quando misturar sexos. "+ Novo quarto" no fim.
+**Layout por evento: um quadro de blocos** (26/11/2026; seletor de evento obrigatório nesta aba; os marcados aparecem como "· sem hospedagem"). A organização dos quartos fica à vista desde o primeiro acesso, sem rolar a página; depois dos quartos vem a seção de caronas do mesmo evento (§10.3):
+1. **Resumo em quatro números** (sempre): "Precisam de hotel", "Com quarto" (verde quando todo mundo tem), "Sem quarto" (laranja enquanto houver alguém) e "Quartos" (com "N camas livres").
+2. **O quadro**, em duas colunas no computador (`lg:grid-cols-[minmax(260px,320px)_1fr]`) e uma embaixo da outra no celular:
+   - **Esquerda — "Sem quarto · N"**: um bloco por pessoa, com o nome, a etiqueta do sexo (bolinha colorida + "Feminino" / "Masculino"; "Sem sexo no cadastro" em laranja), a função e a origem ("da escala · do pedido de voo", "acrescentada aqui · fora da escala"), o seletor **"Colocar no quarto…"** e, para quem foi acrescentada aqui, "Tirar da lista". Cada quarto da lista diz quem já está nele ("1 de 2 · Feminino · com Bia", ou "· vazio"); quarto cheio ou de outro sexo aparece desabilitado, com o motivo. Ação "Distribuir por sexo (N)". Todo mundo com quarto: bloco verde "Todo mundo tem quarto." No rodapé, "Falta alguém?" (acima).
+   - **Direita — os quartos**. Sem quarto montado, um bloco tracejado "Nenhum quarto montado para este evento." com **"Montar quartos"** (abre o painel com as datas de **entrada e saída** já sugeridas pelo evento — véspera do início até o dia seguinte ao fim —, a observação e o campo "Onde", que fica em **"Hotel pela SDC (ela escolhe e reserva)"**; só se escolhe ali um apartamento da IAM, que não passa pela SDC, ou um hotel já definido) e **"Este evento não tem hospedagem"**.
+3. **Cartão da hospedagem** (um por hospedagem, na coluna da direita): título "Hotel a definir pela SDC" (ou o nome do hotel, depois do retorno; ou "Apartamento da IAM"). Ações: "Copiar rooming list", "Copiar pedido" (depois de pedir), "Editar" e, sem quartos nem pedido, "Remover". Dentro dele, de cima para baixo:
+   - uma linha com "Entrada 14/12 · saída 18/12" e "3 quartos · 5 de 6 camas ocupadas";
+   - **os quartos em blocos** (grade que põe tantos por linha quanto a largura deixar, mínimo de 240 px): faixa de cor no topo pelo sexo do quarto, "Quarto 1", "Duplo · Feminino · diária R$ 320,00" e o contador "1 de 2" (verde quando cheio). **Uma casa por cama**: a ocupada mostra o nome, a função e a origem, o período próprio (se houver) e **"Mover para…"**, "Período" e "Tirar"; a livre é tracejada, "Cama livre", com o seletor **"Colocar alguém…"** (quem está sem quarto; quem não cabe aparece desabilitado, com o motivo). Aviso de atenção no bloco quando misturar sexos. Quarto vazio tem "Remover quarto". No fim da grade, o bloco tracejado **"+ Novo quarto"**, que abre ali mesmo o formulário (Nome, Camas, Quarto, Diária);
+   - embaixo dos quartos, as linhas do **Pedido à SDC**; Pagamento; Reserva; Valor total e forma de pagamento ("R$ 2.400,00 · Faturado SDC"); Resposta da SDC; Observação. O pedido vem depois dos quartos porque é com eles montados que se pede.
 
-**Pedido à SDC (na linha do cartão):**
+**Escolher já grava.** "Colocar no quarto…", "Colocar alguém…" e "Mover para…" gravam na hora da escolha, sem botão ao lado (como a troca de função na escala); o toast confirma e a pessoa muda de bloco. Recusa do servidor vira toast de erro e nada muda.
+
+**Pedido à SDC (nas linhas embaixo dos quartos):**
 - Sem quartos: "Monte os quartos para pedir a hospedagem à SDC." (o pedido diz quantos quartos e quem divide com quem).
 - Com quartos: botão primário **"Pedir hospedagem à SDC"**. Gera o pedido `SDC-…` e o texto de "Copiar pedido": evento, **local e cidade do evento** (para a SDC procurar hotel perto), check-in e check-out, "3 quartos · 7 pessoas" e a lista de quartos com os nomes. Sem hotel no texto (a não ser que já esteja definido).
 - **Data real:** ao lado de "Pedir hospedagem à SDC" há o campo **"Pedido em"** (hoje por padrão, não futuro), para lançar um pedido antigo. A linha do pedido mostra "pedido em 15/09/2026 · reservado em 20/09/2026". O painel "Registrar reserva" tem **"Data da reserva"** (hoje por padrão; não futura nem antes do pedido).
@@ -1037,7 +1046,7 @@ de evento traz todos os eventos de hoje em diante, com ou sem escala.
 **"Sem hospedagem"** (como na planilha): com "Este evento não tem hospedagem" a tela do evento vira uma faixa neutra "CONF_AM_60 está marcado como sem hospedagem" com **"Desfazer"**; o evento continua no seletor (com "· sem hospedagem"), mas deixa de ser o evento que a Hospedagem abre sozinha ("Próximo evento"). Só dá para marcar quando não há quartos montados; "Montar quartos" num evento marcado desfaz a marca. As caronas do evento continuam logo abaixo.
 
 **"Mover para…" em um passo** (seletor de quem já está num quarto), com dois grupos:
-- **Outro quarto:** os quartos com vaga (os cheios aparecem desabilitados, "(cheio)").
+- **Outro quarto:** os quartos com vaga (os cheios aparecem desabilitados, com "· cheio").
 - **Trocar de lugar com:** cada pessoa dos outros quartos, "Dani Lima (Quarto 2)". As duas trocam de quarto de uma vez, mesmo com os dois quartos cheios, sem passar por "Sem quarto". Vale a regra de sempre (sexo do quarto e as duas na lista de quem precisa de hotel); recusada, nada muda.
 
 Só quem está na lista entra em quarto e na distribuição por sexo. Quem já está num quarto continua aparecendo no quarto.

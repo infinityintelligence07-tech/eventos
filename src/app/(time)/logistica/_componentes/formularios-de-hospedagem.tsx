@@ -258,15 +258,22 @@ export function BotaoPeriodoDoOcupante({
 export function FormularioNovoQuarto({ acao, hospedagemId, proximoNome }: { acao: AcaoDoFormulario; hospedagemId: string; proximoNome: string }) {
   const [aberto, setAberto] = useState(false);
   const { despachar, erros, estado } = useAcao(acao, () => setAberto(false));
+  // Fechado, é um bloco tracejado do tamanho de um quarto: o lugar onde o próximo quarto vai aparecer.
   if (!aberto) {
     return (
-      <Botao icone={<Plus size={18} aria-hidden />} onClick={() => setAberto(true)}>
+      <button
+        type="button"
+        onClick={() => setAberto(true)}
+        className="flex h-full min-h-[132px] w-full flex-col items-center justify-center gap-1 rounded-[var(--ds-radius-md)] border border-dashed border-[var(--ds-separator-strong)] px-3 py-4 text-[14px] font-medium text-[var(--ds-tint-text)] hover:bg-[var(--ds-tint-soft)]"
+      >
+        <Plus size={20} aria-hidden />
         Novo quarto
-      </Botao>
+        <span className="text-[12px] font-normal text-[var(--ds-label-2)]">{proximoNome}</span>
+      </button>
     );
   }
   return (
-    <form action={despachar} aria-label="Novo quarto" className="rounded-[var(--ds-radius-lg)] border border-dashed border-[var(--ds-separator)] p-4">
+    <form action={despachar} aria-label="Novo quarto" className="rounded-[var(--ds-radius-md)] border border-dashed border-[var(--ds-separator-strong)] p-3">
       <ErroDoFormulario estado={estado} />
       <input type="hidden" name="hospedagemId" value={hospedagemId} />
       <div className="grid grid-cols-2 gap-3">

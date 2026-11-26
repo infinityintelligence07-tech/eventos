@@ -143,8 +143,11 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
   hospedagensDoEvento(eventoId: string): Promise<HospedagemDoEvento[]>;
   /** A lista de quem precisa de hotel no evento: a união das origens (escala, voo, acrescentada), uma linha por pessoa. */
   precisamDeHotel(eventoId: string): Promise<PessoaParaHospedar[]>;
-  /** Quantas pessoas ativas na escala do evento não estão na lista de quem precisa de hotel (o lembrete "falta alguém?"). */
-  naEscalaSemHotel(eventoId: string): Promise<number>;
+  /**
+   * Quem está ativo na escala do evento e ainda não está na lista de quem precisa de hotel, por nome. É o lembrete
+   * "falta alguém?" e, em evento com escala, a lista de quem dá para acrescentar pela Hospedagem.
+   */
+  daEscalaSemHotel(eventoId: string): Promise<{ pessoaId: string; nome: string }[]>;
   /** Eventos (de `desde` em diante) que já têm hospedagem aberta ou gente na lista de hotel pelo voo ou acrescentada. */
   eventosComHotel(filtro: { desde: string }): Promise<string[]>;
   /** Quantas hospedagens o evento tem (com ou sem hotel definido). */
@@ -359,13 +362,21 @@ export function criarRepositorioHospedagem(executor: Executor): RepositorioHospe
       }));
     },
 
-    async naEscalaSemHotel(eventoId) {
-      const linhas = await executor.execute<{ total: number }>(sql`
-        select count(*)::int as total
-          from eventos.convocacao c join eventos.escala es on es.id = c.escala_id
+    async daEscalaSemHotel(eventoId) {
+      // Só quem dá para acrescentar: ativo no cadastro de staff. Quem já está num quarto do evento já está na lista.
+      const linhas = await executor.execute<{ pessoa_id: string; nome: string }>(sql`
+        select p.id as pessoa_id, coalesce(p.nome_social, p.nome_completo) as nome
+          from eventos.convocacao c
+          join eventos.escala es on es.id = c.escala_id
+          join core.pessoa p on p.id = c.pessoa_id
+          join eventos.pessoa_evento pe on pe.pessoa_id = p.id
          where es.evento_id = ${eventoId} and es.deleted_at is null and c.principal and c.status in ${ATIVAS} and not c.precisa_hotel
-           and not ${doVoo(sql`${eventoId}::uuid`, sql`c.pessoa_id`)} and not ${avulsa(sql`${eventoId}::uuid`, sql`c.pessoa_id`)}`);
-      return linhas.rows[0]?.total ?? 0;
+           and p.ativo and p.deleted_at is null
+           and not ${doVoo(sql`${eventoId}::uuid`, sql`c.pessoa_id`)} and not ${avulsa(sql`${eventoId}::uuid`, sql`c.pessoa_id`)}
+           and not exists (select 1 from eventos.quarto_ocupante o where o.evento_id = ${eventoId} and o.pessoa_id = c.pessoa_id)
+         group by p.id, coalesce(p.nome_social, p.nome_completo)
+         order by coalesce(p.nome_social, p.nome_completo), p.id`);
+      return linhas.rows.map((linha) => ({ pessoaId: linha.pessoa_id, nome: linha.nome }));
     },
 
     async eventosComHotel({ desde }) {
