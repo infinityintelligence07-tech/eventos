@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { TurmaRecebida } from "@/core/integrations/iam-control";
 import { criarRepositorioVagas, HORARIO_PADRAO } from "@/modules/escala";
 import { criarRepositorioSincronizacao } from "@/modules/eventos";
-import { type BancoDeTeste, criarBancoDeTeste, TEST_DATABASE_URL } from "@/test/banco";
+import { type BancoDeTeste, criarBancoDeTeste, desfazerFuncoesDa0021, TEST_DATABASE_URL } from "@/test/banco";
 import { turmaDeExemplo } from "@/test/turmas";
 
 import { sincronizarTurmas } from "../sincronizar-turmas";
@@ -63,6 +63,8 @@ describe.skipIf(!TEST_DATABASE_URL)("sincronização de turmas no Postgres (GH +
 
   beforeAll(async () => {
     banco = await criarBancoDeTeste();
+    // As funções de exemplo destes testes (Pai / mãe, Trainee de líder...) saíram na 0021: voltam só aqui.
+    await desfazerFuncoesDa0021(banco);
     worker = banco.dbComoPapel("app_eventos_worker");
     await banco.sql(`insert into core.polo (codigo, nome) values ('AM', 'Manaus')`);
   }, 60_000);

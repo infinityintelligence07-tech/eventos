@@ -103,3 +103,13 @@ export async function criarBancoDeTeste(): Promise<BancoDeTeste> {
     },
   };
 }
+
+/**
+ * Devolve ao banco de teste as funções que a migration 0021 apagou (Pai / mãe, cargo do evento; Trainee de líder;
+ * Palco...) e a linha de Pai / mãe na regra do Confronto, rodando o `.down.sql` dela. Os testes do cargo do evento e
+ * da fila do Confronto usam essas funções como exemplo: as regras continuam no código, só não há mais função de
+ * produção que as use.
+ */
+export async function desfazerFuncoesDa0021(banco: Pick<BancoDeTeste, "sql">): Promise<void> {
+  await banco.sql(`BEGIN;\n${readFileSync(path.join(MIGRATIONS, "0021_funcoes-da-escala.down.sql"), "utf8")}\n;COMMIT;`);
+}

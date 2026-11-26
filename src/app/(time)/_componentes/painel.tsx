@@ -6,7 +6,7 @@ import {
   CalendarDays,
   Contact,
   Database,
-  House,
+  LayoutDashboard,
   Lock,
   LogOut,
   type LucideIcon,
@@ -31,7 +31,7 @@ import { type ItemDoMenu, itemAtivoDoMenu, ROTAS_DO_MENU, rotasDoMenu } from "./
 import { ProvedorDeToast } from "./ui/toast";
 
 const ICONES: Record<ItemDoMenu, LucideIcon> = {
-  Início: House,
+  Dashboard: LayoutDashboard,
   Calendário: CalendarDays,
   Escalas: Users,
   Comunicação: MessageCircle,

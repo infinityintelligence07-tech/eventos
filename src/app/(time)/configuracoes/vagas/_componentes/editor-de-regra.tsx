@@ -148,7 +148,7 @@ export function EditorDeRegra({
         aberto={recalculando}
         aoFechar={() => setRecalculando(false)}
         titulo={`Recalcular as vagas dos eventos de ${nomeDoTipo}?`}
-        descricao="Vale para os eventos que ainda não terminaram e estão sem escala, com a escala em andamento ou devolvida. Números já confirmados por quem monta não mudam."
+        descricao="Vale para os eventos que ainda não terminaram e estão sem escala, com a escala em andamento ou não aprovada. Números já confirmados por quem monta não mudam."
         rotuloConfirmar="Recalcular vagas"
         carregando={recalcular.pendente}
         acao={recalcular.despachar}

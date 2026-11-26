@@ -517,6 +517,36 @@ pedido `ALTERADO` guarda a data da compra anterior (como o `emitido_em`), e a SD
 ser gravada no retorno de voo (opcional; obrigatória só na hospedagem), pelo time e pela SDC, com a mesma validação de
 texto (uma linha, sem link).
 
+### 4.8 Pedido de voo sem aeroporto (26/11/2026, migration 0020)
+
+"Pedido de voo: tirar qual aeroporto." O time deixa de informar aeroporto. **Pede por cidade:** de onde a pessoa sai e
+a cidade do evento, em texto ("Porto Alegre (RS)"). **Quem escolhe o aeroporto é a SDC**, que informa o código (3
+letras, opcional) ao registrar ou corrigir a compra; o time, registrando em nome dela, informa do mesmo jeito.
+
+- **Modelo:** `trecho_voo.origem_cidade` e `destino_cidade` (texto); `origem_iata` e `destino_iata` passam a ser
+  opcionais. Cada ponta do trecho tem a cidade ou o aeroporto (`trecho_voo_pontas_check`). Pedido novo nasce com as
+  cidades e sem aeroporto. **Pedido anterior à 0020 fica como está** (só aeroporto, sem cidade): a migration não mexe em
+  nenhuma linha, e as telas mostram o aeroporto quando não há cidade.
+- **Sugestões do formulário:** a cidade de origem vem do cadastro da pessoa (`pessoa_evento.cidade` e `uf`) e a do
+  evento, do local do evento; as duas são editáveis e obrigatórias (2 a 80 caracteres, uma linha, sem link: a cidade
+  vai para a SDC e pode ir para a copy do staff). Na ida, origem = cidade da pessoa e destino = cidade do evento; a
+  volta inverte. Na **turnê de Masterclass** a volta sai da cidade da **última** palestra, que tem um campo próprio.
+  Origem e destino de um trecho não podem ser a mesma cidade (`mesmaCidade`: sem maiúsculas, acentos e pontuação).
+- **O que aparece** (`domain/pedido.ts`): `rotaDoTrecho` dá, em cada ponta, o aeroporto quando há e a cidade quando
+  não ("Porto Alegre (RS) → Manaus (AM)" e, depois da compra, "POA → MAO"); é o que vai na tabela de Voos e na copy do
+  staff. `rotaPorExtenso` (texto de "Copiar pedido") diz as cidades e, quando já há, os aeroportos. O painel do pedido
+  e a área da SDC mostram as cidades e, numa linha própria, os aeroportos.
+- **O aeroporto ao longo do pedido** (funções puras): na compra, vale o que foi informado; em branco, a ponta fica sem
+  aeroporto, a não ser que o trecho não tenha cidade (pedido antigo), em que fica o que ele já tinha
+  (`aeroportoAoRegistrar`). Ao alterar o pedido, o aeroporto de uma ponta continua se a cidade dela não mudou (ou se o
+  trecho ainda não tinha cidade) e sai se mudou (`aeroportoAoAlterar`). Dois aeroportos iguais num trecho são
+  recusados pelo schema, pelo serviço e pelo `CHECK`.
+- **Turnê e outras regras:** `validarTurne` e as demais regras de `domain/turne.ts` nunca compararam aeroportos
+  (comparam eventos e datas): não mudaram. A única comparação de aeroporto era "origem diferente do destino", que agora
+  vale para as cidades no pedido e para os aeroportos na compra.
+- **SDC:** o que ela recebe ganhou `origemCidade` e `destinoCidade` de cada trecho (a cidade do trecho, nunca o
+  endereço da pessoa); o que ela grava ganhou `origemIata` e `destinoIata` (docs/09 §15.4).
+
 ---
 
 ## 5. Mudanças de banco (migration 0004, só no banco local)
@@ -628,7 +658,8 @@ docs/09 §15.7. **`eventos.registro_acao` (0016):** coluna `acesso_sdc_id` → `
 | `id` | uuid PK | |
 | `pedido_id` | uuid not null → `pedido_sdc` ON DELETE CASCADE | `UNIQUE (pedido_id, sentido)` (cobre o índice da FK) |
 | `sentido` | text not null | `CHECK IN ('IDA','VOLTA')` |
-| `origem_iata`, `destino_iata` | text not null | `CHECK (origem_iata ~ '^[A-Z]{3}$' AND destino_iata ~ '^[A-Z]{3}$' AND origem_iata <> destino_iata)` |
+| `origem_cidade`, `destino_cidade` | text | 0020. O que o time pede: de que cidade a pessoa sai e a que cidade chega ("Porto Alegre (RS)"). Nulas nos trechos anteriores à 0020. `CHECK` de 2 a 80 caracteres |
+| `origem_iata`, `destino_iata` | text | Opcionais desde a 0020: o aeroporto que a SDC informa na compra (ou o do pedido antigo). `CHECK`: cada um nulo ou `~ '^[A-Z]{3}$'`, e diferentes quando vêm os dois. `trecho_voo_pontas_check`: cada ponta tem a cidade ou o aeroporto |
 | `data_desejada` | date not null | |
 | `preferencia_horario` | text | `CHECK IN ('MANHA','TARDE','NOITE','QUALQUER')` ou nulo |
 | `companhia` | text | preenchido pela SDC |
@@ -831,11 +862,12 @@ Server actions (Zod):
 
 | Action | Schema |
 |---|---|
-| `registrarPedidoDeVoo` | `{ convocacaoId, trechos: [{ sentido: 'IDA'\|'VOLTA', origemIata: /^[A-Z]{3}$/, destinoIata, dataDesejada: date, preferenciaHorario? }] 1..2 (sem sentido repetido), observacaoTime? }` |
+| `registrarPedidoDeVoo` | `{ convocacaoId, trechos: [{ sentido: 'IDA'\|'VOLTA', origemCidade: 2..80, destinoCidade: 2..80 (cidades diferentes), dataDesejada: date, preferenciaHorario? }] 1..2 (sem sentido repetido), observacaoTime? }` (até a 0020 o trecho levava `origemIata` e `destinoIata`) |
 | `alterarPedido` | `{ pedidoId, trechos?, observacaoTime?, atualizadoEm }` (EMITIDO → ALTERADO) |
 | `cancelarPedido` | `{ pedidoId, motivo: 3..500 }` |
 | `registrarRetornoDaSdc` | voo: `{ pedidoId, valorCentavos ≥ 0, observacaoSdc?, trechos: [{ sentido, companhia, numeroVoo, localizador, partidaEm, chegadaEm, cartaoEmbarqueUrl? }] }`; hotel: `{ pedidoId, valorCentavos, numeroReserva }` |
 | (desde a 0019) | `registrarPedidoDeVoo` aceita `eventoVoltaId?` (última palestra da turnê) e `dataSolicitacao?`; `registrarPedidoDeHospedagem` aceita `dataSolicitacao?`; os retornos de voo e de hospedagem aceitam `dataCompra?`, e o de voo, `formaPagamento?`. Os schemas da SDC têm `dataCompra?` e `formaPagamento` (sem `dataSolicitacao` nem `eventoVoltaId`). |
+| (desde a 0020) | Os trechos do retorno de voo, do time e da SDC, aceitam `origemIata?` e `destinoIata?` (3 letras, diferentes quando vêm os dois): é na compra que o aeroporto entra. |
 | `criarHospedagem` / `alterarHospedagem` | `{ eventoId, localId, checkIn, checkOut, observacao? }` |
 | `registrarPedidoDeHospedagem` | `{ hospedagemId, observacaoTime? }` (cria `pedido_sdc` tipo HOSPEDAGEM e liga) |
 | `adicionarQuarto` / `removerQuarto` | `{ hospedagemId, nome, capacidade: 1..4, sexo?, valorDiariaCentavos? }` / `{ quartoId }` (só vazio) |
@@ -1228,6 +1260,7 @@ Onde a doc 08 diverge, vale o que está aqui.
 | Acesso da SDC e aprovação do pagamento (25/11/2026, migration 0016) | "Time solicita, SDC coloca o valor e nosso time aprova falando que usamos." A SDC entra pelo Google com um e-mail da lista mantida pela líder (nada no cadastro do GH), vê só pedidos de voo e de hospedagem e registra tudo da compra. O time aprova **depois** da compra; a aprovação cai se a compra mudar. Detalhes e riscos em docs/09 §15. |
 | Hotel sem depender da escala (25/11/2026, migration 0017) | "Precisamos que os hotéis também possam ser pedidos juntos com os voos, não apenas na escala." Quem precisa de hotel é a união de três origens (escala, "Também precisa de hotel" no pedido de voo, acrescentada na Hospedagem); o ocupante do quarto passou a ser a pessoa no evento, com a convocação opcional. Regras de conflito e consumidores em §4.6. |
 | Masterclass e data real (25/11/2026, migration 0019) | O voo de Masterclass é uma turnê: o pedido é da primeira palestra e guarda a última como "evento da volta". Voos e Hospedagem (e a SDC) ganham o recorte Eventos \| Masterclass. A hospedagem de Masterclass usa o que já existia; "pré-reserva" = pedido feito e não emitido. Solicitação e compra têm data real, informada por quem lança (não futura; compra não antes da solicitação); o histórico guarda a hora do lançamento. Forma de pagamento também no voo. Detalhes em §4.7. |
+| Pedido de voo sem aeroporto (26/11/2026, migration 0020) | "Pedido de voo: tirar qual aeroporto." O time pede por cidade (a de origem, sugerida pelo cadastro da pessoa, e a do evento, sugerida pelo local); a SDC escolhe o aeroporto e informa o código na compra, se quiser. Pedido antigo continua só com o aeroporto. Detalhes em §4.8. |
 | Formulário de custo do staff (24/11/2026) | `/solicitar-custo` substitui o Google Forms: aberto do primeiro dia do evento até 5 dias depois do último (inclusive, fuso de São Paulo); fora do prazo, só o time registra. A pessoa informa só deslocamento e despesas; remuneração e alimentação são fixas e entram sozinhas pela regra (quantidade 1, como a tela do time sugere). Tipo de combustível e data do evento ficam de fora. Correção pelo staff só da reprovada, até 5 dias depois da reprovação. Detalhe na doc 08 §11.4. |
 | Comprovante do custo (24/11/2026) | Anexo no formulário do staff: até 3 arquivos de 8 MB (JPEG, PNG, WebP ou PDF, conferidos pelos bytes), obrigatório quando há deslocamento ou despesa. Storage do Supabase, bucket privado `eventos-comprovantes`, pelo protocolo S3 com chave de acesso S3 (nunca a `service_role`); leitura por rota autenticada que redireciona para URL pré-assinada de 5 minutos. Sem as variáveis, o anexo fica desligado e o formulário funciona sem o campo. |
 | Custo aprovado (24/11/2026) | Mensagem pronta para copiar e mandar no WhatsApp (primeiro nome, evento, protocolo, valor). O sistema não envia. **Construção futura:** envio automático pelo WhatsApp. |

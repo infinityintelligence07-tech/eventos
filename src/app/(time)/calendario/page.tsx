@@ -75,10 +75,11 @@ export default async function PaginaCalendario({ searchParams }: { searchParams:
     <>
       <CabecalhoDaPagina titulo="Calendário" subtitulo={quandoSincronizou(calendario.ultimaSincronizacao)} />
 
+      {/* Os números acompanham o atalho: em "Palestras" só o de Masterclass; em "Eventos", os de evento. */}
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <CartaoDeNumero rotulo="Eventos no mês" valor={resumo.eventos} />
-        <CartaoDeNumero rotulo="Masterclasses no mês" valor={resumo.masterclasses} />
-        <CartaoDeNumero rotulo="Vagas sugeridas" valor={resumo.vagas} />
+        {filtros.recorte !== "palestras" && <CartaoDeNumero rotulo="Eventos no mês" valor={resumo.eventos} />}
+        {filtros.recorte !== "eventos" && <CartaoDeNumero rotulo="Masterclasses no mês" valor={resumo.masterclasses} />}
+        {filtros.recorte !== "palestras" && <CartaoDeNumero rotulo="Vagas sugeridas" valor={resumo.vagas} />}
       </div>
 
       <section className={`${CARTAO} min-w-0 p-4 md:p-5`} aria-label={`Calendário de ${calendario.nomeDoMes}`}>

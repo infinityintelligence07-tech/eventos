@@ -13,7 +13,7 @@ import {
   FaixaSomenteLeitura,
 } from "@/app/(time)/_componentes/ui";
 import { carregarComunicacaoDoEvento } from "@/fluxos/comunicacao";
-import { rotuloDoTipoDeModelo, type SituacaoDaCopy, type TipoDeModelo, TIPOS_DE_MODELO } from "@/modules/comunicacao";
+import { rotuloDoTipoDeModelo, type SituacaoDaCopy, type TipoDaEscala, TIPOS_DA_ESCALA } from "@/modules/comunicacao";
 
 import { ComunicacaoDoEvento } from "./_componentes/comunicacao-do-evento";
 import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
@@ -33,8 +33,8 @@ const FILTROS: { valor: string; situacao: SituacaoDaCopy; rotulo: string }[] = [
   { valor: "enviada", situacao: "ENVIADA", rotulo: "Enviadas" },
 ];
 
-function lerTipo(valor: string | undefined): TipoDeModelo {
-  return TIPOS_DE_MODELO.find((tipo) => tipo === valor) ?? "ESCALACAO";
+function lerTipo(valor: string | undefined): TipoDaEscala {
+  return TIPOS_DA_ESCALA.find((tipo) => tipo === valor) ?? "ESCALACAO";
 }
 
 export default async function PaginaComunicacaoDoEvento({ params, searchParams }: Parametros) {

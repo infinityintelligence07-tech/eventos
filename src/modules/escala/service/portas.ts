@@ -9,6 +9,8 @@ export type EventoTravado = {
   codigo: string | null;
   status: string;
   statusEscala: StatusEscala;
+  /** Masterclass não passa pela aprovação da líder. */
+  masterclass: boolean;
   regraVagas: unknown;
   expectativaPublico: number | null;
   pessoasNaFila: number | null;

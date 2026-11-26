@@ -31,8 +31,15 @@ export type EventoParaASdc = {
 
 export type TrechoParaASdc = {
   sentido: Sentido;
-  origemIata: string;
-  destinoIata: string;
+  /**
+   * As cidades que o time pediu ("Porto Alegre (RS)"): de onde a pessoa sai e aonde chega. É só a cidade do trecho,
+   * nunca o endereço da pessoa. Nulas no pedido anterior à 0020, que só tem o aeroporto.
+   */
+  origemCidade: string | null;
+  destinoCidade: string | null;
+  /** Aeroportos (3 letras): os que a própria SDC informou na compra, ou os do pedido antigo. */
+  origemIata: string | null;
+  destinoIata: string | null;
   dataDesejada: string;
   preferenciaHorario: PreferenciaDeHorario | null;
   companhia: string | null;
@@ -191,6 +198,8 @@ export function criarRepositorioDaSdc(executor: Executor) {
             .select({
               pedidoId: trechoVoo.pedidoId,
               sentido: trechoVoo.sentido,
+              origemCidade: trechoVoo.origemCidade,
+              destinoCidade: trechoVoo.destinoCidade,
               origemIata: trechoVoo.origemIata,
               destinoIata: trechoVoo.destinoIata,
               dataDesejada: trechoVoo.dataDesejada,
@@ -238,6 +247,8 @@ export function criarRepositorioDaSdc(executor: Executor) {
           .map((trecho) => ({
             // sentido e preferencia_horario têm CHECK no banco com esses valores.
             sentido: trecho.sentido as Sentido,
+            origemCidade: trecho.origemCidade,
+            destinoCidade: trecho.destinoCidade,
             origemIata: trecho.origemIata,
             destinoIata: trecho.destinoIata,
             dataDesejada: trecho.dataDesejada,

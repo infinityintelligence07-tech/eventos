@@ -141,6 +141,27 @@
       "when": 1795639593353,
       "tag": "0019_masterclass-e-data-real",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1795716097160,
+      "tag": "0020_voo-sem-aeroporto",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1795716667149,
+      "tag": "0021_funcoes-da-escala",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1795716667793,
+      "tag": "0022_copy-de-reprovacao-de-custo",
+      "breakpoints": true
     }
   ]
 }

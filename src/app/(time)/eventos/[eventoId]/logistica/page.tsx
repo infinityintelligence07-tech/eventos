@@ -3,9 +3,8 @@ import { notFound } from "next/navigation";
 import { z } from "zod";
 
 import { situacaoDaEscrita } from "@/fluxos/_base";
-import { carregarCaronas, carregarHospedagem, carregarPedido, carregarVoos } from "@/fluxos/logistica";
+import { carregarHospedagem, carregarPedido, carregarVoos } from "@/fluxos/logistica";
 
-import { SecaoDeCaronas } from "../../../logistica/_componentes/secao-de-caronas";
 import { SecaoDeHospedagem } from "../../../logistica/_componentes/secao-de-hospedagem";
 import { type ParametrosDeVoos, SecaoDeVoos, situacaoDoFiltro } from "../../../logistica/_componentes/secao-de-voos";
 import { parametro } from "../../../logistica/_componentes/situacoes";
@@ -32,18 +31,16 @@ export default async function PaginaLogisticaDoEvento({ params, searchParams }: 
     hotel: parametro(busca.hotel),
   };
   const agora = new Date();
-  const [voos, pedido, hospedagem, caronas, escrita] = await Promise.all([
+  const [voos, pedido, hospedagem, escrita] = await Promise.all([
     carregarVoos({ eventoId, situacao: situacaoDoFiltro(parametros.situacao) }, agora),
     parametros.ref ? carregarPedido(parametros.ref) : null,
     carregarHospedagem(eventoId, agora),
-    carregarCaronas(eventoId, agora),
     situacaoDaEscrita(),
   ]);
   return (
     <>
       <SecaoDeVoos dados={voos} pedido={pedido} base={`/eventos/${eventoId}/logistica`} parametros={parametros} escrita={escrita.liberada} comSeletorDeEvento={false} />
       <SecaoDeHospedagem dados={hospedagem} escrita={escrita.liberada} comSeletorDeEvento={false} />
-      <SecaoDeCaronas dados={caronas} escrita={escrita.liberada} />
     </>
   );
 }

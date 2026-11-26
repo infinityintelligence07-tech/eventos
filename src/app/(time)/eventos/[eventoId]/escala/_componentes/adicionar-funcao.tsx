@@ -7,19 +7,16 @@ import { useAcao } from "@/app/(time)/_componentes/ui";
 import { Botao } from "../../../../_componentes/ui/botao";
 import { CampoDeSelecao, CampoDeTexto } from "../../../../_componentes/ui/campo";
 import { PainelLateral } from "../../../../_componentes/ui/dialogo";
-import { dataCurta } from "../../../../_componentes/ui/formatos";
 import { adicionarVagaManual } from "../acoes";
 
 /** "+ Adicionar função": linha manual (origem MANUAL), já com o número confirmado. */
 export function AdicionarFuncao({
   eventoId,
   funcoes,
-  dias,
   primaria = false,
 }: {
   eventoId: string;
   funcoes: { id: string; nome: string }[];
-  dias: string[];
   primaria?: boolean;
 }) {
   const [aberto, setAberto] = useState(false);
@@ -35,7 +32,7 @@ export function AdicionarFuncao({
         aberto={aberto}
         aoFechar={() => setAberto(false)}
         titulo="Adicionar função"
-        subtitulo="A função entra na escala com o número que você informar, já confirmado."
+        subtitulo="A função entra na escala do evento inteiro, com o número que você informar, já confirmado."
         rodape={
           <>
             <Botao onClick={() => setAberto(false)}>Cancelar</Botao>
@@ -54,15 +51,6 @@ export function AdicionarFuncao({
             vazio="Escolha a função"
             opcoes={funcoes.map((funcao) => ({ valor: funcao.id, rotulo: funcao.nome }))}
             erros={erros("funcaoId")}
-          />
-          <CampoDeSelecao
-            nome="data"
-            rotulo="Dia"
-            obrigatorio
-            valorInicial={dias[0]}
-            opcoes={dias.map((dia) => ({ valor: dia, rotulo: dataCurta(dia) }))}
-            erros={erros("data")}
-            ajuda="Em eventos de vários dias, adicione uma linha por dia quando o número mudar."
           />
           <CampoDeTexto nome="quantidade" rotulo="Número de vagas" numerico obrigatorio defaultValue="1" erros={erros("quantidade")} />
         </form>

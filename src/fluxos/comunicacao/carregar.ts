@@ -8,8 +8,8 @@ import {
   listarEmPortugues,
   modeloEmUso,
   type SituacaoDaCopy,
-  type TipoDeModelo,
-  TIPOS_DE_MODELO,
+  type TipoDaEscala,
+  TIPOS_DA_ESCALA,
 } from "@/modules/comunicacao";
 import { podeComunicar, type StatusEscala } from "@/modules/escala";
 
@@ -24,18 +24,18 @@ export type ComunicacaoDoEvento = {
   evento: { id: string; codigo: string | null; nome: string; statusEscala: StatusEscala };
   escalaComunicavel: boolean;
   escritaLiberada: boolean;
-  tipo: TipoDeModelo;
+  tipo: TipoDaEscala;
   /** Nulo = não há modelo ativo deste tipo. */
   modelo: { id: string; nome: string } | null;
   /** Tipos com modelo ativo, para o seletor da tela. */
-  tiposDisponiveis: TipoDeModelo[];
+  tiposDisponiveis: TipoDaEscala[];
   /** Ordenadas pelo que pede ação primeiro. */
   pessoas: CopyNaTela[];
   contagem: ContagemDeSituacoes;
 };
 
 /** Copys de um evento para a tela de Comunicação do evento. Nulo = evento não encontrado. */
-export async function carregarComunicacaoDoEvento(eventoId: string, tipo: TipoDeModelo, agora: Date): Promise<ComunicacaoDoEvento | null> {
+export async function carregarComunicacaoDoEvento(eventoId: string, tipo: TipoDaEscala, agora: Date): Promise<ComunicacaoDoEvento | null> {
   const repo = criarRepositorioComunicacao(await bancoParaLeitura());
   const [evento] = await repo.eventos({ eventoId });
   if (!evento) return null;
@@ -54,7 +54,7 @@ export async function carregarComunicacaoDoEvento(eventoId: string, tipo: TipoDe
     escritaLiberada: (await situacaoDaEscrita()).liberada,
     tipo,
     modelo: modelo && { id: modelo.id, nome: modelo.nome },
-    tiposDisponiveis: TIPOS_DE_MODELO.filter((outro) => modeloEmUso(modelos, outro) !== null),
+    tiposDisponiveis: TIPOS_DA_ESCALA.filter((outro) => modeloEmUso(modelos, outro) !== null),
     pessoas,
     contagem: contarSituacoes(pessoas.map((pessoa) => pessoa.situacao)),
   };

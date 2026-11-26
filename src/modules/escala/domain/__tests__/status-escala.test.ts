@@ -15,6 +15,8 @@ const TODOS: StatusEscala[] = ["SEM_ESCALA", "RASCUNHO", "AGUARDANDO_APROVACAO",
 
 const VALIDAS: Record<AcaoDaEscala, Partial<Record<StatusEscala, StatusEscala>>> = {
   ENVIAR: { RASCUNHO: "AGUARDANDO_APROVACAO", DEVOLVIDA: "AGUARDANDO_APROVACAO" },
+  // Masterclass: quem monta conclui e a escala já sai aprovada, sem passar pela líder.
+  CONCLUIR: { RASCUNHO: "APROVADA", DEVOLVIDA: "APROVADA" },
   APROVAR: { AGUARDANDO_APROVACAO: "APROVADA" },
   DEVOLVER: { AGUARDANDO_APROVACAO: "DEVOLVIDA" },
   REABRIR: { APROVADA: "RASCUNHO", COMUNICADA: "RASCUNHO" },

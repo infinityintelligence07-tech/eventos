@@ -24,7 +24,7 @@ function CamposDaVersao({ versao }: { versao: Versao }) {
 
 /**
  * Rodapé do detalhe (doc 08 §11.2): Reprovar (motivo obrigatório) e Aprovar (direto; com alerta crítico,
- * pede o motivo — decisão do gerente, docs/07 §11.1). Depois de reprovar, o painel avança para a próxima; depois de
+ * pede o motivo — decisão do gerente, docs/07 §11.1). Depois de reprovar, fica na solicitação, que passa a mostrar a copy de reprovação; depois de
  * aprovar, fica na solicitação, que passa a oferecer a mensagem de aprovado para copiar.
  */
 export function BarraDeAuditoria({

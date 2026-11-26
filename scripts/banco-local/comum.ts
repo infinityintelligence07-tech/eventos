@@ -23,16 +23,16 @@ export const USUARIOS_LOCAIS: readonly UsuarioLocal[] = [
   { usuarioId: "7e570000-0000-7000-8000-000000000007", pessoaId: "7e570000-0000-7000-8000-000000000008", nome: "Sem perfil (teste)", email: "sem-perfil@exemplo.test", perfil: null },
 ];
 
-// Centro aproximado da cidade de cada polo, DDD (telefones fictícios) e aeroporto mais usado.
-export const CIDADES: Record<string, { lat: number; lng: number; ddd: string; iata: string }> = {
-  AM: { lat: -22.7394, lng: -47.3314, ddd: "19", iata: "VCP" },
-  BC: { lat: -26.9906, lng: -48.6348, ddd: "47", iata: "NVT" },
-  BSB: { lat: -15.7939, lng: -47.8828, ddd: "61", iata: "BSB" },
-  CPS: { lat: -22.9056, lng: -47.0608, ddd: "19", iata: "VCP" },
-  GYN: { lat: -16.6869, lng: -49.2648, ddd: "62", iata: "GYN" },
-  LON: { lat: -23.3045, lng: -51.1696, ddd: "43", iata: "LDB" },
-  POA: { lat: -30.0346, lng: -51.2177, ddd: "51", iata: "POA" },
-  VIX: { lat: -20.3155, lng: -40.3128, ddd: "27", iata: "VIX" },
+// Cidade de cada polo: nome e UF, centro aproximado, DDD (telefones fictícios) e aeroporto mais usado.
+export const CIDADES: Record<string, { nome: string; uf: string; lat: number; lng: number; ddd: string; iata: string }> = {
+  AM: { nome: "Americana", uf: "SP", lat: -22.7394, lng: -47.3314, ddd: "19", iata: "VCP" },
+  BC: { nome: "Balneário Camboriú", uf: "SC", lat: -26.9906, lng: -48.6348, ddd: "47", iata: "NVT" },
+  BSB: { nome: "Brasília", uf: "DF", lat: -15.7939, lng: -47.8828, ddd: "61", iata: "BSB" },
+  CPS: { nome: "Campinas", uf: "SP", lat: -22.9056, lng: -47.0608, ddd: "19", iata: "VCP" },
+  GYN: { nome: "Goiânia", uf: "GO", lat: -16.6869, lng: -49.2648, ddd: "62", iata: "GYN" },
+  LON: { nome: "Londrina", uf: "PR", lat: -23.3045, lng: -51.1696, ddd: "43", iata: "LDB" },
+  POA: { nome: "Porto Alegre", uf: "RS", lat: -30.0346, lng: -51.2177, ddd: "51", iata: "POA" },
+  VIX: { nome: "Vitória", uf: "ES", lat: -20.3155, lng: -40.3128, ddd: "27", iata: "VIX" },
 };
 
 export type Coordenada = { lat: number; lng: number };

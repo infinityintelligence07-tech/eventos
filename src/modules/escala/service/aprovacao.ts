@@ -4,11 +4,12 @@ import { resumoDaMontagem } from "../domain/montagem";
 import { type AcaoDaEscala, acaoRegistrada, eventoEncerrado, transicaoDaEscala } from "../domain/status-escala";
 import type { EventoTravado, RepositorioMontagem } from "./portas";
 
-// Enviar, aprovar, devolver e reabrir (docs/07 §4.1 e §11.1). Compare-and-set no status e registro_acao.
+// Enviar, concluir (Masterclass), aprovar, não aprovar ("devolver" no código) e reabrir (docs/07 §4.1 e §11.1). Compare-and-set no status e registro_acao.
 // Aprovar só registra (aprovado_por/em); nada é enviado às pessoas.
 
 const MENSAGEM_TRANSICAO: Record<AcaoDaEscala, string> = {
-  ENVIAR: "Só escalas em andamento ou devolvidas vão para aprovação.",
+  ENVIAR: "Só escalas em andamento ou não aprovadas vão para aprovação.",
+  CONCLUIR: "Só escalas em andamento podem ser concluídas.",
   APROVAR: "Esta escala não está aguardando aprovação.",
   DEVOLVER: "Esta escala não está aguardando aprovação.",
   REABRIR: "Só escalas aprovadas ou comunicadas podem ser reabertas.",
@@ -33,7 +34,8 @@ async function aplicar(
     de: evento.statusEscala,
     para: transicao.para,
     instante,
-    aprovadoPor: acao === "APROVAR" ? usuarioId : undefined,
+    // Na Masterclass não há aprovação: fica registrado quem concluiu.
+    aprovadoPor: acao === "APROVAR" || acao === "CONCLUIR" ? usuarioId : undefined,
     limparAprovacao: acao === "REABRIR",
   });
   if (!alterou) throw new EscalaMudouError("a escala mudou antes da ação");
@@ -51,11 +53,14 @@ async function aplicar(
   return transicao.para;
 }
 
-/** `statusEsperado` é o que estava na tela: se mudou, é conflito (outra pessoa enviou ou a líder devolveu). */
+/**
+ * `statusEsperado` é o que estava na tela: se mudou, é conflito (outra pessoa enviou ou a líder não aprovou).
+ * Masterclass não passa por aprovação: com as mesmas conferências, a escala já sai aprovada (`semAprovacao`).
+ */
 export async function enviarParaAprovacao(
   repo: RepositorioMontagem,
   { eventoId, statusEsperado, usuarioId, instante }: { eventoId: string; statusEsperado: StatusEscala; usuarioId: string; instante: Date },
-): Promise<{ vagasAbertas: number }> {
+): Promise<{ vagasAbertas: number; semAprovacao: boolean }> {
   const evento = await travar(repo, eventoId);
   if (evento.statusEscala !== statusEsperado) throw new EscalaMudouError("a escala mudou desde que a tela abriu");
 
@@ -68,12 +73,12 @@ export async function enviarParaAprovacao(
   );
   if (!resumo.envio.pode) throw new EnvioBloqueadoError(resumo.envio.motivos);
 
-  await aplicar(repo, evento, "ENVIAR", {
+  await aplicar(repo, evento, evento.masterclass ? "CONCLUIR" : "ENVIAR", {
     usuarioId,
     instante,
     dados: { vagas: resumo.vagas, preenchidas: resumo.preenchidas, vagasAbertas: resumo.vagasAbertas },
   });
-  return { vagasAbertas: resumo.vagasAbertas };
+  return { vagasAbertas: resumo.vagasAbertas, semAprovacao: evento.masterclass };
 }
 
 export async function aprovarEscala(

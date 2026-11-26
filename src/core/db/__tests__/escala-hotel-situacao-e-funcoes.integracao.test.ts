@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { type BancoDeTeste, criarBancoDeTeste, TEST_DATABASE_URL } from "@/test/banco";
+import { type BancoDeTeste, criarBancoDeTeste, desfazerFuncoesDa0021, TEST_DATABASE_URL } from "@/test/banco";
 
 const MIGRATIONS = path.resolve(import.meta.dirname, "../migrations");
 const ARQUIVO = "0013_escala-hotel-situacao-e-funcoes";
@@ -44,6 +44,8 @@ describe.skipIf(!TEST_DATABASE_URL)("migration 0013 sobre dados existentes", () 
 
   beforeAll(async () => {
     banco = await criarBancoDeTeste();
+    // As funções de exemplo destes testes (Pai / mãe, Trainee de líder...) saíram na 0021: voltam só aqui.
+    await desfazerFuncoesDa0021(banco);
     await descer();
     paiMaeId = (await um(`select id from eventos.funcao where codigo = 'PAI_MAE'`)).id!;
     staffId = (await um(`select id from eventos.funcao where codigo = 'STAFF'`)).id!;

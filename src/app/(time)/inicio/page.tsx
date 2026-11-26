@@ -7,7 +7,7 @@ import { carregarInicio, type EventoDaSemana } from "@/fluxos/inicio";
 import { Aviso } from "../_componentes/ui/aviso";
 import { BotaoLink } from "../_componentes/ui/botao-link";
 import { CabecalhoDaPagina } from "../_componentes/ui/cabecalho";
-import { CARTAO, TITULO_DE_CARTAO, TITULO_DE_SECAO } from "../_componentes/ui/classes";
+import { CARTAO, CARTAO_CLICAVEL, LINK_QUE_COBRE, TITULO_DE_CARTAO, TITULO_DE_SECAO } from "../_componentes/ui/classes";
 import { Cartao, CartaoDeNumero, CartaoDePendencia } from "../_componentes/ui/cartao";
 import { EstadoVazio } from "../_componentes/ui/estados";
 import { dataEHora, periodo } from "../_componentes/ui/formatos";
@@ -16,14 +16,14 @@ import { CabecaDaTabela, CelulaDaTabela, ColunaDaTabela, LinhaDaTabela, Tabela }
 import { exigirAtor } from "@/app/(time)/_servidor/usuario-atual";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Início" };
+export const metadata: Metadata = { title: "Dashboard" };
 
 /** Microcopy da doc 08 §4. */
 const EXPLICACAO: Record<string, string> = {
   "comunicacao-falta-dado": "Estas copys só podem ser enviadas quando o dado for preenchido.",
-  "escalas-aguardando-aprovacao": "Escalas enviadas para a líder aprovar.",
-  "escalas-devolvidas": "A líder devolveu para ajustar.",
+  "escalas-situacao": "A aprovação das escalas num lugar só: as que a líder não aprovou, as que esperam por ela e as aprovadas.",
   "escalas-a-montar": "Eventos nos próximos 30 dias com a escala ainda não aprovada.",
+  "escalas-a-montar-masterclass": "Masterclasses nos próximos 30 dias com a escala ainda não concluída.",
   "comunicacao-desatualizadas": "Os dados mudaram depois do envio. Copie e envie de novo.",
   "eventos-sem-codigo": "Eventos sem polo cadastrado ou com código repetido no IAM Control.",
   "custos-para-auditar": "Solicitações de custo esperando aprovação do time.",
@@ -66,7 +66,7 @@ export default async function PaginaInicio() {
   return (
     <>
       <CabecalhoDaPagina
-        titulo="Início"
+        titulo="Dashboard"
         subtitulo={quandoSincronizou(inicio.ultimaSincronizacao)}
         acoes={
           <BotaoLink href="/inicio" icone={<RefreshCw size={18} aria-hidden />}>
@@ -87,9 +87,9 @@ export default async function PaginaInicio() {
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {inicio.numeros.map((numero) =>
           numero.valor === null ? (
-            <div key={numero.rotulo} className={`${CARTAO} px-5 py-4`}>
+            <div key={numero.rotulo} className={`${CARTAO} ${CARTAO_CLICAVEL} px-5 py-4`}>
               <p className="text-[12px] font-medium text-[var(--ds-label-2)]">
-                <Link href={numero.href} className="hover:underline">
+                <Link href={numero.href} className={`hover:underline ${LINK_QUE_COBRE}`}>
                   {numero.rotulo}
                 </Link>
               </p>
@@ -125,6 +125,7 @@ export default async function PaginaInicio() {
                 quantidade={cartao.item.quantidade}
                 href={cartao.item.href}
                 textoSemPendencia="Nada pendente."
+                listaCompleta={cartao.item.listaCompleta}
                 exemplos={cartao.item.exemplos.map((exemplo, indice) => ({ chave: `${indice}-${exemplo.href}`, ...exemplo }))}
               />
             ),

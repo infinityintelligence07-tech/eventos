@@ -81,8 +81,8 @@ describe.skipIf(!TEST_DATABASE_URL)("a SDC no banco: lista de acesso, compra, ap
     return { pessoaId: id as string, convocacaoId: convocacaoId as string };
   }
 
-  const ida = { sentido: "IDA" as const, origemIata: "POA", destinoIata: "MAO", dataDesejada: "2026-12-14" };
-  const volta = { sentido: "VOLTA" as const, origemIata: "MAO", destinoIata: "POA", dataDesejada: "2026-12-17" };
+  const ida = { sentido: "IDA" as const, origemCidade: "Porto Alegre (RS)", destinoCidade: "Manaus (AM)", dataDesejada: "2026-12-14" };
+  const volta = { sentido: "VOLTA" as const, origemCidade: "Manaus (AM)", destinoCidade: "Porto Alegre (RS)", dataDesejada: "2026-12-17" };
   const trechosComprados = [
     { sentido: "IDA" as const, companhia: "Azul", numeroVoo: "AD4120", localizador: "KXQ7PZ", partidaEm: "2026-12-14T08:10", chegadaEm: "2026-12-14T11:45" },
     { sentido: "VOLTA" as const, companhia: "Azul", numeroVoo: "AD4121", localizador: "KXQ7PZ", partidaEm: "2026-12-17T19:20", chegadaEm: "2026-12-17T22:05" },
@@ -261,7 +261,9 @@ describe.skipIf(!TEST_DATABASE_URL)("a SDC no banco: lista de acesso, compra, ap
       valorCentavos: "980,00",
       trechos: trechosComprados.map((trecho) => ({ ...trecho, cartaoEmbarqueUrl: "https://exemplo.test/isca", outraCompanhia: "" })),
     });
-    expect(comLink.trechos.map((trecho) => Object.keys(trecho).sort())).toEqual(Array(2).fill(["chegadaEm", "companhia", "localizador", "numeroVoo", "partidaEm", "sentido"]));
+    // (0020) A lista fechada ganhou, de propósito, os aeroportos de origem e de destino: é a SDC quem escolhe o aeroporto.
+    expect(comLink.trechos.map((trecho) => Object.keys(trecho).sort())).toEqual(Array(2).fill(["chegadaEm", "companhia", "destinoIata", "localizador", "numeroVoo", "origemIata", "partidaEm", "sentido"]));
+    expect(comLink.trechos.map((trecho) => [trecho.origemIata, trecho.destinoIata])).toEqual(Array(2).fill([undefined, undefined]));
     expect(Object.keys(comLink).sort()).toEqual(["referencia", "trechos", "valorCentavos"]);
 
     const antes = await colunas();
@@ -474,7 +476,10 @@ describe.skipIf(!TEST_DATABASE_URL)("a SDC no banco: lista de acesso, compra, ap
         // voo
         // (rodada 6) eventoDaVolta: na turnê de Masterclass a volta sai da última palestra; a SDC precisa saber de onde.
         // É um evento com os mesmos campos do evento do pedido (sem id interno: só a chave de agrupamento).
-        ...["passageiro", "trechos", "eventoDaVolta", "sentido", "origemIata", "destinoIata", "dataDesejada", "preferenciaHorario", "companhia", "numeroVoo", "localizador", "partidaEm", "chegadaEm"],
+        // (0020, voo sem aeroporto) origemCidade e destinoCidade: o time pede por cidade e é a SDC quem escolhe o
+        // aeroporto. São as cidades do TRECHO, escritas no pedido; o endereço e a cidade do cadastro da pessoa
+        // (SEGREDOS.cidadeDeCasa) continuam fora, a não ser que o time as escreva no trecho.
+        ...["passageiro", "trechos", "eventoDaVolta", "sentido", "origemCidade", "destinoCidade", "origemIata", "destinoIata", "dataDesejada", "preferenciaHorario", "companhia", "numeroVoo", "localizador", "partidaEm", "chegadaEm"],
         // hospedagem
         ...["checkIn", "checkOut", "quartos", "capacidade", "ocupantes", "hotel", "logradouro", "numero", "bairro", "numeroReserva"],
         "voos",

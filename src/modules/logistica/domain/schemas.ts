@@ -1,12 +1,14 @@
 import { z } from "zod";
 
 import { DIAS_DO_AVISO_MAXIMO, DIAS_DO_AVISO_MINIMO } from "./janela";
+import { mesmaCidade } from "./pedido";
 
 // Schemas das server actions da Logística (docs/07 §6.6). Os campos chegam do FormData como texto;
 // texto vazio já chega ausente (lerFormulario).
 
 const id = z.uuid("Escolha uma opção da lista.");
 
+/** Código do aeroporto (3 letras). O time não informa mais: é a SDC que escolhe o aeroporto e informa na compra. */
 const iata = z
   .string()
   .max(10, "Use o código de 3 letras do aeroporto (ex.: POA).")
@@ -95,15 +97,26 @@ export const dinheiro = z
 export const SENTIDOS = ["IDA", "VOLTA"] as const;
 export const PREFERENCIAS = ["MANHA", "TARDE", "NOITE", "QUALQUER"] as const;
 
+/**
+ * Cidade de um trecho ("Porto Alegre (RS)"): o time escreve, a SDC lê e escolhe o aeroporto, e ela pode ir para a copy
+ * do staff. Uma linha, sem link nem caractere de controle.
+ */
+const cidadeDoTrecho = textoDaSdc(2, 80, "Informe a cidade (ex.: Porto Alegre (RS)).");
+
+/** O que o time pede: de que cidade a pessoa sai e a que cidade chega. Sem aeroporto (quem escolhe é a SDC). */
 const trechoDesejadoSchema = z
   .object({
     sentido: z.enum(SENTIDOS),
-    origemIata: iata,
-    destinoIata: iata,
+    origemCidade: cidadeDoTrecho,
+    destinoCidade: cidadeDoTrecho,
     dataDesejada: data,
     preferenciaHorario: z.enum(PREFERENCIAS).optional(),
   })
-  .refine((trecho) => trecho.origemIata !== trecho.destinoIata, { path: ["destinoIata"], message: "Origem e destino precisam ser diferentes." });
+  .refine((trecho) => !mesmaCidade(trecho.origemCidade, trecho.destinoCidade), { path: ["destinoCidade"], message: "A origem e o destino precisam ser cidades diferentes." });
+
+/** Os aeroportos que a SDC escolheu para o trecho (opcionais): se vierem os dois, não podem ser o mesmo. */
+const aeroportosDiferentes = (trecho: { origemIata?: string; destinoIata?: string }) => !trecho.origemIata || !trecho.destinoIata || trecho.origemIata !== trecho.destinoIata;
+const MENSAGEM_AEROPORTOS_IGUAIS = { path: ["destinoIata"], message: "Origem e destino precisam ser aeroportos diferentes." };
 
 const trechosDesejadosSchema = z
   .array(trechoDesejadoSchema)
@@ -176,6 +189,9 @@ const trechoEmitidoSchema = z
       .pipe(z.string().regex(/^[A-Z0-9]{5,8}$/, "O localizador tem de 5 a 8 letras ou números.")),
     partidaEm: dataEHora,
     chegadaEm: dataEHora,
+    /** Aeroportos que a SDC escolheu (código de 3 letras). Opcionais. */
+    origemIata: iata.optional(),
+    destinoIata: iata.optional(),
     cartaoEmbarqueUrl: z
       .string()
       .trim()
@@ -183,7 +199,8 @@ const trechoEmitidoSchema = z
       .max(500, "Use até 500 caracteres.")
       .optional(),
   })
-  .refine((trecho) => trecho.chegadaEm > trecho.partidaEm, { path: ["chegadaEm"], message: "A chegada precisa ser depois da partida." });
+  .refine((trecho) => trecho.chegadaEm > trecho.partidaEm, { path: ["chegadaEm"], message: "A chegada precisa ser depois da partida." })
+  .refine(aeroportosDiferentes, MENSAGEM_AEROPORTOS_IGUAIS);
 
 export const registrarRetornoDeVooSchema = z.object({
   pedidoId: id,
@@ -353,7 +370,8 @@ export function companhiaNoFormulario(companhia: string | null): { opcao: string
 }
 
 /**
- * O trecho que a SDC informa. Lista fechada: sentido, companhia, número do voo, localizador, partida e chegada.
+ * O trecho que a SDC informa. Lista fechada: sentido, companhia, número do voo, localizador, partida, chegada e,
+ * se quiser, os aeroportos de origem e de destino (é ela quem escolhe o aeroporto; o time pede só as cidades).
  * NÃO tem o link do cartão de embarque (só o time põe link; o da SDC seria um link de terceiros na tela do time).
  */
 const trechoCompradoPelaSdcSchema = z
@@ -373,16 +391,21 @@ const trechoCompradoPelaSdcSchema = z
       .pipe(z.string().regex(/^[A-Z0-9]{5,8}$/, "O localizador tem de 5 a 8 letras ou números.")),
     partidaEm: dataEHora,
     chegadaEm: dataEHora,
+    origemIata: iata.optional(),
+    destinoIata: iata.optional(),
   })
   .refine((trecho) => trecho.chegadaEm > trecho.partidaEm, { path: ["chegadaEm"], message: "A chegada precisa ser depois da partida." })
   .refine((trecho) => trecho.companhia !== OUTRA_COMPANHIA || (trecho.outraCompanhia ?? "").length >= 2, { path: ["outraCompanhia"], message: "Informe o nome da companhia." })
-  .transform(({ sentido, companhia, outraCompanhia, numeroVoo, localizador, partidaEm, chegadaEm }) => ({
+  .refine(aeroportosDiferentes, MENSAGEM_AEROPORTOS_IGUAIS)
+  .transform(({ sentido, companhia, outraCompanhia, numeroVoo, localizador, partidaEm, chegadaEm, origemIata, destinoIata }) => ({
     sentido,
     companhia: companhia === OUTRA_COMPANHIA ? outraCompanhia! : companhia,
     numeroVoo,
     localizador,
     partidaEm,
     chegadaEm,
+    origemIata,
+    destinoIata,
   }));
 
 export const registrarCompraDeVooPelaSdcSchema = z.object({

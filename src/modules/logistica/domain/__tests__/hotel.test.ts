@@ -33,7 +33,7 @@ describe("quem precisa de hotel: três origens, sem depender da escala", () => {
 
   it("formulários: a caixa do voo marcada vira verdadeiro, desmarcada não vem; o acréscimo é evento + pessoa", () => {
     const id = "7e570000-0000-7000-8000-000000000002";
-    const pedido = { eventoId: id, pessoaId: id, trechos: [{ sentido: "IDA", origemIata: "POA", destinoIata: "MAO", dataDesejada: "2026-11-05" }] };
+    const pedido = { eventoId: id, pessoaId: id, trechos: [{ sentido: "IDA", origemCidade: "Porto Alegre (RS)", destinoCidade: "Manaus (AM)", dataDesejada: "2026-11-05" }] };
     expect(registrarPedidoDeVooSchema.parse({ ...pedido, precisaHotel: "on" }).precisaHotel).toBe(true);
     expect(registrarPedidoDeVooSchema.parse(pedido).precisaHotel).toBeUndefined();
     expect(definirHotelDoVooSchema.parse({ pedidoId: id, precisaHotel: "false" })).toEqual({ pedidoId: id, precisaHotel: false });

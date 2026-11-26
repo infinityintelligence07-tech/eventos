@@ -20,7 +20,7 @@ import { aprovarSolicitacaoAcao, reabrirAuditoriaAcao, reprovarSolicitacaoAcao }
 import { BarraDeAuditada, BarraDeAuditoria } from "./barra-de-auditoria";
 import { ChipDaAuditoria, ChipDoAlerta } from "./situacoes";
 
-export type ParametrosDeCustos = { situacao?: string; evento?: string; alerta?: string; busca?: string; protocolo?: string; registrada?: string; corrigida?: string; aprovada?: string };
+export type ParametrosDeCustos = { situacao?: string; evento?: string; alerta?: string; busca?: string; protocolo?: string; registrada?: string; corrigida?: string; aprovada?: string; reprovada?: string };
 
 const SITUACOES: (StatusAuditoria | "TODAS")[] = ["PENDENTE", "APROVADO", "REPROVADO", "TODAS"];
 const NIVEIS: NivelDeExcecao[] = ["CRITICO", "ALERTA", "NENHUM"];
@@ -35,6 +35,7 @@ export function parametrosDeCustos(busca: Record<string, string | string[] | und
     registrada: parametro(busca.registrada),
     corrigida: parametro(busca.corrigida),
     aprovada: parametro(busca.aprovada),
+    reprovada: parametro(busca.reprovada),
   };
 }
 
@@ -51,7 +52,7 @@ function LinhaDaSolicitacao({ linha, base, parametros }: { linha: LinhaDaFila; b
     <LinhaDaTabela>
       <CelulaDaTabela>
         <Link
-          href={enderecoCom(base, parametros, { protocolo: linha.protocolo, registrada: null, corrigida: null, aprovada: null })}
+          href={enderecoCom(base, parametros, { protocolo: linha.protocolo, registrada: null, corrigida: null, aprovada: null, reprovada: null })}
           scroll={false}
           className="whitespace-nowrap [font-family:var(--ds-font-mono)] text-[13px] font-medium text-[var(--ds-tint-text)] hover:underline"
         >
@@ -90,14 +91,14 @@ function LinhaDaSolicitacao({ linha, base, parametros }: { linha: LinhaDaFila; b
  * abre a conversa com a pessoa já com ele escrito, e aperta enviar lá. O envio automático fica para depois.
  * O telefone da pessoa vem do servidor já dentro do `href` e só ali: não é mostrado na tela.
  */
-function MensagemDeAprovado({ pessoaNome, mensagem }: { pessoaNome: string; mensagem: TextoDeAprovado }) {
+function MensagemDeAprovado({ pessoaNome, mensagem, titulo = "Mensagem de aprovado" }: { pessoaNome: string; mensagem: TextoDeAprovado; titulo?: string }) {
   const nome = primeiroNome(pessoaNome);
   return (
     <section aria-labelledby="titulo-mensagem-de-aprovado" className="rounded-[var(--ds-radius-md)] border border-[var(--ds-separator)] p-4">
       <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <h3 id="titulo-mensagem-de-aprovado" className="text-[15px] font-semibold">
-            Mensagem de aprovado
+            {titulo}
           </h3>
           <p className="text-[12px] text-[var(--ds-label-2)]">
             {mensagem.linkDoWhatsApp
@@ -166,7 +167,7 @@ function PainelDaSolicitacao({
   escrita: boolean;
   podeReabrirAuditoria: boolean;
 }) {
-  const semAviso = { registrada: null, corrigida: null, aprovada: null };
+  const semAviso = { registrada: null, corrigida: null, aprovada: null, reprovada: null };
   const fechar = enderecoCom(base, parametros, { protocolo: null, ...semAviso });
   const irPara = (protocolo: string | null) => (protocolo ? enderecoCom(base, parametros, { protocolo, ...semAviso }) : fechar);
   const versao = { solicitacaoId: solicitacao.id, atualizadoEm: solicitacao.atualizadoEm };
@@ -181,7 +182,8 @@ function PainelDaSolicitacao({
       protocolo={solicitacao.protocolo}
       critico={solicitacao.nivel === "CRITICO"}
       alertasCriticos={criticos}
-      hrefDepois={irPara(solicitacao.proxima)}
+      // Depois de reprovar fica na solicitação, que passa a mostrar a copy de reprovação para mandar à pessoa.
+      hrefDepois={enderecoCom(base, parametros, { protocolo: solicitacao.protocolo, ...semAviso, reprovada: "1" })}
       hrefDepoisDeAprovar={enderecoCom(base, parametros, { protocolo: solicitacao.protocolo, ...semAviso, aprovada: "1" })}
       aprovar={aprovarSolicitacaoAcao}
       reprovar={reprovarSolicitacaoAcao}
@@ -225,6 +227,23 @@ function PainelDaSolicitacao({
               : "copie a mensagem de aprovado abaixo e mande pelo WhatsApp."}
           </Aviso>
         )}
+        {parametros.reprovada === "1" && solicitacao.auditoria === "REPROVADO" && (
+          <Aviso
+            tom="atencao"
+            acao={
+              solicitacao.proxima && (
+                <BotaoLink variante="texto" href={irPara(solicitacao.proxima)} scroll={false}>
+                  Próxima da fila
+                </BotaoLink>
+              )
+            }
+          >
+            {solicitacao.protocolo} reprovada. Avise {primeiroNome(solicitacao.pessoaNome)}:{" "}
+            {solicitacao.mensagemDeReprovado?.linkDoWhatsApp
+              ? "abra a conversa no WhatsApp pela copy de reprovação abaixo, ou copie o texto. O motivo já está nela."
+              : "copie a copy de reprovação abaixo e mande pelo WhatsApp. O motivo já está nela."}
+          </Aviso>
+        )}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="flex flex-wrap items-center gap-2">
             <ChipDaAuditoria status={solicitacao.auditoria} />
@@ -260,6 +279,9 @@ function PainelDaSolicitacao({
         )}
 
         {solicitacao.mensagemDeAprovado && <MensagemDeAprovado pessoaNome={solicitacao.pessoaNome} mensagem={solicitacao.mensagemDeAprovado} />}
+        {solicitacao.mensagemDeReprovado && (
+          <MensagemDeAprovado pessoaNome={solicitacao.pessoaNome} mensagem={solicitacao.mensagemDeReprovado} titulo="Copy de reprovação" />
+        )}
 
         <section aria-labelledby="titulo-deslocamentos">
           <h3 id="titulo-deslocamentos" className="mb-2 text-[15px] font-semibold">

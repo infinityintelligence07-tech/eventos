@@ -11,7 +11,7 @@ import { SomenteLeitura } from "./estados";
 export function motivoSemPermissao(permissao: Permissao): string {
   switch (permissao) {
     case "escala.aprovar":
-      return "Só a líder pode aprovar ou devolver escalas.";
+      return "Só a líder pode aprovar ou não aprovar escalas.";
     case "escala.reabrir":
       return "Só a líder pode reabrir a escala.";
     case "custos.reabrir_auditoria":

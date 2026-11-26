@@ -9,6 +9,7 @@ import { AtalhosDeFiltro, BarraDeFiltros, BuscaDeFiltro, SeletorDeFiltro } from 
 import { BotaoLink } from "../_componentes/ui/botao-link";
 import { CabecalhoDaPagina } from "../_componentes/ui/cabecalho";
 import { Cartao } from "../_componentes/ui/cartao";
+import { CARTAO_CLICAVEL, LINK_QUE_COBRE } from "../_componentes/ui/classes";
 import { EstadoVazio } from "../_componentes/ui/estados";
 import { dataCurta, nomeCurtoDoEvento as nomeCurto, periodo, quantidadeDe } from "../_componentes/ui/formatos";
 import { ChipDaEscala } from "../_componentes/ui/situacao";
@@ -34,10 +35,10 @@ const ROTULO_DO_DADO = "text-[12px] text-[var(--ds-label-2)]";
 /** Um evento do cartão "Escalas a montar": nome, código, início, término, local (se houver) e vagas. */
 function EventoAMontar({ evento }: { evento: EscalaAMontar }) {
   return (
-    <li className="min-w-0 rounded-[var(--ds-radius-md)] border border-[var(--ds-separator)] p-3">
+    <li className={`min-w-0 rounded-[var(--ds-radius-md)] border border-[var(--ds-separator)] p-3 hover:bg-[var(--ds-surface-1)] ${CARTAO_CLICAVEL}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <p className="min-w-0">
-          <Link href={`/eventos/${evento.id}/escala`} className="font-medium text-[var(--ds-tint-text)] hover:underline">
+          <Link href={`/eventos/${evento.id}/escala`} className={`font-medium text-[var(--ds-tint-text)] hover:underline ${LINK_QUE_COBRE}`}>
             {nomeCurto(evento)}
           </Link>
           <span className="block text-[12px] text-[var(--ds-label-2)] [font-family:var(--ds-font-mono)]">{evento.codigo ?? "sem código"}</span>
@@ -70,6 +71,37 @@ function EventoAMontar({ evento }: { evento: EscalaAMontar }) {
   );
 }
 
+/** Aviso "Escalas a montar": o contador e um bloco por evento. */
+function CartaoAMontar({ id, titulo, explicacao, vazio, itens }: { id: string; titulo: string; explicacao: string; vazio: string; itens: EscalaAMontar[] }) {
+  return (
+    <Cartao
+      id={id}
+      titulo={titulo}
+      explicacao={explicacao}
+      acoes={
+        <span
+          className={`rounded-full px-2 py-0.5 text-[12px] font-semibold tabular-nums ${
+            itens.length > 0 ? "bg-[var(--ds-orange-soft)] text-[var(--ds-orange-deep)]" : "bg-[var(--ds-green-soft)] text-[var(--ds-green-deep)]"
+          }`}
+        >
+          {itens.length}
+          <span className="sr-only">{itens.length === 1 ? " escala a montar" : " escalas a montar"}</span>
+        </span>
+      }
+    >
+      {itens.length === 0 ? (
+        <p className="text-[13px] text-[var(--ds-label-2)]">{vazio}</p>
+      ) : (
+        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {itens.map((evento) => (
+            <EventoAMontar key={evento.id} evento={evento} />
+          ))}
+        </ul>
+      )}
+    </Cartao>
+  );
+}
+
 export default async function PaginaEscalas({ searchParams }: Parametros) {
   await exigirAtor();
   const agora = new Date();
@@ -94,31 +126,23 @@ export default async function PaginaEscalas({ searchParams }: Parametros) {
         <h2 id="precisa-de-acao" className="mb-3 text-[17px] font-semibold tracking-[-0.01em]">
           Precisa de ação
         </h2>
-        <Cartao
-          id="escalas-a-montar"
-          titulo="Escalas a montar"
-          explicacao={`Eventos nos próximos ${DIAS_PARA_MONTAR_ESCALA} dias com a escala ainda não aprovada.`}
-          acoes={
-            <span
-              className={`rounded-full px-2 py-0.5 text-[12px] font-semibold tabular-nums ${
-                aMontar.length > 0 ? "bg-[var(--ds-orange-soft)] text-[var(--ds-orange-deep)]" : "bg-[var(--ds-green-soft)] text-[var(--ds-green-deep)]"
-              }`}
-            >
-              {aMontar.length}
-              <span className="sr-only">{aMontar.length === 1 ? " escala a montar" : " escalas a montar"}</span>
-            </span>
-          }
-        >
-          {aMontar.length === 0 ? (
-            <p className="text-[13px] text-[var(--ds-label-2)]">Nenhuma escala a montar nos próximos {DIAS_PARA_MONTAR_ESCALA} dias.</p>
-          ) : (
-            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {aMontar.map((evento) => (
-                <EventoAMontar key={evento.id} evento={evento} />
-              ))}
-            </ul>
-          )}
-        </Cartao>
+        {/* Eventos e Masterclass em avisos separados: a Masterclass não passa por aprovação e são muitas. */}
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+          <CartaoAMontar
+            id="escalas-a-montar"
+            titulo="Escalas a montar · Eventos"
+            explicacao={`Eventos nos próximos ${DIAS_PARA_MONTAR_ESCALA} dias com a escala ainda não aprovada.`}
+            vazio={`Nenhuma escala de evento a montar nos próximos ${DIAS_PARA_MONTAR_ESCALA} dias.`}
+            itens={aMontar.eventos}
+          />
+          <CartaoAMontar
+            id="masterclasses-a-montar"
+            titulo="Escalas a montar · Masterclass"
+            explicacao={`Masterclasses nos próximos ${DIAS_PARA_MONTAR_ESCALA} dias com a escala ainda não concluída.`}
+            vazio={`Nenhuma escala de Masterclass a montar nos próximos ${DIAS_PARA_MONTAR_ESCALA} dias.`}
+            itens={aMontar.masterclasses}
+          />
+        </div>
       </section>
 
       <BarraDeFiltros nomes={FILTROS} resultado={lista.eventos.length === 1 ? "1 evento encontrado" : `${lista.eventos.length} eventos encontrados`}>
@@ -140,7 +164,7 @@ export default async function PaginaEscalas({ searchParams }: Parametros) {
           opcoes={[
             { valor: "a-montar", rotulo: "A montar", quantidade: contagem["a-montar"] },
             { valor: "aguardando", rotulo: "Aguardando aprovação", quantidade: contagem.aguardando },
-            { valor: "devolvidas", rotulo: "Devolvidas", quantidade: contagem.devolvidas },
+            { valor: "nao-aprovadas", rotulo: "Não aprovadas", quantidade: contagem["nao-aprovadas"] },
             { valor: "aprovadas", rotulo: "Aprovadas", quantidade: contagem.aprovadas },
             { valor: "comunicadas", rotulo: "Comunicadas", quantidade: contagem.comunicadas },
             { valor: null, rotulo: "Todas", quantidade: contagem.todas },

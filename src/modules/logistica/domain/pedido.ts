@@ -137,14 +137,89 @@ export function rotuloDaPreferencia(preferencia: PreferenciaDeHorario): string {
   }
 }
 
+/**
+ * O que o time pede num trecho: de que cidade a pessoa sai e a que cidade chega ("Porto Alegre (RS)"). O time não
+ * escolhe aeroporto: quem escolhe é a SDC, que informa o código ao registrar a compra.
+ */
 export type TrechoDesejado = {
   sentido: Sentido;
-  origemIata: string;
-  destinoIata: string;
+  origemCidade: string;
+  destinoCidade: string;
   /** AAAA-MM-DD */
   dataDesejada: string;
   preferenciaHorario: PreferenciaDeHorario | null;
 };
+
+/**
+ * As pontas de um trecho como estão gravadas. Cidade: o que o time pediu (vazia nos pedidos anteriores à 0020, que só
+ * têm o aeroporto). Aeroporto (código de 3 letras): o que a SDC informou na compra, ou o que o pedido antigo trazia.
+ */
+export type PontasDoTrecho = { origemCidade: string | null; destinoCidade: string | null; origemIata: string | null; destinoIata: string | null };
+
+/** "Porto Alegre (RS)". Sem UF fica só a cidade; sem cidade, nulo. */
+export function cidadeComUf(cidade: string | null | undefined, uf: string | null | undefined): string | null {
+  const nome = cidade?.trim();
+  if (!nome) return null;
+  const sigla = uf?.trim().toUpperCase();
+  return sigla ? `${nome} (${sigla})` : nome;
+}
+
+/** Para comparar cidades digitadas: sem maiúsculas, acentos, pontuação nem espaços repetidos. */
+export function cidadeNormalizada(cidade: string): string {
+  return cidade
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+export const mesmaCidade = (a: string, b: string) => cidadeNormalizada(a) === cidadeNormalizada(b);
+
+/** "Porto Alegre (RS) → Manaus (AM)": o que o time pediu. Nulo no pedido antigo, que só tem aeroporto. */
+export function cidadesDoTrecho(trecho: PontasDoTrecho): string | null {
+  if (!trecho.origemCidade && !trecho.destinoCidade) return null;
+  return `${trecho.origemCidade ?? trecho.origemIata ?? "—"} → ${trecho.destinoCidade ?? trecho.destinoIata ?? "—"}`;
+}
+
+/** "POA → MAO": os aeroportos, quando há algum (a ponta ainda sem aeroporto fica "—"). Nulo enquanto a SDC não informa. */
+export function aeroportosDoTrecho(trecho: PontasDoTrecho): string | null {
+  if (!trecho.origemIata && !trecho.destinoIata) return null;
+  return `${trecho.origemIata ?? "—"} → ${trecho.destinoIata ?? "—"}`;
+}
+
+/** Em cada ponta, o aeroporto quando houver e a cidade quando não: "Porto Alegre (RS) → Manaus (AM)" e, depois da compra, "POA → MAO". */
+export function rotaDoTrecho(trecho: PontasDoTrecho): string {
+  return `${trecho.origemIata ?? trecho.origemCidade ?? "—"} → ${trecho.destinoIata ?? trecho.destinoCidade ?? "—"}`;
+}
+
+/** Por extenso, para textos e painéis: as cidades e, quando já há, os aeroportos. Pedido antigo: só os aeroportos. */
+export function rotaPorExtenso(trecho: PontasDoTrecho): string {
+  const cidades = cidadesDoTrecho(trecho);
+  const aeroportos = aeroportosDoTrecho(trecho);
+  if (!cidades) return aeroportos ?? "—";
+  return aeroportos ? `${cidades} (aeroportos ${aeroportos})` : cidades;
+}
+
+/**
+ * O aeroporto de uma ponta depois que o time altera o pedido. Fica o que estava quando a cidade não mudou (ou quando
+ * o trecho ainda não tinha cidade: é pedido antigo, e o aeroporto era o próprio pedido). Cidade nova = sem aeroporto,
+ * até a SDC informar o da nova compra.
+ */
+export function aeroportoAoAlterar(atual: { cidade: string | null; iata: string | null } | null, novaCidade: string): string | null {
+  if (!atual?.iata) return null;
+  return atual.cidade === null || mesmaCidade(atual.cidade, novaCidade) ? atual.iata : null;
+}
+
+/**
+ * O aeroporto de uma ponta depois do registro (ou da correção) da compra. Informado = vale o informado. Em branco =
+ * sem aeroporto, a não ser que o trecho não tenha cidade (pedido antigo): aí fica o que estava, para a ponta não
+ * ficar sem nada.
+ */
+export function aeroportoAoRegistrar(atual: { cidade: string | null; iata: string | null }, informado: string | undefined): string | null {
+  if (informado) return informado;
+  return atual.cidade === null ? atual.iata : null;
+}
 
 function dataCurta(data: string): string {
   return `${data.slice(8, 10)}/${data.slice(5, 7)}/${data.slice(0, 4)}`;
@@ -156,7 +231,7 @@ export function textoDoPedidoDeVoo(pedido: {
   eventoCodigo: string | null;
   eventoNome: string;
   passageiro: string;
-  trechos: TrechoDesejado[];
+  trechos: (PontasDoTrecho & Pick<TrechoDesejado, "sentido" | "dataDesejada" | "preferenciaHorario">)[];
   observacaoTime: string | null;
   /** Só na turnê de Masterclass: onde é a primeira palestra (a ida chega) e a última (a volta sai). */
   turne?: { primeiraPalestra: string; ultimaPalestra: string } | null;
@@ -170,7 +245,7 @@ export function textoDoPedidoDeVoo(pedido: {
     `Passageiro: ${pedido.passageiro}`,
     ...ordenados.map(
       (trecho) =>
-        `${trecho.sentido === "IDA" ? "Ida" : "Volta"}: ${trecho.origemIata} → ${trecho.destinoIata} em ${dataCurta(trecho.dataDesejada)}` +
+        `${trecho.sentido === "IDA" ? "Ida" : "Volta"}: ${rotaPorExtenso(trecho)} em ${dataCurta(trecho.dataDesejada)}` +
         (trecho.preferenciaHorario ? ` (${rotuloDaPreferencia(trecho.preferenciaHorario)})` : ""),
     ),
   ];

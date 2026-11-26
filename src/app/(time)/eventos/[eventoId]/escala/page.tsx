@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { situacaoDaEscrita } from "@/fluxos/_base";
 import { permissoesDoAtor } from "@/app/(time)/_servidor/usuario-atual";
 import { carregarMontagem, type MontagemDaEscala, sugerirPessoas } from "@/fluxos/escalas";
+import { carregarCaronas } from "@/fluxos/logistica";
 
 import { Aviso, FaixaSomenteLeitura } from "../../../_componentes/ui/aviso";
 import { BotaoLink } from "../../../_componentes/ui/botao-link";
@@ -12,6 +13,7 @@ import { Cartao } from "../../../_componentes/ui/cartao";
 import { TITULO_DE_SECAO } from "../../../_componentes/ui/classes";
 import { EstadoVazio } from "../../../_componentes/ui/estados";
 import { dataCurta, dataEHora, periodo } from "../../../_componentes/ui/formatos";
+import { SecaoDeCaronas } from "../../../logistica/_componentes/secao-de-caronas";
 import { AdicionarFuncao } from "./_componentes/adicionar-funcao";
 import { BarraDaEscala, type SituacaoDaBarra } from "./_componentes/barra-da-escala";
 import { EquipeDaFuncao } from "./_componentes/equipe-da-funcao";
@@ -27,7 +29,8 @@ type Parametros = { params: Promise<{ eventoId: string }>; searchParams: Promise
 const ROTULO_DO_HISTORICO: Record<string, string> = {
   ENVIADA_APROVACAO: "Enviada para aprovação",
   APROVADA: "Aprovada",
-  DEVOLVIDA: "Devolvida",
+  CONCLUIDA: "Concluída, sem aprovação (Masterclass)",
+  DEVOLVIDA: "Não aprovada",
   REABERTA: "Reaberta",
   COMUNICADA: "Comunicada",
 };
@@ -49,6 +52,7 @@ function situacaoDaBarra(
         pode: envio.pode,
         motivos: envio.pode ? [] : envio.motivos,
         vagasAbertas: montagem.resumo.vagasAbertas,
+        semAprovacao: montagem.evento.tipoSigla === "MC",
       };
     }
     case "AGUARDANDO_APROVACAO":
@@ -87,7 +91,9 @@ export default async function PaginaEscalaDoEvento({ params, searchParams }: Par
   const caminho = `/eventos/${evento.id}/escala`;
   const escreve = escrita.liberada;
   const editavel = escreve && montagem.editavel;
-  const sugestoes = editavel && vaga ? await sugerirPessoas(evento.id, vaga, new Date()) : null;
+  const agora = new Date();
+  // As caronas do evento são montadas aqui, logo abaixo da equipe (é na escala que se marca quem vai de carona).
+  const [sugestoes, caronas] = await Promise.all([editavel && vaga ? sugerirPessoas(evento.id, vaga, agora) : null, carregarCaronas(evento.id, agora)]);
   const varios = montagem.dias.length > 1;
   const codigo = evento.codigo ?? evento.nome;
 
@@ -97,7 +103,7 @@ export default async function PaginaEscalaDoEvento({ params, searchParams }: Par
       <div className="mb-5 grid gap-3">
         {evento.status === "CONCLUIDO" && <Aviso tom="neutro">Evento concluído: a escala fica só para consulta.</Aviso>}
         {montagem.ultimaDevolucao && (
-          <Aviso tom="informacao" titulo={`A líder devolveu esta escala em ${dataEHora(montagem.ultimaDevolucao.em)}.`}>
+          <Aviso tom="informacao" titulo={`A líder não aprovou esta escala em ${dataEHora(montagem.ultimaDevolucao.em)}.`}>
             {montagem.ultimaDevolucao.comentario ? `“${montagem.ultimaDevolucao.comentario}”` : "Sem comentário."}
           </Aviso>
         )}
@@ -110,13 +116,14 @@ export default async function PaginaEscalaDoEvento({ params, searchParams }: Par
               </Link>
             }
           >
-            Esta escala está com a líder para aprovação. Ela fica travada até ser aprovada ou devolvida.
+            Esta escala está com a líder para aprovação. Ela fica travada até a líder decidir.
           </Aviso>
         )}
         {(evento.statusEscala === "APROVADA" || evento.statusEscala === "COMUNICADA") && evento.aprovadoEm && (
           <Aviso tom="informacao">
-            Escala aprovada em {dataEHora(evento.aprovadoEm)}
-            {evento.aprovadoPor ? ` por ${evento.aprovadoPor}` : ""}. Para trocar pessoas ou vagas, reabra a escala e envie para aprovação de novo.
+            {evento.tipoSigla === "MC" ? "Escala concluída" : "Escala aprovada"} em {dataEHora(evento.aprovadoEm)}
+            {evento.aprovadoPor ? ` por ${evento.aprovadoPor}` : ""}.{" "}
+            {evento.tipoSigla === "MC" ? "Para trocar pessoas ou vagas, reabra a escala e conclua de novo." : "Para trocar pessoas ou vagas, reabra a escala e envie para aprovação de novo."}
           </Aviso>
         )}
         {resumo.pendencias.some((pendencia) => pendencia.motivo === "FALTA_FILA") && (
@@ -167,7 +174,7 @@ export default async function PaginaEscalaDoEvento({ params, searchParams }: Par
           {montagem.linhas.length === 0 && resumo.pendencias.length === 0 ? (
             <EstadoVazio
               titulo="Este evento ainda não tem vagas."
-              acao={editavel ? <AdicionarFuncao eventoId={evento.id} funcoes={montagem.funcoes} dias={montagem.dias} primaria /> : undefined}
+              acao={editavel ? <AdicionarFuncao eventoId={evento.id} funcoes={montagem.funcoes} primaria /> : undefined}
             >
               {resumo.semRegra ? "Este tipo de evento ainda não tem regra de vagas. " : ""}Adicione as funções e o número de vagas para começar.
             </EstadoVazio>
@@ -196,7 +203,7 @@ export default async function PaginaEscalaDoEvento({ params, searchParams }: Par
               </div>
               {editavel && (
                 <div className="border-t border-[var(--ds-separator)] px-4 pt-2">
-                  <AdicionarFuncao eventoId={evento.id} funcoes={montagem.funcoes} dias={montagem.dias} />
+                  <AdicionarFuncao eventoId={evento.id} funcoes={montagem.funcoes} />
                 </div>
               )}
             </>
@@ -210,9 +217,9 @@ export default async function PaginaEscalaDoEvento({ params, searchParams }: Par
             <h2 id="equipe" className={TITULO_DE_SECAO}>
               Equipe
             </h2>
-            {/* Quem foi marcado com Hotel ou Carona aqui é distribuído em quartos e carros na Hospedagem do evento. */}
+            {/* Quem foi marcado com Hotel aqui é distribuído em quartos na Hospedagem; as caronas ficam logo abaixo. */}
             <BotaoLink href={`/logistica/hospedagem?evento=${evento.id}`} tamanho="pequeno">
-              Montar quartos e caronas
+              Montar quartos
             </BotaoLink>
           </div>
           <div className="grid grid-cols-1 gap-3">
@@ -233,6 +240,8 @@ export default async function PaginaEscalaDoEvento({ params, searchParams }: Par
           </div>
         </section>
       )}
+
+      {montagem.linhas.length > 0 && <SecaoDeCaronas dados={caronas} escrita={escreve} />}
 
       {montagem.aguardandoAprovacao && montagem.pontosDeAtencao.length > 0 && (
         <Cartao id="atencao" titulo="Pontos de atenção para a aprovação" className="mb-6">

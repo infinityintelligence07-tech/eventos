@@ -27,7 +27,7 @@ function SeletorDePessoa({ id, nome, rotulo, vazio, opcoes }: { id: string; nome
   );
 }
 
-/** Ação principal das Caronas, no título da seção (na Hospedagem e na aba Logística do evento). */
+/** Ação principal das Caronas, no título da seção (na escala do evento). */
 function NovoMotorista({ dados }: { dados: CaronasCarregadas }) {
   if (!dados.evento) return null;
   return (
@@ -43,7 +43,7 @@ function NovoMotorista({ dados }: { dados: CaronasCarregadas }) {
 const km = (valor: number | null) => (valor === null ? "distância desconhecida" : distancia(valor));
 
 /**
- * Caronas de um evento: usada logo abaixo dos quartos na Hospedagem (/logistica/hospedagem) e na aba Logística do evento.
+ * Caronas de um evento: ficam na escala do evento (/eventos/[id]/escala), logo abaixo da equipe.
  * Parte de quem está com o deslocamento "Carona" na escala; o motorista é alguém da escala com veículo no cadastro.
  */
 export function SecaoDeCaronas({ dados, escrita }: { dados: CaronasCarregadas; escrita: boolean }) {
@@ -86,14 +86,14 @@ export function SecaoDeCaronas({ dados, escrita }: { dados: CaronasCarregadas; e
               : `${dados.marcadasComoCarona === 1 ? "1 pessoa marcada" : `${dados.marcadasComoCarona} pessoas marcadas`} como Carona na escala de ${evento.codigo ?? evento.nome}`
           }
           acao={
-            <Link href={`/eventos/${evento.id}/escala`} className="font-medium text-[var(--ds-tint-text)] hover:underline">
-              {dados.marcadasComoCarona === 0 ? "Marcar na escala" : "Abrir a escala"}
+            <Link href={`/eventos/${evento.id}/escala#equipe`} className="font-medium text-[var(--ds-tint-text)] hover:underline">
+              {dados.marcadasComoCarona === 0 ? "Marcar na equipe" : "Ver a equipe"}
             </Link>
           }
         >
           <p>
             {dados.marcadasComoCarona === 0
-              ? "Quem vai de carona aparece aqui quando o deslocamento for marcado como Carona na escala do evento. O motorista é alguém da escala com veículo no cadastro."
+              ? "Quem vai de carona aparece aqui quando o deslocamento for marcado como Carona na equipe, logo acima. O motorista é alguém da escala com veículo no cadastro."
               : dados.semCarona.length === 0
                 ? "Todo mundo que vai de carona tem motorista. Em cada carro abaixo dá para ver quem vai com quem."
                 : `${dados.marcadasComoCarona - dados.semCarona.length} com motorista e ${dados.semCarona.length} sem carona. Escolha o motorista de cada pessoa para definir quem vai com quem.`}

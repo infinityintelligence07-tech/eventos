@@ -217,6 +217,8 @@ export function escalaEmMontagem(status: StatusEscala): boolean {
 export type Pendencias = {
   /** Eventos (sem Masterclass) nos próximos dias com a escala ainda não aprovada. */
   escalasAMontar: EventoNoCalendario[];
+  /** O mesmo aviso para as Masterclasses, à parte (são muitas e não passam por aprovação). */
+  masterclassesAMontar: EventoNoCalendario[];
   /** Eventos (sem Masterclass) sem código: edição ou polo faltando no IAM Control. */
   semCodigo: EventoNoCalendario[];
 };
@@ -226,11 +228,13 @@ export const DIAS_PARA_MONTAR_ESCALA = 30;
 /** @param eventos eventos de hoje em diante; os cancelados e os já concluídos são descartados aqui. */
 export function pendenciasDosEventos(eventos: EventoNoCalendario[], hoje: string): Pendencias {
   const limiteEscala = somarDias(hoje, DIAS_PARA_MONTAR_ESCALA);
-  const ativos = eventos.filter((evento) => evento.status !== "CANCELADO" && evento.dataFim >= hoje && !ehMasterclass(evento));
-  const escalaAberta = (evento: EventoNoCalendario) => escalaEmMontagem(evento.statusEscala);
+  const emAberto = eventos.filter((evento) => evento.status !== "CANCELADO" && evento.dataFim >= hoje);
+  const ativos = emAberto.filter((evento) => !ehMasterclass(evento));
+  const aMontar = (evento: EventoNoCalendario) => evento.dataInicio <= limiteEscala && escalaEmMontagem(evento.statusEscala);
 
   return {
-    escalasAMontar: ativos.filter((evento) => evento.dataInicio <= limiteEscala && escalaAberta(evento)),
+    escalasAMontar: ativos.filter(aMontar),
+    masterclassesAMontar: emAberto.filter((evento) => ehMasterclass(evento) && aMontar(evento)),
     semCodigo: ativos.filter((evento) => evento.codigo === null),
   };
 }

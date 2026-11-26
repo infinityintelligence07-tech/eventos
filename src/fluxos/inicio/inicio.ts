@@ -28,6 +28,10 @@ export type ItemDoInicio = {
   quantidade: number;
   href: string;
   exemplos: { rotulo: string; detalhe?: string; href: string }[];
+  /** Só alimenta um número do topo; não vira cartão. */
+  semCartao?: boolean;
+  /** Os exemplos já são a lista inteira (as situações, com os totais): o cartão não mostra "e mais N". */
+  listaCompleta?: boolean;
 };
 
 export type OrigemDoInicio = "escalas" | "eventos" | "comunicacao" | "logistica" | "custos" | "disponibilidade";
@@ -62,9 +66,9 @@ const FONTES: { origem: OrigemDoInicio; nome: string; carregar: (agora: Date) =>
 /** Ordem dos cartões "Precisa de ação" (doc 08 §4). Chave nova de outra frente vai para o fim. */
 const ORDEM_DOS_CARTOES = [
   "comunicacao-falta-dado",
-  "escalas-aguardando-aprovacao",
-  "escalas-devolvidas",
+  "escalas-situacao",
   "escalas-a-montar",
+  "escalas-a-montar-masterclass",
   "comunicacao-desatualizadas",
   "eventos-sem-codigo",
   "custos-para-auditar",
@@ -118,7 +122,10 @@ export function montarInicio(resumos: ResumoDaOrigem[]): Pick<Inicio, "numeros" 
     numeros: NUMEROS.map(({ chave, rotulo, href }) => ({ rotulo, href, valor: porChave.get(chave)?.quantidade ?? null })),
     cartoes: [
       ...falhas.map((resumo) => ({ tipo: "erro" as const, origem: resumo.origem, nome: resumo.nome })),
-      ...[...itens].sort((a, b) => posicao(a.chave) - posicao(b.chave)).map((item) => ({ tipo: "item" as const, item })),
+      ...itens
+        .filter((item) => !item.semCartao)
+        .sort((a, b) => posicao(a.chave) - posicao(b.chave))
+        .map((item) => ({ tipo: "item" as const, item })),
     ],
     tudoEmDia: falhas.length === 0 && itens.every((item) => item.quantidade === 0),
   };

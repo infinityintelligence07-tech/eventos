@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { CARTAO, EXPLICACAO_DE_CARTAO, TITULO_DE_CARTAO } from "./classes";
+import { CARTAO, CARTAO_CLICAVEL, EXPLICACAO_DE_CARTAO, LINK_QUE_COBRE, SOBRE_O_CARTAO, TITULO_DE_CARTAO } from "./classes";
 
 const ESPACAMENTO = {
   padrao: "p-5",
@@ -12,7 +12,7 @@ const ESPACAMENTO = {
 
 /**
  * Cartão da doc 08 §3.2. Com `titulo`, vira uma `section` rotulada pelo h3 (passe `id` para o aria-labelledby).
- * Cartão clicável: ponha o Link no título, não no cartão inteiro.
+ * Cartão clicável por inteiro: o Link fica no título com LINK_QUE_COBRE e o cartão leva CARTAO_CLICAVEL (classes.ts).
  */
 export function Cartao({
   id,
@@ -58,10 +58,10 @@ export function Cartao({
 /** Número grande com rótulo (o "Numero" do Calendário). Com `href`, o rótulo vira atalho para a lista. */
 export function CartaoDeNumero({ rotulo, valor, de, href }: { rotulo: string; valor: number; de?: number; href?: string }) {
   return (
-    <div className={`${CARTAO} px-5 py-4`}>
+    <div className={`${CARTAO} px-5 py-4 ${href ? CARTAO_CLICAVEL : ""}`}>
       <p className="text-[12px] font-medium tracking-[0.012em] text-[var(--ds-label-2)]">
         {href ? (
-          <Link href={href} className="hover:text-[var(--ds-label)] hover:underline">
+          <Link href={href} className={`hover:text-[var(--ds-label)] hover:underline ${LINK_QUE_COBRE}`}>
             {rotulo}
           </Link>
         ) : (
@@ -89,6 +89,7 @@ export function CartaoDePendencia({
   rotuloVerTodos = "Ver todos",
   textoSemPendencia,
   limite = 6,
+  listaCompleta = false,
 }: {
   titulo: string;
   explicacao: string;
@@ -100,12 +101,21 @@ export function CartaoDePendencia({
   /** Ex.: "Nada pendente." (o Início mostra; o Calendário não). */
   textoSemPendencia?: string;
   limite?: number;
+  /** Os exemplos são a lista inteira (ex.: as situações, com os totais): não há "e mais N". */
+  listaCompleta?: boolean;
 }) {
-  const restantes = quantidade - Math.min(exemplos.length, limite);
+  const restantes = listaCompleta ? 0 : quantidade - Math.min(exemplos.length, limite);
   return (
-    <section className={`${CARTAO} p-5`}>
+    <section className={`${CARTAO} p-5 ${href ? CARTAO_CLICAVEL : ""}`}>
       <h3 className={`flex items-center justify-between gap-2 ${TITULO_DE_CARTAO}`}>
-        {titulo}
+        {/* O cartão inteiro leva para a lista; cada linha de exemplo continua levando para o item dela. */}
+        {href ? (
+          <Link href={href} className={`hover:underline ${LINK_QUE_COBRE}`}>
+            {titulo}
+          </Link>
+        ) : (
+          titulo
+        )}
         <span
           className={`rounded-full px-2 py-0.5 text-[12px] font-semibold tabular-nums ${
             quantidade > 0 ? "bg-[var(--ds-orange-soft)] text-[var(--ds-orange-deep)]" : "bg-[var(--ds-green-soft)] text-[var(--ds-green-deep)]"
@@ -120,10 +130,10 @@ export function CartaoDePendencia({
       {exemplos.length > 0 && (
         <ul className="mt-2 flex flex-col gap-1 text-[13px]">
           {exemplos.slice(0, limite).map((exemplo) => (
-            <li key={exemplo.chave} className="flex flex-wrap items-baseline justify-between gap-x-2">
+            <li key={exemplo.chave} className={`flex flex-wrap items-baseline justify-between gap-x-2 rounded-[6px] ${exemplo.href ? `${SOBRE_O_CARTAO} hover:bg-[var(--ds-fill-4)]` : ""}`}>
               <span className="min-w-0">
                 {exemplo.href ? (
-                  <Link href={exemplo.href} className="text-[var(--ds-tint-text)] hover:underline">
+                  <Link href={exemplo.href} className={`text-[var(--ds-tint-text)] hover:underline ${LINK_QUE_COBRE}`}>
                     {exemplo.rotulo}
                   </Link>
                 ) : (
@@ -138,7 +148,7 @@ export function CartaoDePendencia({
         </ul>
       )}
       {href && quantidade > 0 && (
-        <Link href={href} className="mt-2 inline-flex text-[13px] font-medium text-[var(--ds-tint-text)] hover:underline">
+        <Link href={href} className={`mt-2 inline-flex text-[13px] font-medium text-[var(--ds-tint-text)] hover:underline ${SOBRE_O_CARTAO}`}>
           {rotuloVerTodos}
         </Link>
       )}

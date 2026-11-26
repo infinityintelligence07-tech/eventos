@@ -52,6 +52,7 @@ export function criarRepositorioMontagem(executor: Executor): RepositorioMontage
           codigo: evento.codigo,
           status: evento.status,
           statusEscala: evento.statusEscala,
+          tipoSigla: tipoEvento.sigla,
           regraVagas: tipoEvento.regraVagas,
           expectativaPublico: evento.expectativaPublico,
           pessoasNaFila: evento.pessoasNaFila,
@@ -62,7 +63,9 @@ export function criarRepositorioMontagem(executor: Executor): RepositorioMontage
         .leftJoin(tipoEvento, eq(tipoEvento.id, evento.tipoEventoId))
         .where(eq(evento.id, eventoId));
       // status_escala tem CHECK no banco com esses valores.
-      return linha ? { ...linha, statusEscala: linha.statusEscala as StatusEscala, regraVagas: linha.regraVagas ?? {} } : null;
+      if (!linha) return null;
+      const { tipoSigla, ...resto } = linha;
+      return { ...resto, statusEscala: linha.statusEscala as StatusEscala, masterclass: tipoSigla === "MC", regraVagas: linha.regraVagas ?? {} };
     },
 
     async comecarRascunho(eventoId, instante) {

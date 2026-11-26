@@ -67,8 +67,8 @@ describe.skipIf(!TEST_DATABASE_URL)("hotel sem escala: lista de quem precisa de 
   const acoesDoEvento = async (evento: string, pessoaId: string) =>
     ((await teste.sql(`select acao from eventos.registro_acao where entidade = 'EVENTO' and entidade_id = $1 and em_nome_de_pessoa_id = $2 order by criado_em, id`, [evento, pessoaId])) as { acao: string }[]).map((linha) => linha.acao);
 
-  const ida = { sentido: "IDA" as const, origemIata: "POA", destinoIata: "MAO", dataDesejada: "2026-12-14" };
-  const volta = { sentido: "VOLTA" as const, origemIata: "MAO", destinoIata: "POA", dataDesejada: "2026-12-17" };
+  const ida = { sentido: "IDA" as const, origemCidade: "Porto Alegre (RS)", destinoCidade: "Manaus (AM)", dataDesejada: "2026-12-14" };
+  const volta = { sentido: "VOLTA" as const, origemCidade: "Manaus (AM)", destinoCidade: "Porto Alegre (RS)", dataDesejada: "2026-12-17" };
   const periodo = { checkIn: "2026-12-14", checkOut: "2026-12-18" };
 
   beforeAll(async () => {

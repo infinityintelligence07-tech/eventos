@@ -4,7 +4,7 @@ import { dataEmSaoPaulo, type SituacaoNoCalendario, situacaoNoCalendario, somarD
 
 // Escalas (lista entre eventos) e a fila de aprovação da líder (docs/08 §6.1 e §6.3).
 
-export const SITUACOES_DA_LISTA = ["a-montar", "aguardando", "devolvidas", "aprovadas", "comunicadas"] as const;
+export const SITUACOES_DA_LISTA = ["a-montar", "aguardando", "nao-aprovadas", "aprovadas", "comunicadas"] as const;
 export type SituacaoDaLista = (typeof SITUACOES_DA_LISTA)[number];
 export const PERIODOS_DA_LISTA = [30, 60, 90] as const;
 
@@ -35,7 +35,7 @@ function situacaoDaLista(status: StatusEscala): SituacaoDaLista {
     case "AGUARDANDO_APROVACAO":
       return "aguardando";
     case "DEVOLVIDA":
-      return "devolvidas";
+      return "nao-aprovadas";
     case "APROVADA":
       return "aprovadas";
     case "COMUNICADA":
@@ -77,7 +77,7 @@ export async function listarEscalas(pedido: FiltrosDaLista, agora: Date): Promis
     );
   // Cancelados só aparecem em "Todas"; não contam como escala a montar.
   const ativos = filtrados.filter((linha) => linha.status !== "CANCELADO");
-  const contagem = { "a-montar": 0, aguardando: 0, devolvidas: 0, aprovadas: 0, comunicadas: 0, todas: filtrados.length };
+  const contagem = { "a-montar": 0, aguardando: 0, "nao-aprovadas": 0, aprovadas: 0, comunicadas: 0, todas: filtrados.length };
   for (const linha of ativos) contagem[situacaoDaLista(linha.statusEscala)] += 1;
 
   return {

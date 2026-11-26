@@ -23,7 +23,7 @@ export default async function PaginaAvisoDeVoos() {
       <Cartao
         id="aviso-de-voos"
         titulo="Aviso de passagens a pedir"
-        explicacao="Quando um evento entra neste prazo e ainda há passagens a pedir à SDC, o aviso aparece no Início e no topo da tela de Voos, para a líder e para o time."
+        explicacao="Quando um evento entra neste prazo e ainda há passagens a pedir à SDC, o aviso aparece na Dashboard e no topo da tela de Voos, para a líder e para o time."
       >
         {permissoes["config.aviso_de_voos"] ? (
           <FormularioDoAviso dias={aviso.dias} minimo={aviso.minimo} maximo={aviso.maximo} escritaLiberada={escrita.liberada} />
