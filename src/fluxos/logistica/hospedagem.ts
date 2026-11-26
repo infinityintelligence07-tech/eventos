@@ -57,11 +57,16 @@ export type HospedagemDoEventoCarregada = {
    */
   equipe: PessoaParaHospedar[];
   semQuarto: PessoaParaHospedar[];
-  /** Pessoas ativas do cadastro de staff que ainda não estão na lista: quem dá para acrescentar por aqui. */
-  staffParaAcrescentar: { pessoaId: string; nome: string }[];
+  /**
+   * Quem dá para acrescentar por aqui. Em evento com escala, só os nomes da escala que ainda não estão na lista de
+   * hotel. Sem escala (Masterclass, ou evento que ainda não tem ninguém escalado), o cadastro de staff ativo.
+   */
+  paraAcrescentar: { pessoaId: string; nome: string }[];
+  /** De onde vem `paraAcrescentar`: da escala do evento ou, na falta dela, do cadastro de staff. */
+  acrescentarDe: "ESCALA" | "STAFF";
   /** O evento ainda aceita acrescentar gente (não foi cancelado nem terminou). */
   podeAcrescentar: boolean;
-  /** Pessoas ativas na escala do evento que não estão na lista de hotel (para lembrar de conferir). */
+  /** Pessoas ativas na escala do evento que não estão na lista de hotel (o lembrete "falta alguém?"). */
   naEscalaSemHotel: number;
   /** Quantas pessoas sem quarto a sugestão por sexo consegue alocar. */
   sugestaoAloca: number;
@@ -99,17 +104,19 @@ export async function carregarHospedagem(eventoId: string | null, agora: Date, r
   const comTrabalho = new Set([...comEquipe.map((item) => item.id), ...comHotel]);
   const candidatos = eventos.filter((item) => comTrabalho.has(item.id));
   const evento = escolhido ?? candidatos.find((item) => !item.semHospedagem) ?? candidatos[0] ?? eventos[0] ?? null;
-  if (!evento) return { recorte, hoje, eventos, evento: null, hospedagens: [], locais, equipe: [], semQuarto: [], staffParaAcrescentar: [], podeAcrescentar: false, naEscalaSemHotel: 0, sugestaoAloca: 0 };
+  if (!evento) return { recorte, hoje, eventos, evento: null, hospedagens: [], locais, equipe: [], semQuarto: [], paraAcrescentar: [], acrescentarDe: "STAFF", podeAcrescentar: false, naEscalaSemHotel: 0, sugestaoAloca: 0 };
 
-  const [hospedagens, equipe, naEscalaSemHotel, staff, situacao] = await Promise.all([
+  const [hospedagens, equipe, daEscalaSemHotel, staff, situacao] = await Promise.all([
     repo.hospedagensDoEvento(evento.id),
     repo.precisamDeHotel(evento.id),
-    repo.naEscalaSemHotel(evento.id),
+    repo.daEscalaSemHotel(evento.id),
     pedidos.staffAtivoPorNome(),
     repo.eventoParaHospedar(evento.id),
   ]);
   const semQuarto = equipe.filter((pessoa) => pessoa.quartoId === null);
   const naLista = new Set(equipe.map((pessoa) => pessoa.pessoaId));
+  // Com gente na escala, só entram nomes dela. Sem escala, o hotel ainda pode ser pedido (ele vem antes da escala).
+  const temEscala = daEscalaSemHotel.length > 0 || equipe.some((pessoa) => pessoa.naEscala);
   const quartos = hospedagens.flatMap((hospedagem) =>
     hospedagem.quartos.map((quarto) => ({ id: quarto.id, capacidade: quarto.capacidade, sexo: quarto.sexo, ocupantes: quarto.ocupantes })),
   );
@@ -121,9 +128,10 @@ export async function carregarHospedagem(eventoId: string | null, agora: Date, r
     locais,
     equipe,
     semQuarto,
-    staffParaAcrescentar: staff.filter((pessoa) => !naLista.has(pessoa.pessoaId)),
+    paraAcrescentar: temEscala ? daEscalaSemHotel : staff.filter((pessoa) => !naLista.has(pessoa.pessoaId)),
+    acrescentarDe: temEscala ? "ESCALA" : "STAFF",
     podeAcrescentar: situacao !== null && !situacao.cancelado && situacao.dataFim >= dataEmSaoPaulo(agora),
-    naEscalaSemHotel,
+    naEscalaSemHotel: daEscalaSemHotel.length,
     sugestaoAloca: sugerirRooming(semQuarto, quartos).alocacoes.length,
     hospedagens: hospedagens.map((hospedagem) => {
       const quartosEmTexto = hospedagem.quartos.map((quarto) => ({ nome: quarto.nome, capacidade: quarto.capacidade, ocupantes: quarto.ocupantes.map((ocupante) => nomeComPeriodo(ocupante.nome, ocupante)) }));

@@ -99,7 +99,9 @@ describe.skipIf(!TEST_DATABASE_URL)("hotel sem escala: lista de quem precisa de 
     expect(tela.equipe).toEqual([{ pessoaId: ana, nome: "Ana Voa E Dorme", sexo: "F", origens: ["VOO"], naEscala: false, funcao: null, deslocamento: null, quartoId: null }]);
     expect(tela.semQuarto).toHaveLength(1);
     expect(tela.podeAcrescentar).toBe(true);
-    expect(tela.staffParaAcrescentar.map((pessoa) => pessoa.nome)).toEqual(["Bruno Só Voa"]);
+    // Sem escala no evento, dá para acrescentar qualquer pessoa ativa do cadastro de staff.
+    expect(tela.acrescentarDe).toBe("STAFF");
+    expect(tela.paraAcrescentar.map((pessoa) => pessoa.nome)).toEqual(["Bruno Só Voa"]);
     // E a tela de Voos leva para lá: "1 pessoa com voo pedido e sem quarto".
     expect((await carregarVoos({}, agora)).hotelSemQuarto).toMatchObject([{ evento: { id: eventoId }, pessoas: 1 }]);
 
@@ -220,7 +222,9 @@ describe.skipIf(!TEST_DATABASE_URL)("hotel sem escala: lista de quem precisa de 
     ]);
     // Fabi está na escala sem hotel e sem outra origem: é o lembrete "falta alguém?".
     expect(tela.naEscalaSemHotel).toBe(1);
-    expect(tela.staffParaAcrescentar.map((pessoa) => pessoa.nome)).toContain("Fabi Sem Hotel");
+    // Com escala, "Acrescentar pessoa" só traz nomes dela: quem está escalado e ainda fora da lista de hotel.
+    expect(tela.acrescentarDe).toBe("ESCALA");
+    expect(tela.paraAcrescentar.map((pessoa) => pessoa.nome)).toEqual(["Fabi Sem Hotel"]);
 
     // "Distribuir por sexo" e a troca de quarto continuam funcionando, por pessoa.
     expect(await aplicarRoomingSugerido(evento, ator(), agora)).toEqual({ alocadas: 1, semLugar: 0 });
